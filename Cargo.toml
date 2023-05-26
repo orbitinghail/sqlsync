@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "bin/client",
+    "bin/server",
+
+    "lib/sqlsync",
+]
