@@ -7,7 +7,7 @@ use std::{
 };
 
 use libsqlite3_sys::SQLITE_IOERR;
-use log::debug;
+use log::{debug, trace};
 use sqlite_vfs::{OpenAccess, Vfs};
 
 type FileIdx = u16;
@@ -149,17 +149,17 @@ impl<const PAGESIZE: usize> Debug for VirtualFile<PAGESIZE> {
 
 impl<const PAGESIZE: usize> sqlite_vfs::File for VirtualFile<PAGESIZE> {
     fn file_size(&self) -> sqlite_vfs::VfsResult<u64> {
-        debug!("file_size {:?}", self);
+        trace!("file_size {:?}", self);
         Ok(self.storage.borrow().file_size(self.fd) as u64)
     }
 
     fn truncate(&mut self, size: u64) -> sqlite_vfs::VfsResult<()> {
-        debug!("truncate {:?} {}", self, size);
+        trace!("truncate {:?} {}", self, size);
         panic!("not implemented")
     }
 
     fn write(&mut self, pos: u64, buf: &[u8]) -> sqlite_vfs::VfsResult<usize> {
-        debug!("write {:?} {} {}", self, pos, buf.len());
+        trace!("write {:?} {} {}", self, pos, buf.len());
         if buf.len() > PAGESIZE {
             return Err(SQLITE_IOERR);
         }
@@ -181,7 +181,7 @@ impl<const PAGESIZE: usize> sqlite_vfs::File for VirtualFile<PAGESIZE> {
     }
 
     fn read(&mut self, pos: u64, buf: &mut [u8]) -> sqlite_vfs::VfsResult<usize> {
-        debug!("read {:?} {} {}", self, pos, buf.len());
+        trace!("read {:?} {} {}", self, pos, buf.len());
         if buf.len() > PAGESIZE {
             return Err(SQLITE_IOERR);
         }
@@ -207,7 +207,7 @@ impl<const PAGESIZE: usize> sqlite_vfs::File for VirtualFile<PAGESIZE> {
     }
 
     fn sync(&mut self) -> sqlite_vfs::VfsResult<()> {
-        debug!("sync {:?}", self);
+        trace!("sync {:?}", self);
         Ok(())
     }
 
@@ -293,7 +293,7 @@ impl<const PAGESIZE: usize> Vfs for StorageVfs<PAGESIZE> {
 
     fn exists(&mut self, path: &std::ffi::CStr) -> sqlite_vfs::VfsResult<bool> {
         let path = path.to_str().map_err(|_err| SQLITE_IOERR)?;
-        debug!("exists {}", path);
+        trace!("exists {}", path);
 
         let storage = self.storage.borrow();
         Ok(storage.file_exists(path))

@@ -7,3 +7,4 @@ edition = "2021"
 sqlsync = { path = "../../lib/sqlsync" }
 simple_logger = "4.1.0"
 log = "0.4.14"
+anyhow = { version ="1.0.40", features = ["backtrace"] }

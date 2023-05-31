@@ -11,3 +11,4 @@ libsqlite3-sys = { git = "https://github.com/trevyn/rusqlite", branch = "wasm32-
 rusqlite = { git = "https://github.com/trevyn/rusqlite", branch = "wasm32-unknown-unknown", features = ["bundled"] }
 sqlite-vfs = { git = "https://github.com/rklaehn/sqlite-vfs" }
 log = "0.4.14"
+anyhow = "1.0.40"
