@@ -3,7 +3,11 @@ name = "sqlsync"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-rusqlite = { version = "0.29.0", features = ["bundled", "session"] }
+libsqlite3-sys = { git = "https://github.com/trevyn/rusqlite", branch = "wasm32-unknown-unknown", features = ["bundled"] }
+rusqlite = { git = "https://github.com/trevyn/rusqlite", branch = "wasm32-unknown-unknown", features = ["bundled"] }
+sqlite-vfs = { git = "https://github.com/rklaehn/sqlite-vfs" }
+log = "0.4.14"
