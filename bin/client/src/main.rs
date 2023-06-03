@@ -168,9 +168,9 @@ fn main() -> anyhow::Result<()> {
         .env()
         .init()?;
 
-    let mut recorder = sqlsync::Recorder::new(Mutator {}, sqlsync::Database::new());
+    let mut recorder = sqlsync::Follower::new(Mutator {}, sqlsync::Database::new());
 
-    let print_tasks = |rec: &mut sqlsync::Recorder<Mutator>| {
+    let print_tasks = |rec: &mut sqlsync::Follower<Mutator>| {
         rec.query(|conn| {
             let tasks = query_tasks(conn)?;
             println!("got {} tasks", tasks.len());
@@ -182,7 +182,7 @@ fn main() -> anyhow::Result<()> {
     };
 
     recorder.apply(Mutation::InitSchema)?;
-    recorder.commit()?;
+    recorder.rebase(recorder.seq())?;
 
     recorder.apply(Mutation::AppendTask {
         id: 1,

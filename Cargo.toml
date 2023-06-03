@@ -5,4 +5,5 @@ members = [
     "bin/server",
 
     "lib/sqlsync",
+    "lib/sqlite-vfs",
 ]
