@@ -76,6 +76,8 @@ pub const WAL_HEADER_SIZE: usize = match wal_header::SIZE {
 };
 
 // sqlite wal index header
+// TODO: this should use native endian, not big endian
+// https://github.com/smessmer/binary-layout/issues/21
 define_layout!(wal_index_header_info, BigEndian, {
     // wal-index format version number
     iversion: u32,

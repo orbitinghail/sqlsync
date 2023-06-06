@@ -3,7 +3,7 @@ use std::{cell::RefCell, fmt::Debug, rc::Rc};
 use byteorder::BigEndian;
 use libsqlite3_sys::SQLITE_IOERR;
 use log::{debug, trace};
-use sqlite_vfs::{OpenKind, Vfs};
+use sqlite_vfs::{File, OpenKind, Vfs};
 
 use crate::layout::{
     wal_checksum, wal_header, wal_index_header_info, WAL_HEADER_SIZE,
