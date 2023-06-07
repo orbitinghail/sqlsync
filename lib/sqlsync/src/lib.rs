@@ -1,10 +1,12 @@
-mod database;
-mod leader;
-mod mutate;
+mod local;
+mod physical;
 mod vfs;
-mod layout;
 
-pub use database::Database;
-pub use mutate::{Follower, Mutator};
+pub use local::Local;
 
 pub use rusqlite::{named_params, OptionalExtension, Transaction};
+
+pub trait Mutator {
+    type Mutation;
+    fn apply(&self, tx: &mut Transaction, mutation: &Self::Mutation) -> anyhow::Result<()>;
+}

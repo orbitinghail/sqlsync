@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use sqlsync::{named_params, OptionalExtension, Transaction};
+use sqlsync::{named_params, Mutator, OptionalExtension, Transaction};
 
 #[derive(Debug)]
 struct Task {
@@ -96,9 +96,9 @@ enum Mutation {
     MoveTask { id: i64, after: i64 },
 }
 
-struct Mutator {}
+struct MutatorImpl {}
 
-impl sqlsync::Mutator for Mutator {
+impl Mutator for MutatorImpl {
     type Mutation = Mutation;
 
     fn apply(&self, tx: &mut Transaction, mutation: &Self::Mutation) -> anyhow::Result<()> {
@@ -168,10 +168,10 @@ fn main() -> anyhow::Result<()> {
         .env()
         .init()?;
 
-    let mut recorder = sqlsync::Follower::new(Mutator {}, sqlsync::Database::new());
+    let mut local = sqlsync::Local::new();
 
-    let print_tasks = |rec: &mut sqlsync::Follower<Mutator>| {
-        rec.query(|conn| {
+    let print_tasks = |local: &mut sqlsync::Local| {
+        local.query(|conn| {
             let tasks = query_tasks(conn)?;
             println!("got {} tasks", tasks.len());
             for task in tasks {
@@ -181,55 +181,76 @@ fn main() -> anyhow::Result<()> {
         })
     };
 
-    recorder.apply(Mutation::InitSchema)?;
-    recorder.rebase(recorder.seq())?;
+    local
+        .run(|tx| {
+            let mutator = MutatorImpl {};
+            mutator.apply(tx, &Mutation::InitSchema)
+        })
+        .unwrap();
+    local
+        .run(|tx| {
+            let mutator = MutatorImpl {};
+            mutator.apply(
+                tx,
+                &Mutation::AppendTask {
+                    id: 1,
+                    description: "work on sqlsync".into(),
+                },
+            )
+        })
+        .unwrap();
 
-    recorder.apply(Mutation::AppendTask {
-        id: 1,
-        description: "work on sqlsync".into(),
-    })?;
-    recorder.apply(Mutation::AppendTask {
-        id: 2,
-        description: "eat lunch".into(),
-    })?;
+    print_tasks(&mut local)?;
 
-    print_tasks(&mut recorder)?;
+    // recorder.apply(Mutation::InitSchema)?;
+    // recorder.rebase(recorder.seq())?;
 
-    recorder.rebase(recorder.seq())?;
+    // recorder.apply(Mutation::AppendTask {
+    //     id: 1,
+    //     description: "work on sqlsync".into(),
+    // })?;
+    // recorder.apply(Mutation::AppendTask {
+    //     id: 2,
+    //     description: "eat lunch".into(),
+    // })?;
 
-    print_tasks(&mut recorder)?;
+    // print_tasks(&mut recorder)?;
 
-    recorder.apply(Mutation::MoveTask { id: 1, after: 2 })?;
+    // recorder.rebase(recorder.seq())?;
 
-    print_tasks(&mut recorder)?;
+    // print_tasks(&mut recorder)?;
 
-    recorder.apply(Mutation::UpdateTask {
-        id: 2,
-        partial: PartialTask {
-            description: None,
-            completed: Some(true),
-        },
-    })?;
+    // recorder.apply(Mutation::MoveTask { id: 1, after: 2 })?;
 
-    print_tasks(&mut recorder)?;
+    // print_tasks(&mut recorder)?;
 
-    recorder.apply(Mutation::RemoveTask { id: 2 })?;
+    // recorder.apply(Mutation::UpdateTask {
+    //     id: 2,
+    //     partial: PartialTask {
+    //         description: None,
+    //         completed: Some(true),
+    //     },
+    // })?;
 
-    recorder.apply(Mutation::AppendTask {
-        id: 3,
-        description: "eat lunch".into(),
-    })?;
+    // print_tasks(&mut recorder)?;
 
-    recorder.apply(Mutation::AppendTask {
-        id: 4,
-        description: "another one".into(),
-    })?;
+    // recorder.apply(Mutation::RemoveTask { id: 2 })?;
 
-    print_tasks(&mut recorder)?;
+    // recorder.apply(Mutation::AppendTask {
+    //     id: 3,
+    //     description: "eat lunch".into(),
+    // })?;
 
-    recorder.apply(Mutation::MoveTask { id: 4, after: 1 })?;
+    // recorder.apply(Mutation::AppendTask {
+    //     id: 4,
+    //     description: "another one".into(),
+    // })?;
 
-    print_tasks(&mut recorder)?;
+    // print_tasks(&mut recorder)?;
+
+    // recorder.apply(Mutation::MoveTask { id: 4, after: 1 })?;
+
+    // print_tasks(&mut recorder)?;
 
     Ok(())
 }
