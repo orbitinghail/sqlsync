@@ -14,7 +14,7 @@ Remote
   replayer: logical.TimelineReplayer<Mutator>
 
   replay(Batch)
-  auto_checkpoint()
+  maybe_checkpoint()
   diff(Cursor) -> Changeset
 
 logical
@@ -68,7 +68,7 @@ physical
     wal: Vec<u8>
     shm: SqliteShm
 
-    auto_checkpoint(max_pages)
+    maybe_checkpoint(max_pages)
       if wal.len() > max_pages:
         create new Layer
         copy from wal into Layer
@@ -127,7 +127,7 @@ server:
     // replayer.run(db, batch)
 
   // if our wal is too long, checkpoint
-  remote.auto_checkpoint()
+  remote.maybe_checkpoint()
 
   // a client wants to pull changes
   cursor = network.receive()

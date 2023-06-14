@@ -1,8 +1,11 @@
 use binary_layout::define_layout;
-use binary_layout::NativeEndian;
 use byteorder::BigEndian;
 
-use super::{sqlite_chksum::sqlite_chksum, sqlite_wal::SqliteWal, PAGESIZE};
+use super::{
+    sqlite_chksum::sqlite_chksum,
+    sqlite_wal::{wal_salts, SqliteWal},
+    PAGESIZE,
+};
 
 // we expect all shm allocations to be 16KB
 const EXPECTED_REGION_SIZE: usize = 2 << 14;
@@ -109,11 +112,6 @@ impl SqliteShm {
         }
     }
 }
-
-define_layout!(wal_salts, BigEndian, {
-    salt1: u32,
-    salt2: u32,
-});
 
 // sqlite wal index header
 define_layout!(header_layout, NativeEndian, {

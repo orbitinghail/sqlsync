@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use binary_layout::define_layout;
 use byteorder::BigEndian;
 
-use super::{sqlite_chksum::sqlite_chksum, PAGESIZE};
+use super::{sqlite_chksum::sqlite_chksum, PAGESIZE, layer::Layer};
 
 pub struct SqliteWal {
     data: Vec<u8>,
@@ -15,6 +15,36 @@ impl SqliteWal {
 
     pub fn truncate(&mut self, size: usize) {
         self.data.truncate(size)
+    }
+
+    pub fn num_pages(&self) -> usize {
+        // TODO: make this more robust to partially written WAL files
+        // TODO: currently this takes advantage of the fact that we truncate
+        // self.data on reset...  - this is not compat with regular sqlite WAL
+        // files as they are not truncated and simply start writing from the
+        // beginning and use salt values to detect where valid pages end
+
+        if self.data.len() <= HEADER_SIZE {
+            return 0;
+        }
+
+        // wal is arranged like so:
+        // wal_header (HEADER_SIZE bytes)
+        // page_0_header (page_header_size bytes)
+        // page_0_data (PAGESIZE bytes)
+        // ...
+        let page_header_size = 24;
+
+        // so to calculate total number of pages
+        // we subtract the header size from the total size
+        // and then divide by the size of a page + header
+
+        // first assert the file matches our expectation
+        assert_eq!(
+            (self.data.len() - HEADER_SIZE) % (page_header_size + PAGESIZE),
+            0
+        );
+        (self.data.len() - HEADER_SIZE) / (page_header_size + PAGESIZE)
     }
 
     pub fn len(&self) -> usize {
@@ -52,7 +82,7 @@ impl SqliteWal {
 
     pub fn reset(&mut self) {
         // read previous wal's salt1
-        let prev_salt1 = header_layout::View::new(&self.data).salt1().read();
+        let prev_salt1 = header_layout::View::new(&self.data).salts().salt1().read();
 
         // create a new empty wal header
         let mut wal_hdr = header_layout::View::new([0u8; HEADER_SIZE]);
@@ -62,8 +92,9 @@ impl SqliteWal {
         wal_hdr.file_format_write_version_mut().write(3007000);
         wal_hdr.page_size_mut().write(PAGESIZE as u32);
         wal_hdr.checkpoint_sequence_number_mut().write(0);
-        wal_hdr.salt1_mut().write(prev_salt1.wrapping_add(1));
-        wal_hdr.salt2_mut().write(rand::random::<u32>());
+        let mut salts_view = wal_hdr.salts_mut();
+        salts_view.salt1_mut().write(prev_salt1.wrapping_add(1));
+        salts_view.salt2_mut().write(rand::random::<u32>());
 
         // calculate and store the wal checksum
         let wal_hdr = wal_hdr.into_storage();
@@ -86,9 +117,19 @@ impl SqliteWal {
 
     pub fn salts(&self) -> (u32, u32) {
         let hdr = header_layout::View::new(&self.data);
-        (hdr.salt1().read(), hdr.salt1().read())
+        let view = hdr.salts();
+        (view.salt1().read(), view.salt1().read())
+    }
+
+    pub fn as_layer(&self) -> Layer {
+        todo!()
     }
 }
+
+define_layout!(wal_salts, BigEndian, {
+    salt1: u32,
+    salt2: u32,
+});
 
 // sqlite wal header
 define_layout!(header_layout, BigEndian, {
@@ -100,10 +141,8 @@ define_layout!(header_layout, BigEndian, {
     page_size: u32,
     // checkpoint sequence number
     checkpoint_sequence_number: u32,
-    // salt-1
-    salt1: u32,
-    // salt-2
-    salt2: u32,
+    // salts
+    salts: wal_salts::NestedView,
     // checksum-1
     checksum1: u32,
     // checksum-2
