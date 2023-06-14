@@ -1,11 +1,8 @@
 use binary_layout::define_layout;
+use binary_layout::NativeEndian;
 use byteorder::BigEndian;
 
-use super::{
-    sqlite_chksum::{sqlite_chksum, SqliteChksum},
-    sqlite_wal::SqliteWal,
-    PAGESIZE,
-};
+use super::{sqlite_chksum::sqlite_chksum, sqlite_wal::SqliteWal, PAGESIZE};
 
 // we expect all shm allocations to be 16KB
 const EXPECTED_REGION_SIZE: usize = 2 << 14;
@@ -78,8 +75,8 @@ impl SqliteShm {
         hdr.database_size_mut().write(db_page_cnt as u32);
         hdr.last_frame_checksum1_mut().write(wal_chksum1);
         hdr.last_frame_checksum2_mut().write(wal_chksum2);
-        hdr.salt1_mut().write(wal_salt1);
-        hdr.salt2_mut().write(wal_salt2);
+        hdr.salts_mut().salt1_mut().write(wal_salt1);
+        hdr.salts_mut().salt2_mut().write(wal_salt2);
 
         // calculate and store the shm header checksum
         let hdr = hdr.into_storage();
@@ -113,10 +110,13 @@ impl SqliteShm {
     }
 }
 
+define_layout!(wal_salts, BigEndian, {
+    salt1: u32,
+    salt2: u32,
+});
+
 // sqlite wal index header
-// TODO: this should use native endian, not big endian
-// https://github.com/smessmer/binary-layout/issues/21
-define_layout!(header_layout, BigEndian, {
+define_layout!(header_layout, NativeEndian, {
     // wal-index format version number
     iversion: u32,
     // unused padding
@@ -137,8 +137,7 @@ define_layout!(header_layout, BigEndian, {
     last_frame_checksum1: u32,
     last_frame_checksum2: u32,
     // the two salt values copied from the WAL - in the byte order of the WAL (big-endian)
-    salt1: u32,
-    salt2: u32,
+    salts: wal_salts::NestedView,
     // checksum
     checksum1: u32,
     checksum2: u32,
@@ -149,7 +148,7 @@ pub const HEADER_SIZE: usize = match header_layout::SIZE {
     _ => panic!("header_layout::SIZE is not static"),
 };
 
-define_layout!(checkpoint_layout, BigEndian, {
+define_layout!(checkpoint_layout, NativeEndian, {
     // Number of WAL frames backfilled into DB
     backfill: u32,
     // Reader marks

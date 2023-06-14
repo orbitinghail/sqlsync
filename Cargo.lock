@@ -66,8 +66,7 @@ dependencies = [
 [[package]]
 name = "binary-layout"
 version = "3.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4eb8cda7e0cb274442a8ac32a9d5719e89355a4871be9dccae681fb8f5e9ec1c"
+source = "git+https://github.com/carlsverre/binary-layout?branch=feat-native-endian#92614c3d5be7fba2dc41535ce0640218a619ea26"
 dependencies = [
  "doc-comment",
  "paste",
