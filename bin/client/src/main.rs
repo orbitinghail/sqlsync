@@ -82,11 +82,13 @@ fn query_max_sort(tx: &Transaction) -> anyhow::Result<f64> {
     Ok(max_sort.unwrap_or(0.))
 }
 
+#[derive(Clone)]
 struct PartialTask {
     description: Option<String>,
     completed: Option<bool>,
 }
 
+#[derive(Clone)]
 enum Mutation {
     InitSchema,
 

@@ -1,7 +1,7 @@
 mod changeset;
 mod cursor;
 mod layer;
-pub mod layout; // TODO: this should become private
+mod layout;
 mod page;
 mod sqlite_chksum;
 mod sqlite_shm;

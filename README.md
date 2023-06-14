@@ -30,7 +30,7 @@ logical
     // run a mutation on the db and append it to the timeline
     run(db, mutation)
     // read a batch of mutations from the timeline
-    read(max_len) -> Batch
+    read_batch(start_seq, max_len) -> Batch
     // read seq from timelines table
     // remove mutations <= seq
     // reapply remaining mutations

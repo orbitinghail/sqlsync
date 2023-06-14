@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use rusqlite::{Connection, OpenFlags, Transaction};
 
 use crate::{
+    db::{readyonly_query, run_in_tx},
     physical::{StorageReplica, PAGESIZE},
     vfs::VirtualVfs,
 };
@@ -40,10 +41,7 @@ impl Local {
     where
         F: FnOnce(&mut Transaction) -> anyhow::Result<()>,
     {
-        let mut txn = self.sqlite.transaction()?;
-        f(&mut txn)?; // will cause a rollback on failure
-        txn.commit()?;
-        Ok(())
+        run_in_tx(&mut self.sqlite, f)
     }
 
     // run a closure on db in a txn, rolling back any changes
@@ -51,7 +49,6 @@ impl Local {
     where
         F: FnOnce(Transaction) -> anyhow::Result<()>,
     {
-        f(self.sqlite.transaction()?)
-        // will drop the tx right away, throwing away any changes
+        readyonly_query(&mut self.sqlite, f)
     }
 }
