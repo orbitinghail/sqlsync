@@ -6,12 +6,22 @@ use super::{
 };
 
 pub struct Storage {
+    layer_id_gen: u64,
     layers: Vec<Layer>,
     wal: SqliteWal,
     shm: SqliteShm,
 }
 
 impl Storage {
+    pub fn new() -> Self {
+        Self {
+            layer_id_gen: 0,
+            layers: Vec::new(),
+            wal: SqliteWal::new(),
+            shm: SqliteShm::new(),
+        }
+    }
+
     pub fn maybe_checkpoint(&mut self, max_pages: usize) -> Result<()> {
         if self.wal.num_pages() > max_pages {
             self.checkpoint()
@@ -21,8 +31,12 @@ impl Storage {
     }
 
     fn checkpoint(&mut self) -> Result<()> {
+        // get next layer_id
+        let layer_id = self.layer_id_gen;
+        self.layer_id_gen += 1;
+
         // save the current wal into a layer
-        let layer = self.wal.as_layer();
+        let layer = Layer::new(layer_id, self.wal.as_pages());
         self.layers.push(layer);
 
         // reset the wal
@@ -38,6 +52,7 @@ impl Storage {
 
         // reset the shm
         self.shm.reset(max_page_id as usize, &self.wal);
+
         Ok(())
     }
 

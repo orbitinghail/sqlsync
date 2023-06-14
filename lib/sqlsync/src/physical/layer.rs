@@ -8,6 +8,10 @@ pub struct Layer {
 }
 
 impl Layer {
+    pub fn new(id: LayerId, pages: SparsePages) -> Self {
+        Self { id, pages }
+    }
+
     pub fn max_page_idx(&self) -> PageIdx {
         self.pages.iter().map(|(idx, _)| *idx).max().unwrap_or(0)
     }

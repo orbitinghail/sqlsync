@@ -1,8 +1,12 @@
+use std::collections::BTreeMap;
+
 use anyhow::{anyhow, Result};
 use binary_layout::define_layout;
 use byteorder::BigEndian;
 
-use super::{sqlite_chksum::sqlite_chksum, PAGESIZE, layer::Layer};
+use crate::physical::page::{Page, PageIdx};
+
+use super::{layer::Layer, page::SparsePages, sqlite_chksum::sqlite_chksum, PAGESIZE};
 
 pub struct SqliteWal {
     data: Vec<u8>,
@@ -30,21 +34,20 @@ impl SqliteWal {
 
         // wal is arranged like so:
         // wal_header (HEADER_SIZE bytes)
-        // page_0_header (page_header_size bytes)
-        // page_0_data (PAGESIZE bytes)
+        // frame_0_header (FRAME_HEADER_SIZE bytes)
+        // frame_0_data (PAGESIZE bytes)
         // ...
-        let page_header_size = 24;
 
         // so to calculate total number of pages
         // we subtract the header size from the total size
-        // and then divide by the size of a page + header
+        // and then divide by the size of a page + frame_header
 
         // first assert the file matches our expectation
         assert_eq!(
-            (self.data.len() - HEADER_SIZE) % (page_header_size + PAGESIZE),
+            (self.data.len() - HEADER_SIZE) % (FRAME_HEADER_SIZE + PAGESIZE),
             0
         );
-        (self.data.len() - HEADER_SIZE) / (page_header_size + PAGESIZE)
+        (self.data.len() - HEADER_SIZE) / (FRAME_HEADER_SIZE + PAGESIZE)
     }
 
     pub fn len(&self) -> usize {
@@ -121,8 +124,30 @@ impl SqliteWal {
         (view.salt1().read(), view.salt1().read())
     }
 
-    pub fn as_layer(&self) -> Layer {
-        todo!()
+    pub fn as_pages(&self) -> SparsePages {
+        // for now, we just fail if this is called on an empty wal
+        assert!(self.data.len() >= HEADER_SIZE, "wal is empty");
+
+        // TODO: add more checks that the wal is valid
+
+        // skip header
+        let data = &self.data[HEADER_SIZE..];
+
+        // copy each page into a BTreeMap
+        let mut pages: BTreeMap<PageIdx, Page> = BTreeMap::new();
+        let mut offset = 0;
+        while offset < data.len() {
+            let page_hdr = frame_header_layout::View::new(&data[offset..]);
+            let page_number = page_hdr.page_number().read();
+            let page_data: Page = data
+                [offset + FRAME_HEADER_SIZE..offset + FRAME_HEADER_SIZE + PAGESIZE]
+                .try_into()
+                .expect("page data is not PAGESIZE bytes");
+            pages.insert(page_number as PageIdx, page_data);
+            offset += FRAME_HEADER_SIZE + PAGESIZE;
+        }
+
+        SparsePages::new(pages)
     }
 }
 
@@ -152,4 +177,23 @@ define_layout!(header_layout, BigEndian, {
 pub const HEADER_SIZE: usize = match header_layout::SIZE {
     Some(size) => size,
     _ => panic!("header_layout::SIZE is not static"),
+};
+
+// sqlite wal frameheader
+define_layout!(frame_header_layout, BigEndian, {
+    // Page number
+    page_number: u32,
+    // For commit records, the size of the database file in pages after the commit. For all other records, zero.
+    db_pages_after_commit: u32,
+    // salts
+    salts: wal_salts::NestedView,
+    // checksum-1
+    checksum1: u32,
+    // checksum-2
+    checksum2: u32,
+});
+
+pub const FRAME_HEADER_SIZE: usize = match frame_header_layout::SIZE {
+    Some(size) => size,
+    _ => panic!("frame_header_layout::SIZE is not static"),
 };

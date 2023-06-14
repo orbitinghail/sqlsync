@@ -10,6 +10,10 @@ pub struct SparsePages {
 }
 
 impl SparsePages {
+    pub fn new(pages: BTreeMap<PageIdx, Page>) -> SparsePages {
+        Self { pages }
+    }
+
     pub fn iter(&self) -> Iter<'_, PageIdx, Page> {
         self.pages.iter()
     }
