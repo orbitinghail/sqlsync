@@ -3,9 +3,10 @@ use std::{cell::RefCell, rc::Rc};
 use rusqlite::{Connection, OpenFlags, Transaction};
 
 use crate::{
-    db::{readyonly_query, run_in_tx},
+    db::readyonly_query,
+    journal::JournalPartial,
     logical::Timeline,
-    physical::PAGESIZE,
+    physical::{SparsePages, PAGESIZE},
     vfs::{RcStorage, StorageVfs},
     Mutator,
 };
@@ -66,5 +67,26 @@ impl<M: Mutator> Local<M> {
         F: FnOnce(Transaction) -> anyhow::Result<()>,
     {
         readyonly_query(&mut self.sqlite, f)
+    }
+
+    pub fn XXX_DEBUG_commit(&mut self) {
+        self.storage.borrow_mut().commit()
+    }
+
+    pub fn XXX_DEBUG_revert(&mut self) {
+        self.storage.borrow_mut().revert()
+    }
+
+    pub fn rebase(&mut self) -> anyhow::Result<()> {
+        let req = self.timeline.sync_request()?;
+        let resp: JournalPartial<SparsePages> = todo!("network.send(req)");
+        if resp.is_empty() {
+            return Ok(());
+        }
+        let storage = self.storage.borrow_mut();
+        storage.revert();
+        storage.sync_receive(resp);
+
+        self.timeline.rebase(&mut self.sqlite)
     }
 }

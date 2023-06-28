@@ -44,12 +44,16 @@ impl<M: Mutator> Timeline<M> {
         out
     }
 
+    pub fn sync_request(&self) -> anyhow::Result<Cursor> {
+        self.journal.end()
+    }
+
     pub fn sync_prepare(&self, cursor: Cursor) -> JournalPartial<M::Mutation> {
         self.journal.sync_prepare(cursor, MAX_SYNC)
     }
 
-    pub fn sync_receive(&mut self, partial: JournalPartial<M::Mutation>) {
-        self.journal.sync_receive(partial);
+    pub fn sync_receive(&mut self, partial: JournalPartial<M::Mutation>) -> Cursor {
+        self.journal.sync_receive(partial)
     }
 
     pub fn rebase(&self, sqlite: &mut Connection) -> anyhow::Result<()> {

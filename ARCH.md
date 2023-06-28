@@ -2,8 +2,8 @@
 journal<T>:
     lsn() -> u64
     append(T)
+    sync_prepare(cursor, max_len) -> &JournalPartial<T>
     sync_receive(&JournalPartial<T>)
-    sync_prepare(lsn, max_len) -> &JournalPartial<T>
     rollup(lsn, (Iter<T>) -> Option<T>)
     iter() -> impl DoubleEndedIterator<Item=T> // might run into lifetime issues?
 
@@ -21,21 +21,20 @@ client:
 
     // pull pending local mutations and send to server
     local.push_mutations(network)
-        timeline.sync(network)
-            batch = journal.read(server_cursor, MAX_BATCH_SIZE)
-            server_cursor = network.send(SyncMutations(batch))
+        if !server_cursor:
+            server_cursor = 0
+        partial = timeline.sync_prepare(server_cursor)
+            journal.sync_prepare(server_cursor, MAX_LEN)
+        server_cursor = network.send(SyncTimeline(partial))
 
     local.rebase(network)
-        storage.sync(network)
-            // receive changes made on the server since we last synced
-            batch = network.send(SyncStorage(client_cursor))
-            // if batch is empty, we can abort the rebase
-            if batch.empty():
-                abort()
-            // revert all local changes to main.db
-            main_db.revert()
-            // update the journal which backs main.db
-            client_cursor = journal.receive(batch)
+        request = timeline.sync_request()
+        response = network.send(SyncStorage(request))
+        if response.empty():
+            return
+        storage.revert()
+        storage.sync_receive(response)
+
         timeline.rebase(db)
             // figure out how many of our mutations have been applied server side
             applied_cursor = db.query("select lsn from mutations where client_id = $client_id")

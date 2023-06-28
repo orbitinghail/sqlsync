@@ -18,6 +18,12 @@ pub struct JournalPartial<'a, T> {
     data: &'a [T],
 }
 
+impl<T> JournalPartial<'_, T> {
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+}
+
 pub struct Journal<T>
 where
     T: Clone,
@@ -54,30 +60,36 @@ where
         self.range.end += 1;
     }
 
+    /// Read a partial from the journal starting *after* cursor.
+    /// The partial will contain at most max_len entries.
+    pub fn sync_prepare<'a>(&'a self, cursor: Cursor, max_len: usize) -> JournalPartial<'a, T> {
+        // start reading after the cursor
+        let start_lsn = cursor.lsn + 1;
+        // TODO: these asserts should become handleable errors
+        assert!(!self.data.is_empty());
+        assert!(start_lsn >= self.range.start);
+        assert!(start_lsn < self.range.end);
+        let offset = start_lsn - self.range.start;
+        let end = std::cmp::min(offset + max_len as LSN, self.range.end);
+        JournalPartial {
+            start: start_lsn,
+            data: &self.data[offset as usize..end as usize],
+        }
+    }
+
     /// Merge a partial into the journal starting at partial.start and possibly extending the journal.
     /// The partial must overlap with the journal or be immediately after the journal.
     /// Note: this method does not replace existing entries in the journal, it only extends the journal if needed.
-    pub fn sync_receive(&mut self, partial: JournalPartial<T>) {
+    pub fn sync_receive(&mut self, partial: JournalPartial<T>) -> Cursor {
+        // TODO: these asserts should become handleable errors
+        assert!(!partial.data.is_empty());
         assert!(partial.start >= self.range.start);
         assert!(partial.start <= self.range.end);
         let offset = self.range.end - partial.start;
         self.data
             .extend_from_slice(&partial.data[offset as usize..]);
         self.range.end = partial.start + partial.data.len() as LSN;
-    }
-
-    /// Read a partial from the journal starting at cursor.
-    /// The partial will contain at most max_len entries.
-    pub fn sync_prepare<'a>(&'a self, cursor: Cursor, max_len: usize) -> JournalPartial<'a, T> {
-        let lsn = cursor.lsn;
-        assert!(lsn >= self.range.start);
-        assert!(lsn < self.range.end);
-        let offset = lsn - self.range.start;
-        let end = std::cmp::min(offset + max_len as LSN, self.range.end);
-        JournalPartial {
-            start: lsn,
-            data: &self.data[offset as usize..end as usize],
-        }
+        Cursor::new(self.range.end - 1)
     }
 
     /// Rollup the journal to the given cursor, optionally compacting the entries into a new entry.

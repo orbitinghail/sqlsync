@@ -189,6 +189,9 @@ fn main() -> anyhow::Result<()> {
 
     local.run(Mutation::InitSchema)?;
 
+    println!("committing");
+    local.XXX_DEBUG_commit();
+
     local.run(Mutation::AppendTask {
         id: 1,
         description: "work on sqlsync".into(),
@@ -197,6 +200,12 @@ fn main() -> anyhow::Result<()> {
         id: 2,
         description: "eat lunch".into(),
     })?;
+
+    println!("printing tasks");
+    print_tasks!()?;
+
+    println!("reverting");
+    local.XXX_DEBUG_revert();
 
     println!("printing tasks");
     print_tasks!()?;
