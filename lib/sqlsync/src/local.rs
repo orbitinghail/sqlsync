@@ -4,21 +4,21 @@ use rusqlite::{Connection, OpenFlags, Transaction};
 
 use crate::{
     db::{readyonly_query, run_in_tx},
-    physical::{StorageReplica, PAGESIZE},
-    vfs::VirtualVfs,
+    physical::PAGESIZE,
+    vfs::{RcStorage, StorageVfs},
 };
 
 pub struct Local {
-    storage: Rc<RefCell<StorageReplica>>,
+    storage: RcStorage,
     sqlite: Connection,
 }
 
 impl Local {
     pub fn new() -> Self {
-        let storage = Rc::new(RefCell::new(StorageReplica::new()));
+        let storage = RcStorage::new();
 
         // register the vfs globally (BOOOOOO)
-        let v = VirtualVfs::new(storage.clone());
+        let v = Rc::new(RefCell::new(StorageVfs::new(storage.clone())));
         sqlite_vfs::register("local-vfs", v).expect("failed to register local-vfs with sqlite");
 
         let sqlite = Connection::open_with_flags_and_vfs(
@@ -30,9 +30,13 @@ impl Local {
 
         sqlite.pragma_update(None, "page_size", PAGESIZE).unwrap();
         sqlite.pragma_update(None, "cache_size", 0).unwrap();
-        sqlite.pragma_update(None, "journal_mode", "wal").unwrap();
-        sqlite.pragma_update(None, "wal_autocheckpoint", 0).unwrap();
+        sqlite
+            .pragma_update(None, "journal_mode", "memory")
+            .unwrap();
         sqlite.pragma_update(None, "synchronous", "off").unwrap();
+        sqlite
+            .pragma_update(None, "locking_mode", "exclusive")
+            .unwrap();
 
         Self { storage, sqlite }
     }

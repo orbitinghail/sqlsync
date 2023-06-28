@@ -2,7 +2,7 @@
 //! Create a custom SQLite virtual file system by implementing the [Vfs] trait and registering it
 //! using [register].
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::ffi::{c_void, CStr, CString};
 use std::mem::{size_of, ManuallyDrop, MaybeUninit};
 use std::os::raw::{c_char, c_int};
@@ -71,9 +71,6 @@ pub trait File {
         // information is written to disk in the same order as calls to xWrite()
         ffi::SQLITE_IOCAP_SEQUENTIAL
     }
-
-    fn shm_map(&mut self, region: usize, size: usize, create: bool) -> VfsResult<*const u8>;
-    fn shm_unmap(&mut self) -> VfsResult<()>;
 }
 
 /// Allow boxing files, so you can easily return different optimized impls depending on OpenKind
@@ -106,14 +103,6 @@ impl File for Box<dyn File> {
 
     fn sync(&mut self) -> VfsResult<()> {
         self.as_mut().sync()
-    }
-
-    fn shm_map(&mut self, region: usize, size: usize, create: bool) -> VfsResult<*const u8> {
-        self.as_mut().shm_map(region, size, create)
-    }
-
-    fn shm_unmap(&mut self) -> VfsResult<()> {
-        self.as_mut().shm_unmap()
     }
 }
 
@@ -224,13 +213,16 @@ pub enum OpenAccess {
 }
 
 struct State<V> {
-    vfs: V,
+    vfs: Rc<RefCell<V>>,
     io_methods: ffi::sqlite3_io_methods,
     last_error: Rc<Cell<Option<VfsError>>>,
 }
 
 /// Register a virtual file system ([Vfs]) to SQLite.
-pub fn register<F: File, V: Vfs<File = F>>(name: &str, vfs: V) -> Result<(), RegisterError> {
+pub fn register<F: File, V: Vfs<File = F>>(
+    name: &str,
+    vfs: Rc<RefCell<V>>,
+) -> Result<(), RegisterError> {
     let name = ManuallyDrop::new(CString::new(name)?);
     let io_methods = ffi::sqlite3_io_methods {
         iVersion: 3,
@@ -344,7 +336,7 @@ mod vfs {
             }
         };
 
-        if let Err(err) = state.vfs.open(path, opts).and_then(|file| {
+        if let Err(err) = state.vfs.borrow_mut().open(path, opts).and_then(|file| {
             let out_file = (p_file as *mut FileState<F>)
                 .as_mut()
                 .ok_or_else(null_ptr_error)?;
@@ -385,7 +377,7 @@ mod vfs {
 
         let path = CStr::from_ptr(z_path);
 
-        match state.vfs.delete(path.as_ref()) {
+        match state.vfs.borrow_mut().delete(path.as_ref()) {
             Ok(_) => ffi::SQLITE_OK,
             Err(err) => err,
         }
@@ -415,9 +407,9 @@ mod vfs {
         let path = CStr::from_ptr(z_path);
 
         let result = match flags {
-            ffi::SQLITE_ACCESS_EXISTS => state.vfs.exists(path.as_ref()),
-            ffi::SQLITE_ACCESS_READ => state.vfs.access(path.as_ref(), false),
-            ffi::SQLITE_ACCESS_READWRITE => state.vfs.access(path.as_ref(), true),
+            ffi::SQLITE_ACCESS_EXISTS => state.vfs.borrow_mut().exists(path.as_ref()),
+            ffi::SQLITE_ACCESS_READ => state.vfs.borrow_mut().access(path.as_ref(), false),
+            ffi::SQLITE_ACCESS_READWRITE => state.vfs.borrow_mut().access(path.as_ref(), true),
             _ => return ffi::SQLITE_IOERR_ACCESS,
         };
 
@@ -515,7 +507,7 @@ mod vfs {
         state.last_error.take();
         let bytes = slice::from_raw_parts_mut(z_buf_out, n_byte as usize);
 
-        let len = state.vfs.randomness(bytes);
+        let len = state.vfs.borrow_mut().randomness(bytes);
         len as c_int
     }
 
@@ -529,7 +521,7 @@ mod vfs {
         };
         state.last_error.take();
 
-        let elapsed_us: usize = state.vfs.sleep(n_micro as usize);
+        let elapsed_us: usize = state.vfs.borrow().sleep(n_micro as usize);
         elapsed_us as c_int
     }
 
@@ -546,7 +538,7 @@ mod vfs {
         };
         state.last_error.take();
 
-        *p_time_out = state.vfs.current_time();
+        *p_time_out = state.vfs.borrow().current_time();
         ffi::SQLITE_OK
     }
 
@@ -587,7 +579,7 @@ mod vfs {
         };
         state.last_error.take();
 
-        *p = state.vfs.current_time_int64();
+        *p = state.vfs.borrow().current_time_int64();
         ffi::SQLITE_OK
     }
 }
@@ -813,44 +805,21 @@ mod io {
     }
 
     /// Create a shared memory file mapping.
-    /// p_file will be a pointer to the main database file.
-    /// i_region is the region number to retrieve.
-    /// region_size is the size of the regions
-    /// b_extend will be true if the mapping should be extended.
-    ///     i.e. if the underlying shared memory impl does not yet contain the requested region, then allocate it.
-    ///     otherwise if !b_extend and region is missing: set *pp to null and return SQLITE_OK
-    pub unsafe extern "C" fn shm_map<F: File>(
+    pub unsafe extern "C" fn shm_map<F>(
         p_file: *mut ffi::sqlite3_file,
-        i_region: i32,
-        region_size: i32,
+        i_pg: i32,
+        pgsz: i32,
         b_extend: i32,
-        pp: *mut *mut c_void,
+        _pp: *mut *mut c_void,
     ) -> i32 {
-        log::trace!(
-            "shm_map pg={} sz={} extend={}",
-            i_region,
-            region_size,
-            b_extend
-        );
+        log::trace!("shm_map pg={} sz={} extend={}", i_pg, pgsz, b_extend);
 
-        let state = match file_state::<F>(p_file, true) {
-            Ok(f) => f,
-            Err(_) => return ffi::SQLITE_IOERR_SHMMAP,
-        };
+        // reset last error
+        if file_state::<F>(p_file, true).is_err() {
+            return ffi::SQLITE_IOERR_SHMMAP;
+        }
 
-        let ptr = match state
-            .file
-            .shm_map(i_region as usize, region_size as usize, b_extend != 0)
-        {
-            Ok(ptr) => ptr,
-            Err(err) => {
-                state.set_last_error(err);
-                return ffi::SQLITE_IOERR_SHMMAP;
-            }
-        };
-
-        *pp = ptr as *mut c_void;
-        ffi::SQLITE_OK
+        ffi::SQLITE_IOERR_SHMMAP
     }
 
     /// Perform locking on a shared-memory segment.
@@ -867,35 +836,27 @@ mod io {
             return ffi::SQLITE_IOERR_SHMMAP;
         }
 
-        // TODO: implement shm_lock if/when it's needed
-        ffi::SQLITE_OK
+        ffi::SQLITE_IOERR_SHMLOCK
     }
 
     /// Memory barrier operation on shared memory.
     pub unsafe extern "C" fn shm_barrier(_p_file: *mut ffi::sqlite3_file) {
         log::trace!("shm_barrier");
-        // TODO: implement shm_barrier if/when it's needed
     }
 
     /// Unmap a shared memory segment.
-    pub unsafe extern "C" fn shm_unmap<F: File>(
+    pub unsafe extern "C" fn shm_unmap<F>(
         p_file: *mut ffi::sqlite3_file,
         _delete_flags: i32,
     ) -> i32 {
         log::trace!("shm_unmap");
 
-        let state = match file_state::<F>(p_file, true) {
-            Ok(f) => f,
-            Err(_) => return ffi::SQLITE_IOERR_SHMMAP,
-        };
-
-        match state.file.shm_unmap() {
-            Ok(_) => ffi::SQLITE_OK,
-            Err(err) => {
-                state.set_last_error(err);
-                ffi::SQLITE_IOERR_SHMMAP
-            }
+        // reset last error
+        if file_state::<F>(p_file, true).is_err() {
+            return ffi::SQLITE_IOERR_SHMMAP;
         }
+
+        ffi::SQLITE_OK
     }
 
     /// Fetch a page of a memory-mapped file.

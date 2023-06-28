@@ -4,7 +4,8 @@ Local
   sqlite: sqlite.Connection
   timeline: logical.Timeline<Mutator>
 
-  pull() -> Batch
+  // grab local pending changes
+  pending() -> Batch
   cursor() -> Cursor
   rebase(Changeset)
 
@@ -104,8 +105,8 @@ client:
   local.run(AddTodo)
   local.run(UpdateTodo)
 
-  // pull a batch and send to server
-  batch: logical.Batch = local.pull(10)
+  // pull pending local mutations and send to server
+  batch: logical.Batch = local.pending(10)
   network.send(batch)
 
   // receive changes from the server

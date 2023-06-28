@@ -129,6 +129,7 @@ impl SqliteWal {
         assert!(self.data.len() >= HEADER_SIZE, "wal is empty");
 
         // TODO: add more checks that the wal is valid
+        // TODO: this is only currently safe if there are *no* outstanding txns
 
         // skip header
         let data = &self.data[HEADER_SIZE..];

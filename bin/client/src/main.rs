@@ -183,12 +183,15 @@ fn main() -> anyhow::Result<()> {
         })
     };
 
+    println!("initializing schema");
     local
         .run(|tx| {
             let mutator = MutatorImpl {};
             mutator.apply(tx, &Mutation::InitSchema)
         })
         .unwrap();
+
+    println!("appending a task");
     local
         .run(|tx| {
             let mutator = MutatorImpl {};
@@ -202,6 +205,7 @@ fn main() -> anyhow::Result<()> {
         })
         .unwrap();
 
+    println!("printing tasks");
     print_tasks(&mut local)?;
 
     // recorder.apply(Mutation::InitSchema)?;
