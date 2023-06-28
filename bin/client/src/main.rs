@@ -1,3 +1,5 @@
+use std::sync::MutexGuard;
+
 use anyhow::anyhow;
 use sqlsync::{named_params, Mutator, OptionalExtension, Transaction};
 
@@ -170,43 +172,34 @@ fn main() -> anyhow::Result<()> {
         .env()
         .init()?;
 
-    let mut local = sqlsync::Local::new();
+    let mut local = sqlsync::Local::new(MutatorImpl {});
 
-    let print_tasks = |local: &mut sqlsync::Local| {
-        local.query(|conn| {
-            let tasks = query_tasks(conn)?;
-            println!("got {} tasks", tasks.len());
-            for task in tasks {
-                println!("{:?}", task);
-            }
-            Ok(())
-        })
-    };
+    macro_rules! print_tasks {
+        () => {
+            local.query(|conn| {
+                let tasks = query_tasks(conn)?;
+                println!("got {} tasks", tasks.len());
+                for task in tasks {
+                    println!("{:?}", task);
+                }
+                Ok(())
+            })
+        };
+    }
 
-    println!("initializing schema");
-    local
-        .run(|tx| {
-            let mutator = MutatorImpl {};
-            mutator.apply(tx, &Mutation::InitSchema)
-        })
-        .unwrap();
+    local.run(Mutation::InitSchema)?;
 
-    println!("appending a task");
-    local
-        .run(|tx| {
-            let mutator = MutatorImpl {};
-            mutator.apply(
-                tx,
-                &Mutation::AppendTask {
-                    id: 1,
-                    description: "work on sqlsync".into(),
-                },
-            )
-        })
-        .unwrap();
+    local.run(Mutation::AppendTask {
+        id: 1,
+        description: "work on sqlsync".into(),
+    })?;
+    local.run(Mutation::AppendTask {
+        id: 2,
+        description: "eat lunch".into(),
+    })?;
 
     println!("printing tasks");
-    print_tasks(&mut local)?;
+    print_tasks!()?;
 
     // recorder.apply(Mutation::InitSchema)?;
     // recorder.rebase(recorder.seq())?;

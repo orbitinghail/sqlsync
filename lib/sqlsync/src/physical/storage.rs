@@ -1,11 +1,15 @@
 use super::{page::SparsePages, PAGESIZE};
 use crate::{
-    journal::{Batch, Cursor, Journal},
+    journal::{Cursor, Journal, JournalPartial},
     physical::page::Page,
 };
 use anyhow::Result;
 
-const MAX_BATCH_SIZE: usize = 10;
+// TODO: eventually we should decide on MAX_SYNC based on the number of pages
+// per journal entry
+// idea: push this down to Journal via some kind of "include" callback to decide
+// which entries to include in order (once it returns false, return the partial)
+const MAX_SYNC: usize = 1;
 
 pub struct Storage {
     journal: Journal<SparsePages>,
@@ -32,12 +36,12 @@ impl Storage {
         self.pending.clear()
     }
 
-    pub fn receive_batch(&mut self, batch: Batch<SparsePages>) {
-        self.journal.write(batch);
+    pub fn sync_prepare(&self, cursor: Cursor) -> JournalPartial<SparsePages> {
+        self.journal.sync_prepare(cursor, MAX_SYNC)
     }
 
-    pub fn prepare_batch(&self, cursor: Cursor) -> Batch<SparsePages> {
-        self.journal.read(cursor, MAX_BATCH_SIZE)
+    pub fn sync_receive(&mut self, partial: JournalPartial<SparsePages>) {
+        self.journal.sync_receive(partial);
     }
 }
 

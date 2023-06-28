@@ -2,8 +2,8 @@
 journal<T>:
     lsn() -> u64
     append(T)
-    write(&Batch<T>)
-    read(lsn, max_len) -> &Batch<T>
+    sync_receive(&JournalPartial<T>)
+    sync_prepare(lsn, max_len) -> &JournalPartial<T>
     rollup(lsn, (Iter<T>) -> Option<T>)
     iter() -> impl DoubleEndedIterator<Item=T> // might run into lifetime issues?
 
@@ -13,7 +13,7 @@ client:
 
     // run local mutations
     local.run(AddTodo)
-        timeline.apply(db, AddTodo)
+        timeline.run(db, AddTodo)
             journal.append(AddTodo)
             tx = db.begin()
             mutation.apply(tx, AddTodo)

@@ -1,75 +1,55 @@
-use std::ops::DerefMut;
-
 use rusqlite::Connection;
 
-use crate::{db::run_in_tx, Mutator};
+use crate::{
+    db::run_in_tx,
+    journal::{Cursor, Journal, JournalPartial},
+    Mutator,
+};
 
-#[derive(Clone)]
-struct Entry<M: Clone> {
-    seq: u64,
-    mutation: M,
-}
+const MAX_SYNC: usize = 10;
 
-struct Batch<M> {
-    timeline_id: u64,
-    last_seq: u64,
-    mutations: Vec<M>,
-}
+const TIMELINES_TABLE: &str = "__sqlsync_timelines";
+const TIMELINES_TABLE_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS __sqlsync_timelines (
+        id INTEGER PRIMARY KEY,
+        lsn INTEGER NOT NULL
+    )
+";
 
-struct Timeline<M: Mutator> {
+pub struct Timeline<M: Mutator> {
     id: u64,
-    next_seq: u64,
     mutator: M,
-    entries: Vec<Entry<M::Mutation>>,
+    journal: Journal<M::Mutation>,
 }
 
 impl<M: Mutator> Timeline<M> {
     pub fn new(id: u64, mutator: M) -> Self {
         Self {
             id,
-            next_seq: 0,
             mutator,
-            entries: Vec::new(),
+            journal: Journal::new(),
         }
     }
 
-    pub fn run(&mut self, sqlite: &mut Connection, mutation: M::Mutation) -> anyhow::Result<()> {
+    pub fn migrate_db(&self, sqlite: &mut Connection) -> anyhow::Result<()> {
         run_in_tx(sqlite, |tx| {
-            self.mutator.apply(tx, &mutation)?;
-            self.entries.push(Entry {
-                seq: self.next_seq,
-                mutation,
-            });
-            self.next_seq += 1;
+            tx.execute(TIMELINES_TABLE_SQL, [])?;
             Ok(())
         })
     }
 
-    pub fn len(&self) -> usize {
-        self.entries.len()
+    pub fn run(&mut self, sqlite: &mut Connection, mutation: M::Mutation) -> anyhow::Result<()> {
+        let out = run_in_tx(sqlite, |tx| self.mutator.apply(tx, &mutation));
+        self.journal.append(mutation);
+        out
     }
 
-    pub fn read_batch(&self, start_seq: u64, max_size: usize) -> Option<Batch<M::Mutation>> {
-        if self.entries.is_empty() {
-            return None;
-        }
+    pub fn sync_prepare(&self, cursor: Cursor) -> JournalPartial<M::Mutation> {
+        self.journal.sync_prepare(cursor, MAX_SYNC)
+    }
 
-        let entries: Vec<Entry<M::Mutation>> = self
-            .entries
-            .iter()
-            .skip_while(|e| e.seq < start_seq)
-            .take(max_size)
-            .map(|e| e.clone())
-            .collect();
-
-        let last_seq = entries.last().map(|e| e.seq)?;
-        let mutations = entries.into_iter().map(|e| e.mutation).collect();
-
-        Some(Batch {
-            timeline_id: self.id,
-            last_seq,
-            mutations,
-        })
+    pub fn sync_receive(&mut self, partial: JournalPartial<M::Mutation>) {
+        self.journal.sync_receive(partial);
     }
 
     pub fn rebase(&self, sqlite: &mut Connection) -> anyhow::Result<()> {

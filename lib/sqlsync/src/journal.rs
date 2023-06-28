@@ -13,7 +13,7 @@ impl Cursor {
     }
 }
 
-pub struct Batch<'a, T> {
+pub struct JournalPartial<'a, T> {
     start: LSN,
     data: &'a [T],
 }
@@ -54,26 +54,27 @@ where
         self.range.end += 1;
     }
 
-    /// Merge a batch into the journal starting at batch.start and possibly extending the journal.
-    /// The batch must overlap with the journal or be immediately after the journal.
+    /// Merge a partial into the journal starting at partial.start and possibly extending the journal.
+    /// The partial must overlap with the journal or be immediately after the journal.
     /// Note: this method does not replace existing entries in the journal, it only extends the journal if needed.
-    pub fn write(&mut self, batch: Batch<T>) {
-        assert!(batch.start >= self.range.start);
-        assert!(batch.start <= self.range.end);
-        let offset = self.range.end - batch.start;
-        self.data.extend_from_slice(&batch.data[offset as usize..]);
-        self.range.end = batch.start + batch.data.len() as LSN;
+    pub fn sync_receive(&mut self, partial: JournalPartial<T>) {
+        assert!(partial.start >= self.range.start);
+        assert!(partial.start <= self.range.end);
+        let offset = self.range.end - partial.start;
+        self.data
+            .extend_from_slice(&partial.data[offset as usize..]);
+        self.range.end = partial.start + partial.data.len() as LSN;
     }
 
-    /// Read a batch of entries from the journal starting at cursor.
-    /// The batch will contain at most max_len entries.
-    pub fn read<'a>(&'a self, cursor: Cursor, max_len: usize) -> Batch<'a, T> {
+    /// Read a partial from the journal starting at cursor.
+    /// The partial will contain at most max_len entries.
+    pub fn sync_prepare<'a>(&'a self, cursor: Cursor, max_len: usize) -> JournalPartial<'a, T> {
         let lsn = cursor.lsn;
         assert!(lsn >= self.range.start);
         assert!(lsn < self.range.end);
         let offset = lsn - self.range.start;
         let end = std::cmp::min(offset + max_len as LSN, self.range.end);
-        Batch {
+        JournalPartial {
             start: lsn,
             data: &self.data[offset as usize..end as usize],
         }
