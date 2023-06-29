@@ -176,140 +176,138 @@ fn main() -> anyhow::Result<()> {
     let mut remote = sqlsync::Remote::new(MutatorImpl {});
 
     macro_rules! debug_state {
-        ($next_action:literal) => {
+        (start $name:literal) => {
             log::info!("===============================");
-            log::info!("Current State");
-            log::info!("local: {:?}", local);
-            log::info!("remote: {:?}", remote);
-            log::info!("next action: {:?}", $next_action);
+            debug_state!(finish);
+            log::info!($name);
+        };
+        (finish) => {
+            log::info!("{:?}", local);
+            log::info!("{:?}", remote);
         };
     };
 
     macro_rules! print_tasks {
         () => {
             local.query(|conn| {
-                log::info!("printing tasks");
                 let tasks = query_tasks(conn)?;
-                log::info!("got {} tasks", tasks.len());
+                log::info!("{} Tasks:", tasks.len());
                 for task in tasks {
-                    log::info!("{:?}", task);
+                    log::info!("  {:?}", task);
                 }
                 Ok(())
             })
         };
     }
 
-    local.run(Mutation::InitSchema)?;
+    macro_rules! step_remote {
+        () => {
+            debug_state!(start "Stepping remote");
+            remote.step()?;
+            debug_state!(finish);
+        };
+    }
 
-    debug_state!("syncing: client -> server");
+    macro_rules! mutate {
+        (InitSchema) => {
+            log::info!("initializing schema");
+            local.run(Mutation::InitSchema)?
+        };
+        (AppendTask $id:literal, $description:literal) => {
+            log::info!("appending task {} {}", $id, $description);
+            local.run(Mutation::AppendTask {
+                id: $id,
+                description: $description.into(),
+            })?
+        };
+        (RemoveTask $id:literal) => {
+            log::info!("removing task {}", $id);
+            local.run(Mutation::RemoveTask { id: $id })?
+        };
+        (UpdateTask $id:literal, $partial:expr) => {
+            log::info!("updating task {}", $id);
+            local.run(Mutation::UpdateTask {
+                id: $id,
+                partial: $partial,
+            })?
+        };
+        (MoveTask $id:literal after $after:literal) => {
+            log::info!("moving task {} after {}", $id, $after);
+            local.run(Mutation::MoveTask {
+                id: $id,
+                after: $after,
+            })?
+        };
+    }
 
-    // sync client to server to send over the InitSchema
-    let req = local.sync_timeline_prepare();
-    let server_cursor = remote.handle_client_sync_timeline(local_id, req);
-    local.sync_timeline_response(server_cursor);
+    macro_rules! sync {
+        (client -> server) => {
+            debug_state!(start "syncing: client -> server");
+            let req = local.sync_timeline_prepare();
+            let server_cursor = remote.handle_client_sync_timeline(local_id, req);
+            local.sync_timeline_response(server_cursor);
+            debug_state!(finish);
+        };
+        (server -> client) => {
+            debug_state!(start "syncing: server -> client");
+            let req = local.storage_cursor();
+            let resp = remote.handle_client_sync_storage(req);
+            resp.and_then(|r| Some(local.sync_storage_receive(r)))
+                .transpose()?;
+            debug_state!(finish);
+        };
+    }
 
-    // step the remote forward, this will apply InitSchema on the server
-    debug_state!("stepping remote");
-    remote.step()?;
+    mutate!(InitSchema);
 
-    debug_state!("running two tasks on local");
+    sync!(client -> server);
+    step_remote!();
 
-    local.run(Mutation::AppendTask {
-        id: 1,
-        description: "work on sqlsync".into(),
-    })?;
-    local.run(Mutation::AppendTask {
-        id: 2,
-        description: "eat lunch".into(),
-    })?;
+    mutate!(AppendTask 1, "work on sqlsync");
+    mutate!(AppendTask 2, "eat lunch");
+    print_tasks!()?;
+
+    sync!(server -> client);
+    print_tasks!()?;
+
+    sync!(client -> server);
+    print_tasks!()?;
+
+    step_remote!();
+
+    sync!(server -> client);
+    print_tasks!()?;
+
+    // now let's switch the order of the tasks and do a full sync
+
+    mutate!(MoveTask 1 after 2);
+    print_tasks!()?;
+
+    // full sync
+    sync!(client -> server);
+    step_remote!();
+    sync!(server -> client);
 
     print_tasks!()?;
 
-    debug_state!("syncing: server -> client");
+    // run some updates, appends, and removes
 
-    // syncing at this point should be a logical no-op
-    // however, it should involve fastforwarding storage and replaying timeline
-    let req = local.storage_cursor();
-    let resp = remote.handle_client_sync_storage(req);
-    resp.and_then(|r| Some(local.sync_storage_receive(r)))
-        .transpose()?;
+    mutate!(UpdateTask 1, PartialTask {
+        description: Some("work on sqlsync".into()),
+        completed: Some(true),
+    });
 
-    print_tasks!()?;
+    mutate!(AppendTask 3, "another one");
 
-    debug_state!("syncing: client -> server");
-
-    let req = local.sync_timeline_prepare();
-    let server_cursor = remote.handle_client_sync_timeline(local_id, req);
-    local.sync_timeline_response(server_cursor);
+    mutate!(RemoveTask 2);
 
     print_tasks!()?;
 
-    // step the remote forward, this will apply the two pending tasks on the server
-    debug_state!("stepping remote");
-    remote.step()?;
-
-    debug_state!("syncing: server -> client");
-
-    // syncing at this point should be a logical no-op
-    // however, it should involve fastforwarding storage and replaying timeline
-    let req = local.storage_cursor();
-    let resp = remote.handle_client_sync_storage(req);
-    resp.and_then(|r| Some(local.sync_storage_receive(r)))
-        .transpose()?;
+    sync!(client -> server);
+    step_remote!();
+    sync!(server -> client);
 
     print_tasks!()?;
-
-    debug_state!("done.");
-
-    // recorder.apply(Mutation::InitSchema)?;
-    // recorder.rebase(recorder.seq())?;
-
-    // recorder.apply(Mutation::AppendTask {
-    //     id: 1,
-    //     description: "work on sqlsync".into(),
-    // })?;
-    // recorder.apply(Mutation::AppendTask {
-    //     id: 2,
-    //     description: "eat lunch".into(),
-    // })?;
-
-    // print_tasks(&mut recorder)?;
-
-    // recorder.rebase(recorder.seq())?;
-
-    // print_tasks(&mut recorder)?;
-
-    // recorder.apply(Mutation::MoveTask { id: 1, after: 2 })?;
-
-    // print_tasks(&mut recorder)?;
-
-    // recorder.apply(Mutation::UpdateTask {
-    //     id: 2,
-    //     partial: PartialTask {
-    //         description: None,
-    //         completed: Some(true),
-    //     },
-    // })?;
-
-    // print_tasks(&mut recorder)?;
-
-    // recorder.apply(Mutation::RemoveTask { id: 2 })?;
-
-    // recorder.apply(Mutation::AppendTask {
-    //     id: 3,
-    //     description: "eat lunch".into(),
-    // })?;
-
-    // recorder.apply(Mutation::AppendTask {
-    //     id: 4,
-    //     description: "another one".into(),
-    // })?;
-
-    // print_tasks(&mut recorder)?;
-
-    // recorder.apply(Mutation::MoveTask { id: 4, after: 1 })?;
-
-    // print_tasks(&mut recorder)?;
 
     Ok(())
 }
