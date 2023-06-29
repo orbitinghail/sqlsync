@@ -8,7 +8,6 @@ use crate::{
 
 const MAX_SYNC: usize = 10;
 
-const TIMELINES_TABLE: &str = "__sqlsync_timelines";
 const TIMELINES_TABLE_SQL: &str = "
     CREATE TABLE IF NOT EXISTS __sqlsync_timelines (
         id INTEGER PRIMARY KEY,

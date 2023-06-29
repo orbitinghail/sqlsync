@@ -1,9 +1,10 @@
 mod db;
+mod journal;
 mod local;
 mod logical;
 mod physical;
+mod remote;
 mod vfs;
-mod journal;
 
 pub use local::Local;
 pub use logical::Mutator;

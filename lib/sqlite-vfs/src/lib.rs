@@ -6,6 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::ffi::{c_void, CStr, CString};
 use std::mem::{size_of, ManuallyDrop, MaybeUninit};
 use std::os::raw::{c_char, c_int};
+use std::pin::Pin;
 use std::ptr::null_mut;
 use std::rc::Rc;
 use std::slice;
@@ -103,6 +104,51 @@ impl File for Box<dyn File> {
 
     fn sync(&mut self) -> VfsResult<()> {
         self.as_mut().sync()
+    }
+}
+
+/// Allow File to be an unsafe pointer
+pub struct FilePtr<T: File>(*mut T);
+
+impl<T: File> FilePtr<T> {
+    pub fn new(f: &mut Box<T>) -> Self {
+        Self(&mut **f)
+    }
+}
+
+impl<T: File> Clone for FilePtr<T> {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
+impl<T: File> File for FilePtr<T> {
+    fn sector_size(&self) -> usize {
+        unsafe { (*self.0).sector_size() }
+    }
+
+    fn device_characteristics(&self) -> i32 {
+        unsafe { (*self.0).device_characteristics() }
+    }
+
+    fn file_size(&self) -> VfsResult<u64> {
+        unsafe { (*self.0).file_size() }
+    }
+
+    fn truncate(&mut self, size: u64) -> VfsResult<()> {
+        unsafe { (*self.0).truncate(size) }
+    }
+
+    fn write(&mut self, pos: u64, buf: &[u8]) -> VfsResult<usize> {
+        unsafe { (*self.0).write(pos, buf) }
+    }
+
+    fn read(&mut self, pos: u64, buf: &mut [u8]) -> VfsResult<usize> {
+        unsafe { (*self.0).read(pos, buf) }
+    }
+
+    fn sync(&mut self) -> VfsResult<()> {
+        unsafe { (*self.0).sync() }
     }
 }
 
@@ -213,16 +259,13 @@ pub enum OpenAccess {
 }
 
 struct State<V> {
-    vfs: Rc<RefCell<V>>,
+    vfs: V,
     io_methods: ffi::sqlite3_io_methods,
     last_error: Rc<Cell<Option<VfsError>>>,
 }
 
 /// Register a virtual file system ([Vfs]) to SQLite.
-pub fn register<F: File, V: Vfs<File = F>>(
-    name: &str,
-    vfs: Rc<RefCell<V>>,
-) -> Result<(), RegisterError> {
+pub fn register<F: File, V: Vfs<File = F>>(name: &str, vfs: V) -> Result<(), RegisterError> {
     let name = ManuallyDrop::new(CString::new(name)?);
     let io_methods = ffi::sqlite3_io_methods {
         iVersion: 3,
@@ -245,6 +288,7 @@ pub fn register<F: File, V: Vfs<File = F>>(
         xFetch: Some(io::mem_fetch::<F>),
         xUnfetch: Some(io::mem_unfetch::<F>),
     };
+
     let ptr = Box::into_raw(Box::new(State {
         vfs,
         io_methods,
@@ -336,7 +380,7 @@ mod vfs {
             }
         };
 
-        if let Err(err) = state.vfs.borrow_mut().open(path, opts).and_then(|file| {
+        if let Err(err) = state.vfs.open(path, opts).and_then(|file| {
             let out_file = (p_file as *mut FileState<F>)
                 .as_mut()
                 .ok_or_else(null_ptr_error)?;
@@ -377,7 +421,7 @@ mod vfs {
 
         let path = CStr::from_ptr(z_path);
 
-        match state.vfs.borrow_mut().delete(path.as_ref()) {
+        match state.vfs.delete(path.as_ref()) {
             Ok(_) => ffi::SQLITE_OK,
             Err(err) => err,
         }
@@ -407,9 +451,9 @@ mod vfs {
         let path = CStr::from_ptr(z_path);
 
         let result = match flags {
-            ffi::SQLITE_ACCESS_EXISTS => state.vfs.borrow_mut().exists(path.as_ref()),
-            ffi::SQLITE_ACCESS_READ => state.vfs.borrow_mut().access(path.as_ref(), false),
-            ffi::SQLITE_ACCESS_READWRITE => state.vfs.borrow_mut().access(path.as_ref(), true),
+            ffi::SQLITE_ACCESS_EXISTS => state.vfs.exists(path.as_ref()),
+            ffi::SQLITE_ACCESS_READ => state.vfs.access(path.as_ref(), false),
+            ffi::SQLITE_ACCESS_READWRITE => state.vfs.access(path.as_ref(), true),
             _ => return ffi::SQLITE_IOERR_ACCESS,
         };
 
@@ -507,7 +551,7 @@ mod vfs {
         state.last_error.take();
         let bytes = slice::from_raw_parts_mut(z_buf_out, n_byte as usize);
 
-        let len = state.vfs.borrow_mut().randomness(bytes);
+        let len = state.vfs.randomness(bytes);
         len as c_int
     }
 
@@ -521,7 +565,7 @@ mod vfs {
         };
         state.last_error.take();
 
-        let elapsed_us: usize = state.vfs.borrow().sleep(n_micro as usize);
+        let elapsed_us: usize = state.vfs.sleep(n_micro as usize);
         elapsed_us as c_int
     }
 
@@ -538,7 +582,7 @@ mod vfs {
         };
         state.last_error.take();
 
-        *p_time_out = state.vfs.borrow().current_time();
+        *p_time_out = state.vfs.current_time();
         ffi::SQLITE_OK
     }
 
@@ -579,7 +623,7 @@ mod vfs {
         };
         state.last_error.take();
 
-        *p = state.vfs.borrow().current_time_int64();
+        *p = state.vfs.current_time_int64();
         ffi::SQLITE_OK
     }
 }

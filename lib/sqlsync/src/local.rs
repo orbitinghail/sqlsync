@@ -1,18 +1,15 @@
-use std::{cell::RefCell, rc::Rc};
-
-use rusqlite::{Connection, OpenFlags, Transaction};
+use rusqlite::{Connection, Transaction};
 
 use crate::{
-    db::readyonly_query,
+    db::{open_with_vfs, readyonly_query},
     journal::JournalPartial,
     logical::Timeline,
-    physical::{SparsePages, PAGESIZE},
-    vfs::{RcStorage, StorageVfs},
+    physical::{SparsePages, Storage},
     Mutator,
 };
 
 pub struct Local<M: Mutator> {
-    storage: RcStorage,
+    storage: Box<Storage>,
     timeline: Timeline<M>,
     sqlite: Connection,
 }
@@ -22,28 +19,7 @@ impl<M: Mutator> Local<M> {
         // TODO: get client_id from somewhere
         let client_id = 0;
 
-        let storage = RcStorage::new();
-
-        // register the vfs globally (BOOOOOO)
-        let v = Rc::new(RefCell::new(StorageVfs::new(storage.clone())));
-        sqlite_vfs::register("local-vfs", v).expect("failed to register local-vfs with sqlite");
-
-        let mut sqlite = Connection::open_with_flags_and_vfs(
-            "main.db",
-            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
-            "local-vfs",
-        )
-        .unwrap();
-
-        sqlite.pragma_update(None, "page_size", PAGESIZE).unwrap();
-        sqlite.pragma_update(None, "cache_size", 0).unwrap();
-        sqlite
-            .pragma_update(None, "journal_mode", "memory")
-            .unwrap();
-        sqlite.pragma_update(None, "synchronous", "off").unwrap();
-        sqlite
-            .pragma_update(None, "locking_mode", "exclusive")
-            .unwrap();
+        let (mut sqlite, storage) = open_with_vfs().expect("failed to open sqlite db");
 
         let timeline = Timeline::new(client_id, mutator);
         timeline
@@ -70,11 +46,11 @@ impl<M: Mutator> Local<M> {
     }
 
     pub fn XXX_DEBUG_commit(&mut self) {
-        self.storage.borrow_mut().commit()
+        self.storage.commit()
     }
 
     pub fn XXX_DEBUG_revert(&mut self) {
-        self.storage.borrow_mut().revert()
+        self.storage.revert()
     }
 
     pub fn rebase(&mut self) -> anyhow::Result<()> {
@@ -83,9 +59,8 @@ impl<M: Mutator> Local<M> {
         if resp.is_empty() {
             return Ok(());
         }
-        let storage = self.storage.borrow_mut();
-        storage.revert();
-        storage.sync_receive(resp);
+        self.storage.revert();
+        self.storage.sync_receive(resp);
 
         self.timeline.rebase(&mut self.sqlite)
     }

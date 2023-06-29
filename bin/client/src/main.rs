@@ -1,5 +1,3 @@
-use std::sync::MutexGuard;
-
 use anyhow::anyhow;
 use sqlsync::{named_params, Mutator, OptionalExtension, Transaction};
 
