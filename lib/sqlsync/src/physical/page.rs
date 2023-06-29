@@ -17,6 +17,10 @@ impl SparsePages {
         }
     }
 
+    pub fn num_pages(&self) -> usize {
+        self.pages.len()
+    }
+
     pub fn clear(&mut self) {
         self.pages.clear();
     }

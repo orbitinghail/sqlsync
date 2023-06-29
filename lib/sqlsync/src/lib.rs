@@ -7,6 +7,7 @@ mod remote;
 mod vfs;
 
 pub use local::Local;
+pub use remote::Remote;
 pub use logical::Mutator;
 
 pub use rusqlite::{named_params, OptionalExtension, Transaction};

@@ -98,6 +98,7 @@ enum Mutation {
     MoveTask { id: i64, after: i64 },
 }
 
+#[derive(Clone)]
 struct MutatorImpl {}
 
 impl Mutator for MutatorImpl {
@@ -170,15 +171,28 @@ fn main() -> anyhow::Result<()> {
         .env()
         .init()?;
 
-    let mut local = sqlsync::Local::new(MutatorImpl {});
+    let local_id = 1;
+    let mut local = sqlsync::Local::new(local_id, MutatorImpl {});
+    let mut remote = sqlsync::Remote::new(MutatorImpl {});
+
+    macro_rules! debug_state {
+        ($next_action:literal) => {
+            log::info!("===============================");
+            log::info!("Current State");
+            log::info!("local: {:?}", local);
+            log::info!("remote: {:?}", remote);
+            log::info!("next action: {:?}", $next_action);
+        };
+    };
 
     macro_rules! print_tasks {
         () => {
             local.query(|conn| {
+                log::info!("printing tasks");
                 let tasks = query_tasks(conn)?;
-                println!("got {} tasks", tasks.len());
+                log::info!("got {} tasks", tasks.len());
                 for task in tasks {
-                    println!("{:?}", task);
+                    log::info!("{:?}", task);
                 }
                 Ok(())
             })
@@ -187,8 +201,18 @@ fn main() -> anyhow::Result<()> {
 
     local.run(Mutation::InitSchema)?;
 
-    println!("committing");
-    local.XXX_DEBUG_commit();
+    debug_state!("syncing: client -> server");
+
+    // sync client to server to send over the InitSchema
+    let req = local.sync_timeline_prepare();
+    let server_cursor = remote.handle_client_sync_timeline(local_id, req);
+    local.sync_timeline_response(server_cursor);
+
+    // step the remote forward, this will apply InitSchema on the server
+    debug_state!("stepping remote");
+    remote.step()?;
+
+    debug_state!("running two tasks on local");
 
     local.run(Mutation::AppendTask {
         id: 1,
@@ -199,14 +223,43 @@ fn main() -> anyhow::Result<()> {
         description: "eat lunch".into(),
     })?;
 
-    println!("printing tasks");
     print_tasks!()?;
 
-    println!("reverting");
-    local.XXX_DEBUG_revert();
+    debug_state!("syncing: server -> client");
 
-    println!("printing tasks");
+    // syncing at this point should be a logical no-op
+    // however, it should involve fastforwarding storage and replaying timeline
+    let req = local.storage_cursor();
+    let resp = remote.handle_client_sync_storage(req);
+    resp.and_then(|r| Some(local.sync_storage_receive(r)))
+        .transpose()?;
+
     print_tasks!()?;
+
+    debug_state!("syncing: client -> server");
+
+    let req = local.sync_timeline_prepare();
+    let server_cursor = remote.handle_client_sync_timeline(local_id, req);
+    local.sync_timeline_response(server_cursor);
+
+    print_tasks!()?;
+
+    // step the remote forward, this will apply the two pending tasks on the server
+    debug_state!("stepping remote");
+    remote.step()?;
+
+    debug_state!("syncing: server -> client");
+
+    // syncing at this point should be a logical no-op
+    // however, it should involve fastforwarding storage and replaying timeline
+    let req = local.storage_cursor();
+    let resp = remote.handle_client_sync_storage(req);
+    resp.and_then(|r| Some(local.sync_storage_receive(r)))
+        .transpose()?;
+
+    print_tasks!()?;
+
+    debug_state!("done.");
 
     // recorder.apply(Mutation::InitSchema)?;
     // recorder.rebase(recorder.seq())?;

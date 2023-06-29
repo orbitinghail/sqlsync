@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use super::{page::SparsePages, PAGESIZE};
 use crate::{
     journal::{Cursor, Journal, JournalPartial},
@@ -16,6 +18,15 @@ pub struct Storage {
     pending: SparsePages,
 }
 
+impl Debug for Storage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Storage")
+            .field(&self.journal)
+            .field(&("pending pages", &self.pending.num_pages()))
+            .finish()
+    }
+}
+
 impl Storage {
     pub fn new() -> Self {
         Self {
@@ -24,16 +35,16 @@ impl Storage {
         }
     }
 
-    pub fn cursor(&self) -> Result<Cursor> {
-        self.journal.end()
-    }
-
     pub fn commit(&mut self) {
         self.journal.append(std::mem::take(&mut self.pending))
     }
 
     pub fn revert(&mut self) {
         self.pending.clear()
+    }
+
+    pub fn cursor(&self) -> Option<Cursor> {
+        self.journal.end().ok()
     }
 
     pub fn sync_prepare(&self, cursor: Cursor) -> JournalPartial<SparsePages> {

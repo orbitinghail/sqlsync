@@ -2,4 +2,5 @@ mod mutate;
 mod timeline;
 
 pub use mutate::Mutator;
-pub use timeline::Timeline;
+pub use timeline::{run_timeline_migration, RemoteTimeline, Timeline, TimelineId};
+
