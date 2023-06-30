@@ -98,4 +98,85 @@ server:
         clients.announce_changes()
 
 
+Analysis of sync logic
+=======================
+
+sync timeline from client to server
+    let req = local.sync_timeline_prepare();
+        get cached server cursor
+        timeline.sync_prepare
+            journal.sync_prepare
+                panic if cursor is out of range
+                return partial [cursor..max_len]
+
+    let server_cursor = remote.handle_client_sync_timeline(local_id, req);
+        find timeline
+        timeline.sync_receive
+            journal.sync_receive
+                panic if partial does not overlap
+                merge partial into self.data
+                return end cursor
+        add to ReceiveQueue
+        return timeline's end cursor
+
+    local.sync_timeline_response(server_cursor);
+        cache server cursor to optimize next sync
+
+step server
+    pop entry from receive queue
+    get timeline for entry
+    timeline.apply_up_to(sqlite, entry.cursor)
+        read applied_cursor from __sqlsync_timelines
+        start_cursor = applied_cursor.next() or Cursor(0)
+        apply mutations from start_cursor to entry.cursor
+        update __sqlsync_timelines with new applied cursor
+    storage.commit
+        journal.append(self.pending)
+
+sync storage from server to client
+    let req = local.storage_cursor();
+        storage.cursor
+            journal.end.ok <- if journal is empty, this returns None
+
+    let resp = remote.handle_client_sync_storage(req);
+        map client cursor to cursor.next() or Cursor(0)
+        if cursor <= storage.cursor()
+            storage.sync_prepare
+                journal.sync_prepare
+                    panic if cursor is out of range
+                    return partial [cursor..max_len]
+
+    resp.and_then(|r| Some(local.sync_storage_receive(r)))
+        .transpose()?;
+        if partial is not empty
+            storage.revert
+                clear pending pages
+
+            storage.sync_receive
+                journal.sync_receive
+                    panic if partial does not overlap
+                    merge partial into self.data
+                    return end cursor
+
+            timeline.rebase
+                read applied cursor from __sqlsync_timelines
+                journal.remove_up_to(applied)
+                    assert applied is in range
+                    data.drain(..offset)
+                    update range
+                reapply remaining mutations
+
+
+TODO & Observations
+    - can we eliminate some panics through the type system?
+    - remaining panics should be errors
+    - cursor/lsn/offset logic feels brittle
+        - at the very least it should be pushed entirely into an opaque layer which can be heavily tested
+        - perhaps a custom range class
+    - should timeline id actually be pushed into the journal to ensure that unrelated journals don't accidentally cross-sync
+    - when syncing client -> server, if we don't have the server cursor we should request it (or the server should initialize us with it)
+
+
+    
+
 ```

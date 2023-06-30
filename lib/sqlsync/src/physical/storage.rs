@@ -5,7 +5,6 @@ use crate::{
     journal::{Cursor, Journal, JournalPartial},
     physical::page::Page,
 };
-use anyhow::Result;
 
 // TODO: eventually we should decide on MAX_SYNC based on the number of pages
 // per journal entry
@@ -68,7 +67,7 @@ impl sqlite_vfs::File for Storage {
             .unwrap_or(0))
     }
 
-    fn truncate(&mut self, size: u64) -> sqlite_vfs::VfsResult<()> {
+    fn truncate(&mut self, _size: u64) -> sqlite_vfs::VfsResult<()> {
         // for now we panic
         panic!("truncate not implemented")
     }

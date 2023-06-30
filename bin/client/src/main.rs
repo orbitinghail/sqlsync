@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use sqlsync::{named_params, Mutator, OptionalExtension, Transaction};
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Task {
     id: i64,
     sort: f64,
@@ -185,7 +186,7 @@ fn main() -> anyhow::Result<()> {
             log::info!("{:?}", local);
             log::info!("{:?}", remote);
         };
-    };
+    }
 
     macro_rules! print_tasks {
         () => {

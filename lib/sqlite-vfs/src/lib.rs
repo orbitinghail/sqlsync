@@ -2,11 +2,10 @@
 //! Create a custom SQLite virtual file system by implementing the [Vfs] trait and registering it
 //! using [register].
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::ffi::{c_void, CStr, CString};
 use std::mem::{size_of, ManuallyDrop, MaybeUninit};
 use std::os::raw::{c_char, c_int};
-use std::pin::Pin;
 use std::ptr::null_mut;
 use std::rc::Rc;
 use std::slice;

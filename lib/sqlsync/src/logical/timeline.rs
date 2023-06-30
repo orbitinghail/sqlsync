@@ -1,4 +1,4 @@
-use rusqlite::{named_params, Connection, ToSql};
+use rusqlite::{named_params, Connection};
 
 use std::fmt::Debug;
 
