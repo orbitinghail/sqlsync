@@ -26,14 +26,12 @@ pub fn open_with_vfs() -> Result<(Connection, Box<Storage>)> {
     .unwrap();
 
     sqlite.pragma_update(None, "page_size", PAGESIZE).unwrap();
-    sqlite.pragma_update(None, "cache_size", 0).unwrap();
+    sqlite.pragma_update(None, "synchronous", "off").unwrap();
     sqlite
         .pragma_update(None, "journal_mode", "memory")
         .unwrap();
-    sqlite.pragma_update(None, "synchronous", "off").unwrap();
-    sqlite
-        .pragma_update(None, "locking_mode", "exclusive")
-        .unwrap();
+    sqlite.pragma_update(None, "default_cache_size", 0).unwrap();
+    sqlite.pragma_update(None, "cache_size", 0).unwrap();
 
     Ok((sqlite, storage))
 }

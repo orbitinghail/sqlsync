@@ -117,6 +117,7 @@ impl Mutator for MutatorImpl {
             )?,
 
             Mutation::AppendTask { id, description } => {
+                log::debug!("appending task({}): {}", id, description);
                 let max_sort = query_max_sort(tx)?;
                 tx.execute(
                     "insert into tasks (id, sort, description, completed)
@@ -135,6 +136,7 @@ impl Mutator for MutatorImpl {
 
             Mutation::UpdateTask { id, partial } => {
                 let task = query_task(tx, id)?;
+
                 if let Some(task) = task {
                     tx.execute(
                         "update tasks set
@@ -174,25 +176,30 @@ fn main() -> anyhow::Result<()> {
 
     let local_id = 1;
     let mut local = sqlsync::Local::new(local_id, MutatorImpl {});
+
+    let local_id_2 = 2;
+    let mut local2 = sqlsync::Local::new(local_id_2, MutatorImpl {});
+
     let mut remote = sqlsync::Remote::new(MutatorImpl {});
 
     macro_rules! debug_state {
-        (start $name:literal) => {
+        (start $($log_args:tt)+) => {
             log::info!("===============================");
             debug_state!(finish);
-            log::info!($name);
+            log::info!($($log_args)+);
         };
         (finish) => {
-            log::info!("{:?}", local);
+            log::info!("LOCAL1: {:?}", local);
+            log::info!("LOCAL2: {:?}", local2);
             log::info!("{:?}", remote);
         };
     }
 
     macro_rules! print_tasks {
-        () => {
-            local.query(|conn| {
+        ($client:ident) => {
+            $client.query(|conn| {
                 let tasks = query_tasks(conn)?;
-                log::info!("{} Tasks:", tasks.len());
+                log::info!("{} has {} tasks:", std::stringify!($client), tasks.len());
                 for task in tasks {
                     log::info!("  {:?}", task);
                 }
@@ -210,31 +217,41 @@ fn main() -> anyhow::Result<()> {
     }
 
     macro_rules! mutate {
-        (InitSchema) => {
-            log::info!("initializing schema");
-            local.run(Mutation::InitSchema)?
+        ($client:ident, InitSchema) => {
+            log::info!("{}: initializing schema", std::stringify!($client));
+            $client.run(Mutation::InitSchema)?
         };
-        (AppendTask $id:literal, $description:literal) => {
-            log::info!("appending task {} {}", $id, $description);
-            local.run(Mutation::AppendTask {
+        ($client:ident, AppendTask $id:literal, $description:literal) => {
+            log::info!(
+                "{}: appending task {} {}",
+                std::stringify!($client),
+                $id,
+                $description
+            );
+            $client.run(Mutation::AppendTask {
                 id: $id,
                 description: $description.into(),
             })?
         };
-        (RemoveTask $id:literal) => {
-            log::info!("removing task {}", $id);
-            local.run(Mutation::RemoveTask { id: $id })?
+        ($client:ident, RemoveTask $id:literal) => {
+            log::info!("{}: removing task {}", std::stringify!($client), $id);
+            $client.run(Mutation::RemoveTask { id: $id })?
         };
-        (UpdateTask $id:literal, $partial:expr) => {
-            log::info!("updating task {}", $id);
-            local.run(Mutation::UpdateTask {
+        ($client:ident, UpdateTask $id:literal, $partial:expr) => {
+            log::info!("{}: updating task {}", std::stringify!($client), $id);
+            $client.run(Mutation::UpdateTask {
                 id: $id,
                 partial: $partial,
             })?
         };
-        (MoveTask $id:literal after $after:literal) => {
-            log::info!("moving task {} after {}", $id, $after);
-            local.run(Mutation::MoveTask {
+        ($client:ident, MoveTask $id:literal after $after:literal) => {
+            log::info!(
+                "{}: moving task {} after {}",
+                std::stringify!($client),
+                $id,
+                $after
+            );
+            $client.run(Mutation::MoveTask {
                 id: $id,
                 after: $after,
             })?
@@ -242,73 +259,71 @@ fn main() -> anyhow::Result<()> {
     }
 
     macro_rules! sync {
-        (client -> server) => {
-            debug_state!(start "syncing: client -> server");
-            let req = local.sync_timeline_prepare();
-            let server_cursor = remote.handle_client_sync_timeline(local_id, req);
-            local.sync_timeline_response(server_cursor);
+        ($client:ident -> server) => {
+            let id = $client.id();
+            debug_state!(start "syncing: client({}) -> server", id);
+            let req = $client.sync_timeline_prepare();
+            if let Some(req) = req {
+                let server_range = remote.handle_client_sync_timeline(id, req)?;
+                $client.sync_timeline_response(server_range);
+            } else {
+                log::info!("{}: nothing to sync", std::stringify!($client));
+            }
             debug_state!(finish);
         };
-        (server -> client) => {
-            debug_state!(start "syncing: server -> client");
-            let req = local.storage_cursor();
+        (server -> $client:ident) => {
+            let id = $client.id();
+            debug_state!(start "syncing: server -> client({})", id);
+            let req = $client.sync_storage_request();
             let resp = remote.handle_client_sync_storage(req);
-            resp.and_then(|r| Some(local.sync_storage_receive(r)))
-                .transpose()?;
+            if let Some(resp) = resp {
+                $client.sync_storage_receive(resp)?;
+            } else {
+                log::info!("{}: nothing to sync", std::stringify!($client));
+            }
             debug_state!(finish);
         };
     }
 
-    mutate!(InitSchema);
+    mutate!(local, InitSchema);
 
-    sync!(client -> server);
-    step_remote!();
-
-    mutate!(AppendTask 1, "work on sqlsync");
-    mutate!(AppendTask 2, "eat lunch");
-    print_tasks!()?;
-
-    sync!(server -> client);
-    print_tasks!()?;
-
-    sync!(client -> server);
-    print_tasks!()?;
+    sync!(local -> server);
 
     step_remote!();
 
-    sync!(server -> client);
-    print_tasks!()?;
+    sync!(server -> local);
+    print_tasks!(local)?;
 
-    // now let's switch the order of the tasks and do a full sync
+    sync!(server -> local2);
+    print_tasks!(local2)?;
 
-    mutate!(MoveTask 1 after 2);
-    print_tasks!()?;
+    // at this point, everything is in sync
+    // now let's make some changes on both clients,
+    // then do a full sync, then check both clients
 
-    // full sync
-    sync!(client -> server);
+    mutate!(local, AppendTask 1, "work on sqlsync");
+    mutate!(local2, AppendTask 2, "eat lunch");
+    mutate!(local, AppendTask 3, "go on a walk");
+
+    sync!(local -> server);
+    sync!(local2 -> server);
+
+    // need to step twice to apply changes from both clients
+    // should be applied as local then local2
     step_remote!();
-    sync!(server -> client);
-
-    print_tasks!()?;
-
-    // run some updates, appends, and removes
-
-    mutate!(UpdateTask 1, PartialTask {
-        description: Some("work on sqlsync".into()),
-        completed: Some(true),
-    });
-
-    mutate!(AppendTask 3, "another one");
-
-    mutate!(RemoveTask 2);
-
-    print_tasks!()?;
-
-    sync!(client -> server);
     step_remote!();
-    sync!(server -> client);
 
-    print_tasks!()?;
+    // sync down changes
+    // need to sync twice because each sync only moves one PartialPages
+    sync!(server -> local);
+    sync!(server -> local);
+    sync!(server -> local2);
+    sync!(server -> local2);
+
+    print_tasks!(local)?;
+    print_tasks!(local2)?;
+
+    log::info!("DONE");
 
     Ok(())
 }

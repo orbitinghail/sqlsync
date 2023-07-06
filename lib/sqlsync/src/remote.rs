@@ -8,29 +8,36 @@ use rusqlite::Connection;
 
 use crate::{
     db::open_with_vfs,
-    journal::{Cursor, JournalPartial},
+    journal::JournalPartial,
     logical::{run_timeline_migration, RemoteTimeline},
+    lsn::{LsnRange, RequestedLsnRange},
     physical::{SparsePages, Storage},
     Mutator,
 };
 
 type TimelineId = u64;
 
-#[derive(Debug, PartialEq, Eq, Ord)]
+#[derive(Debug, PartialEq, Eq)]
 struct ReceiveQueueEntry {
     timestamp: Instant,
     timeline_id: TimelineId,
-    cursor: Cursor,
+    range: LsnRange,
 }
 
 // ProcessQueueEntries are naturally ordered from latest to earliest
 impl PartialOrd for ReceiveQueueEntry {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ReceiveQueueEntry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match self.timestamp.cmp(&other.timestamp).reverse() {
             core::cmp::Ordering::Equal => {}
-            ord => return Some(ord),
+            ord => return ord,
         }
-        self.timeline_id.partial_cmp(&other.timeline_id)
+        self.timeline_id.cmp(&other.timeline_id)
     }
 }
 
@@ -75,45 +82,45 @@ impl<M: Mutator> Remote<M> {
         &mut self,
         timeline_id: TimelineId,
         partial: JournalPartial<M::Mutation>,
-    ) -> Cursor {
+    ) -> anyhow::Result<LsnRange> {
         // get the timeline for this client (or create a new one)
         let timeline = self.get_or_create_timeline_mut(timeline_id);
 
-        // store the partial into the journal and get the new end cursor
-        let cursor = timeline.sync_receive(partial);
+        // store the partial into the journal and get the new range
+        let range = timeline.sync_receive(partial)?;
 
         // add the client to the receive queue
         self.receive_queue.push(ReceiveQueueEntry {
             timestamp: Instant::now(),
             timeline_id,
-            cursor,
+            range,
         });
 
-        cursor
+        Ok(range)
     }
 
     pub fn handle_client_sync_storage(
         &self,
-        client_cursor: Option<Cursor>,
+        req: RequestedLsnRange,
     ) -> Option<JournalPartial<'_, SparsePages>> {
-        let cursor = client_cursor.map(|c| c.next()).unwrap_or(Cursor::new(0));
-        if let Some(storage_cursor) = self.storage.cursor() {
-            if cursor <= storage_cursor {
-                return Some(self.storage.sync_prepare(cursor));
-            }
-        }
-        None
+        self.storage.sync_prepare(req)
     }
 
     pub fn step(&mut self) -> anyhow::Result<()> {
         let entry = self.receive_queue.pop();
         if let Some(entry) = entry {
+            log::debug!(
+                "applying {:?} on timeline {}",
+                entry.range,
+                entry.timeline_id
+            );
+
             // apply the timeline to the db
             let timeline = self
                 .timelines
                 .get_mut(&entry.timeline_id)
                 .expect("timeline missing in timelines but present in the receive queue");
-            timeline.apply_up_to(&mut self.sqlite, entry.cursor)?;
+            timeline.apply_range(&mut self.sqlite, entry.range)?;
 
             // commit changes
             self.storage.commit();

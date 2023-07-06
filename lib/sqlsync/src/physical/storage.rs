@@ -1,8 +1,14 @@
-use std::fmt::Debug;
+use std::{
+    collections::hash_map::DefaultHasher,
+    fmt::Debug,
+    hash::{Hash, Hasher},
+    time::Instant,
+};
 
 use super::{page::SparsePages, PAGESIZE};
 use crate::{
-    journal::{Cursor, Journal, JournalPartial},
+    journal::{Journal, JournalPartial},
+    lsn::{LsnRange, RequestedLsnRange},
     physical::page::Page,
 };
 
@@ -11,6 +17,10 @@ use crate::{
 // idea: push this down to Journal via some kind of "include" callback to decide
 // which entries to include in order (once it returns false, return the partial)
 const MAX_SYNC: usize = 1;
+
+// This is the offset of the file change counter in the sqlite header which is
+// stored at page 0
+const FILE_CHANGE_COUNTER_OFFSET: usize = 24;
 
 pub struct Storage {
     journal: Journal<SparsePages>,
@@ -42,16 +52,19 @@ impl Storage {
         self.pending.clear()
     }
 
-    pub fn cursor(&self) -> Option<Cursor> {
-        self.journal.end().ok()
+    pub fn sync_request(&self) -> RequestedLsnRange {
+        self.journal.sync_request(MAX_SYNC)
     }
 
-    pub fn sync_prepare(&self, cursor: Cursor) -> JournalPartial<SparsePages> {
-        self.journal.sync_prepare(cursor, MAX_SYNC)
+    pub fn sync_prepare(&self, req: RequestedLsnRange) -> Option<JournalPartial<SparsePages>> {
+        self.journal.sync_prepare(req)
     }
 
-    pub fn sync_receive(&mut self, partial: JournalPartial<SparsePages>) {
-        self.journal.sync_receive(partial);
+    pub fn sync_receive(
+        &mut self,
+        partial: JournalPartial<SparsePages>,
+    ) -> anyhow::Result<LsnRange> {
+        self.journal.sync_receive(partial)
     }
 }
 
@@ -74,6 +87,7 @@ impl sqlite_vfs::File for Storage {
 
     fn write(&mut self, pos: u64, buf: &[u8]) -> sqlite_vfs::VfsResult<usize> {
         let page_idx = pos / (PAGESIZE as u64);
+        log::debug!("writing page {}", page_idx);
 
         // for now we panic if we attempt to write less than a full page
         assert!(buf.len() == PAGESIZE);
@@ -92,7 +106,11 @@ impl sqlite_vfs::File for Storage {
             self.journal
                 .iter()
                 .rev()
-                .flat_map(|pages| pages.read(page_idx))
+                .enumerate()
+                .flat_map(|(i, pages)| {
+                    log::debug!("read: searching journal entry {} for page {}", i, page_idx);
+                    pages.read(page_idx)
+                })
                 .next()
         });
 
@@ -102,6 +120,25 @@ impl sqlite_vfs::File for Storage {
             let end = start + buf.len();
             assert!(end <= PAGESIZE);
             buf.copy_from_slice(&page[start..end]);
+
+            // disable any sqlite caching by forcing the file change
+            // counter to be different every time sqlite reads the file header
+            if page_idx == 0
+                && start <= FILE_CHANGE_COUNTER_OFFSET
+                && end >= FILE_CHANGE_COUNTER_OFFSET + 4
+            {
+                // if pos = 0, then this should be FILE_CHANGE_COUNTER_OFFSET
+                // if pos = FILE_CHANGE_COUNTER_OFFSET, this this should be 0
+                let file_change_buf_offset = FILE_CHANGE_COUNTER_OFFSET - page_offset;
+
+                // write a hashed instant to the u32 at buf[file_change_buf_offset]
+                let inst = Instant::now();
+                let mut hasher = DefaultHasher::new();
+                inst.hash(&mut hasher);
+                let inst_u32: u32 = (hasher.finish() % (u32::MAX as u64)) as u32;
+                buf[file_change_buf_offset..(file_change_buf_offset + 4)]
+                    .copy_from_slice(&inst_u32.to_be_bytes());
+            }
 
             Ok(buf.len())
         } else {

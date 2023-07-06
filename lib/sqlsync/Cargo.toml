@@ -15,3 +15,6 @@ anyhow = "1.0.40"
 binary-layout = { git = "https://github.com/carlsverre/binary-layout", branch = "feat-native-endian" }
 byteorder = "1.4.3"
 rand = "0.8.4"
+
+[dev-dependencies]
+testutil = { path = "../testutil" }

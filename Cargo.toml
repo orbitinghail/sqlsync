@@ -6,4 +6,6 @@ members = [
 
     "lib/sqlsync",
     "lib/sqlite-vfs",
+
+    "lib/testutil",
 ]

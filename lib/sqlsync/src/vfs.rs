@@ -24,7 +24,7 @@ impl Vfs for StorageVfs {
     ) -> VfsResult<Self::File> {
         let path = path.to_str().map_err(|_err| SQLITE_IOERR)?;
         debug!("open {} {:?}", path, opts);
-        assert!(opts.kind == OpenKind::MainDb);
+        assert!(opts.kind == OpenKind::MainDb, "only main.db is supported, got {:?}", opts);
         Ok(self.storage.clone())
     }
 
