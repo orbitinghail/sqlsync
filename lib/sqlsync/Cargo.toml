@@ -7,13 +7,11 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-libsqlite3-sys = { git = "https://github.com/trevyn/rusqlite", branch = "wasm32-unknown-unknown", features = ["bundled", "session"] }
-rusqlite = { git = "https://github.com/trevyn/rusqlite", branch = "wasm32-unknown-unknown", features = ["bundled", "session"] }
+libsqlite3-sys = { git = "https://github.com/trevyn/rusqlite", branch = "wasm32-unknown-unknown", features = ["bundled"] }
+rusqlite = { git = "https://github.com/trevyn/rusqlite", branch = "wasm32-unknown-unknown", features = ["bundled"] }
 sqlite-vfs = { path = "../sqlite-vfs" }
 log = "0.4.14"
 anyhow = "1.0.40"
-binary-layout = { git = "https://github.com/carlsverre/binary-layout", branch = "feat-native-endian" }
-byteorder = "1.4.3"
 rand = "0.8.4"
 
 [dev-dependencies]

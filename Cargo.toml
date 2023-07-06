@@ -2,7 +2,6 @@
 
 members = [
     "bin/client",
-    "bin/server",
 
     "lib/sqlsync",
     "lib/sqlite-vfs",
