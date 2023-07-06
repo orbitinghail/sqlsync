@@ -4,10 +4,11 @@ use sqlite_vfs::FilePtr;
 
 use crate::{
     physical::{Storage, PAGESIZE},
+    unixtime::UnixTime,
     vfs::StorageVfs,
 };
 
-pub fn open_with_vfs() -> Result<(Connection, Box<Storage>)> {
+pub fn open_with_vfs(unixtime: impl UnixTime) -> Result<(Connection, Box<Storage>)> {
     let mut storage = Box::new(Storage::new());
     let storage_ptr = FilePtr::new(&mut storage);
 
@@ -15,7 +16,7 @@ pub fn open_with_vfs() -> Result<(Connection, Box<Storage>)> {
     let vfs_name = format!("local-vfs-{}", rand::random::<u64>());
 
     // register the vfs globally
-    let vfs = StorageVfs::new(storage_ptr);
+    let vfs = StorageVfs::new(unixtime, storage_ptr);
     sqlite_vfs::register(&vfs_name, vfs).expect("failed to register local-vfs with sqlite");
 
     let sqlite = Connection::open_with_flags_and_vfs(

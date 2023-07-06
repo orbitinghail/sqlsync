@@ -8,7 +8,7 @@ use crate::{
     logical::{run_timeline_migration, Timeline, TimelineId},
     lsn::{LsnRange, RequestedLsnRange},
     physical::{SparsePages, Storage},
-    Mutator,
+    Mutator, unixtime::UnixTime,
 };
 
 const MAX_TIMELINE_SYNC: usize = 10;
@@ -31,8 +31,8 @@ impl<M: Mutator> Debug for Local<M> {
 }
 
 impl<M: Mutator> Local<M> {
-    pub fn new(timeline_id: TimelineId, mutator: M) -> Self {
-        let (mut sqlite, storage) = open_with_vfs().expect("failed to open sqlite db");
+    pub fn new(timeline_id: TimelineId, mutator: M, unixtime: impl UnixTime) -> Self {
+        let (mut sqlite, storage) = open_with_vfs(unixtime).expect("failed to open sqlite db");
 
         run_timeline_migration(&mut sqlite).expect("failed to initialize timelines table");
 

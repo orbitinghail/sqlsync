@@ -1,7 +1,6 @@
 use std::{
     collections::{BinaryHeap, HashMap},
     fmt::Debug,
-    time::Instant,
 };
 
 use rusqlite::Connection;
@@ -12,6 +11,7 @@ use crate::{
     logical::{run_timeline_migration, RemoteTimeline},
     lsn::{LsnRange, RequestedLsnRange},
     physical::{SparsePages, Storage},
+    unixtime::UnixTime,
     Mutator,
 };
 
@@ -19,7 +19,7 @@ type TimelineId = u64;
 
 #[derive(Debug, PartialEq, Eq)]
 struct ReceiveQueueEntry {
-    timestamp: Instant,
+    timestamp: i64,
     timeline_id: TimelineId,
     range: LsnRange,
 }
@@ -41,15 +41,16 @@ impl Ord for ReceiveQueueEntry {
     }
 }
 
-pub struct Remote<M: Mutator> {
+pub struct Remote<M: Mutator, U: UnixTime> {
     mutator: M,
+    unixtime: U,
     storage: Box<Storage>,
     timelines: HashMap<TimelineId, RemoteTimeline<M>>,
     receive_queue: BinaryHeap<ReceiveQueueEntry>,
     sqlite: Connection,
 }
 
-impl<M: Mutator> Debug for Remote<M> {
+impl<M: Mutator, U: UnixTime> Debug for Remote<M, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Remote")
             .field(&self.storage)
@@ -58,13 +59,15 @@ impl<M: Mutator> Debug for Remote<M> {
     }
 }
 
-impl<M: Mutator> Remote<M> {
-    pub fn new(mutator: M) -> Self {
-        let (mut sqlite, storage) = open_with_vfs().expect("failed to open sqlite db");
+impl<M: Mutator, U: UnixTime> Remote<M, U> {
+    pub fn new(mutator: M, unixtime: U) -> Self {
+        let (mut sqlite, storage) =
+            open_with_vfs(unixtime.clone()).expect("failed to open sqlite db");
         run_timeline_migration(&mut sqlite).expect("failed to initialize timelines table");
 
         Self {
             mutator,
+            unixtime,
             storage,
             sqlite,
             timelines: HashMap::new(),
@@ -91,7 +94,7 @@ impl<M: Mutator> Remote<M> {
 
         // add the client to the receive queue
         self.receive_queue.push(ReceiveQueueEntry {
-            timestamp: Instant::now(),
+            timestamp: self.unixtime.unix_timestamp(),
             timeline_id,
             range,
         });

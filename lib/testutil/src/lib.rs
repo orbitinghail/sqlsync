@@ -4,6 +4,6 @@ pub use assert_panic::assert_panic;
 #[macro_export]
 macro_rules! assert_ok {
     ( $e:expr , $($arg:tt)*) => {
-        assert_matches!($e, Ok(_), $($arg)*)
+        testutil::assert_matches!($e, Ok(_), $($arg)*)
     };
 }

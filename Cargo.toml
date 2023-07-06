@@ -4,6 +4,8 @@ members = [
     "bin/client",
 
     "lib/sqlsync",
+    "lib/sqlsync-wasm",
+
     "lib/sqlite-vfs",
 
     "lib/testutil",

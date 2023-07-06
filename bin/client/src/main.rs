@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use sqlsync::{named_params, Mutator, OptionalExtension, Transaction};
+use sqlsync::{named_params, unixtime::SystemUnixTime, Mutator, OptionalExtension, Transaction};
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -175,12 +175,12 @@ fn main() -> anyhow::Result<()> {
         .init()?;
 
     let local_id = 1;
-    let mut local = sqlsync::Local::new(local_id, MutatorImpl {});
+    let mut local = sqlsync::Local::new(local_id, MutatorImpl {}, SystemUnixTime::new());
 
     let local_id_2 = 2;
-    let mut local2 = sqlsync::Local::new(local_id_2, MutatorImpl {});
+    let mut local2 = sqlsync::Local::new(local_id_2, MutatorImpl {}, SystemUnixTime::new());
 
-    let mut remote = sqlsync::Remote::new(MutatorImpl {});
+    let mut remote = sqlsync::Remote::new(MutatorImpl {}, SystemUnixTime::new());
 
     macro_rules! debug_state {
         (start $($log_args:tt)+) => {

@@ -25,6 +25,8 @@ const FILE_CHANGE_COUNTER_OFFSET: usize = 24;
 pub struct Storage {
     journal: Journal<SparsePages>,
     pending: SparsePages,
+
+    file_change_counter: u32,
 }
 
 impl Debug for Storage {
@@ -41,6 +43,7 @@ impl Storage {
         Self {
             journal: Journal::new(),
             pending: SparsePages::new(),
+            file_change_counter: 0,
         }
     }
 
@@ -131,13 +134,12 @@ impl sqlite_vfs::File for Storage {
                 // if pos = FILE_CHANGE_COUNTER_OFFSET, this this should be 0
                 let file_change_buf_offset = FILE_CHANGE_COUNTER_OFFSET - page_offset;
 
-                // write a hashed instant to the u32 at buf[file_change_buf_offset]
-                let inst = Instant::now();
-                let mut hasher = DefaultHasher::new();
-                inst.hash(&mut hasher);
-                let inst_u32: u32 = (hasher.finish() % (u32::MAX as u64)) as u32;
+                // we only care that *each time* sqlite tries to read the first
+                // page, it sees a different file change counter. So we can just
+                // bit flip self.file_change_counter and write it into the header
+                self.file_change_counter ^= 1;
                 buf[file_change_buf_offset..(file_change_buf_offset + 4)]
-                    .copy_from_slice(&inst_u32.to_be_bytes());
+                    .copy_from_slice(&self.file_change_counter.to_be_bytes());
             }
 
             Ok(buf.len())
