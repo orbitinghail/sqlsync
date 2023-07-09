@@ -45,4 +45,11 @@ opt-level = "s"
 wasm-opt = false
 
 [package.metadata.wasm-pack.profile.dev.wasm-bindgen]
+debug-js-glue = true
+demangle-name-section = true
+dwarf-debug-info = true
+
+[package.metadata.wasm-pack.profile.dev.wasm-bindgen-test]
+debug-js-glue = true
+demangle-name-section = true
 dwarf-debug-info = true
