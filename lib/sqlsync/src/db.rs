@@ -31,8 +31,10 @@ pub fn open_with_vfs(unixtime: impl UnixTime) -> Result<(Connection, Box<Storage
     sqlite
         .pragma_update(None, "journal_mode", "memory")
         .unwrap();
-    sqlite.pragma_update(None, "default_cache_size", 0).unwrap();
-    sqlite.pragma_update(None, "cache_size", 0).unwrap();
+
+    // TODO: benchmark with/without cache
+    // sqlite.pragma_update(None, "default_cache_size", 0).unwrap();
+    // sqlite.pragma_update(None, "cache_size", 0).unwrap();
 
     Ok((sqlite, storage))
 }

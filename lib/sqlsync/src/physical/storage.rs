@@ -1,9 +1,4 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    fmt::Debug,
-    hash::{Hash, Hasher},
-    time::Instant,
-};
+use std::fmt::Debug;
 
 use super::{page::SparsePages, PAGESIZE};
 use crate::{
@@ -126,6 +121,8 @@ impl sqlite_vfs::File for Storage {
 
             // disable any sqlite caching by forcing the file change
             // counter to be different every time sqlite reads the file header
+            // TODO: optimize the file change counter by monitoring when sqlite
+            // writes a new counter and whenever we sync from the server
             if page_idx == 0
                 && start <= FILE_CHANGE_COUNTER_OFFSET
                 && end >= FILE_CHANGE_COUNTER_OFFSET + 4
