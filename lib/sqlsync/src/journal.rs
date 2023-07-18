@@ -1,130 +1,263 @@
-use anyhow::Result;
-use std::fmt::Debug;
+use std::fmt::Formatter;
+use std::io;
 
 use crate::lsn::{Lsn, LsnRange, RequestedLsnRange};
+use crate::positioned_io::PositionedReader;
+use thiserror::Error;
 
-pub struct JournalPartial<'a, T> {
-    range: LsnRange,
-    data: &'a [T],
+#[derive(Error, Debug)]
+pub enum JournalError {
+    #[error("refusing to sync from journal id {partial_id} into journal id {self_id}")]
+    WrongJournal {
+        partial_id: JournalId,
+        self_id: JournalId,
+    },
+
+    #[error("journal range {journal_debug} does not intersect or preceed partial range {partial_range:?}")]
+    RangesMustBeContiguous {
+        journal_debug: String,
+        partial_range: LsnRange,
+    },
+
+    #[error("failed to serialize object")]
+    SerializationError(#[source] anyhow::Error),
 }
 
-impl<'a, T> JournalPartial<'a, T> {
-    pub fn new(range: LsnRange, data: &'a [T]) -> Self {
-        assert!(
-            range.len() == data.len(),
-            "range and data must be the same length"
-        );
-        Self { range, data }
+pub type JournalResult<T> = std::result::Result<T, JournalError>;
+
+pub type JournalId = u64;
+
+pub struct JournalPartial<I: DoubleEndedIterator> {
+    id: JournalId,
+    pub range: LsnRange,
+    iter: I,
+}
+
+impl<I: DoubleEndedIterator> IntoIterator for JournalPartial<I> {
+    type Item = I::Item;
+    type IntoIter = I;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter
     }
 }
 
-pub enum Journal<T>
-where
-    T: Clone,
-{
+pub trait Serializable {
+    /// serialize the object into the given writer
+    fn serialize_into<W: io::Write>(&self, writer: &mut W) -> anyhow::Result<()>;
+}
+
+pub trait Deserializable: Sized {
+    /// deserialize the object from the given reader
+    fn deserialize_from<R: PositionedReader>(reader: R) -> anyhow::Result<Self>;
+}
+
+pub trait Journal: std::fmt::Debug {
+    type Entry: PositionedReader;
+
+    type Iter<'a>: DoubleEndedIterator<Item = &'a Self::Entry>
+    where
+        <Self as Journal>::Entry: 'a;
+
+    // TODO: eventually this needs to be a UUID of some kind
+    fn id(&self) -> JournalId;
+
+    /// append a new journal entry, and then write to it
+    fn append(&mut self, obj: impl Serializable) -> JournalResult<()>;
+
+    /// iterate over journal entries
+    fn iter(&self) -> JournalResult<Self::Iter<'_>>;
+
+    fn iter_range(&self, range: LsnRange) -> JournalResult<Self::Iter<'_>>;
+
+    /// sync
+    fn sync_request(&self, max_sync: usize) -> RequestedLsnRange;
+
+    fn sync_prepare(
+        &self,
+        req: RequestedLsnRange,
+    ) -> JournalResult<Option<JournalPartial<Self::Iter<'_>>>>;
+
+    fn sync_receive(&mut self, partial: JournalPartial<Self::Iter<'_>>) -> JournalResult<LsnRange>;
+
+    /// drop the journal's prefix
+    fn drop_prefix(&mut self, up_to: Lsn) -> JournalResult<()>;
+}
+
+pub enum MemoryJournal {
     Empty {
-        /// We need to keep track of the next lsn to use if we are empty.
-        /// this is because journals can trim their prefix after it's been safely replicated elsewhere
+        id: JournalId,
         nextlsn: Lsn,
     },
     NonEmpty {
-        /// The range of lsns covered by this journal.
+        id: JournalId,
         range: LsnRange,
-        /// The data contained in this journal.
-        /// data[0] corresponds to range.first, data[1] to range.first + 1, etc.
-        data: Vec<T>,
+        data: Vec<Vec<u8>>,
     },
 }
 
-impl<T: Clone> Debug for Journal<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl MemoryJournal {
+    pub fn empty(id: JournalId) -> MemoryJournal {
+        MemoryJournal::Empty { id, nextlsn: 0 }
+    }
+}
+
+impl std::fmt::Debug for MemoryJournal {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Journal::Empty { nextlsn } => f.debug_tuple("Journal::Empty").field(nextlsn).finish(),
-            Journal::NonEmpty { range, .. } => f.debug_tuple("Journal").field(range).finish(),
+            MemoryJournal::Empty { id, nextlsn, .. } => f
+                .debug_tuple("MemoryJournal::Empty")
+                .field(id)
+                .field(nextlsn)
+                .finish(),
+            MemoryJournal::NonEmpty { id, range, .. } => f
+                .debug_tuple("MemoryJournal::NonEmpty")
+                .field(id)
+                .field(range)
+                .finish(),
         }
     }
 }
 
-impl<T> Journal<T>
-where
-    T: Clone,
-{
-    pub fn new() -> Self {
-        Journal::Empty { nextlsn: 0 }
+impl Journal for MemoryJournal {
+    type Entry = Vec<u8>;
+    type Iter<'a> = std::slice::Iter<'a, Vec<u8>>;
+
+    fn id(&self) -> JournalId {
+        match self {
+            Self::Empty { id, .. } => *id,
+            Self::NonEmpty { id, .. } => *id,
+        }
     }
 
-    /// Append a single entry to the journal.
-    pub fn append(&mut self, entry: T) {
+    fn append(&mut self, obj: impl Serializable) -> JournalResult<()> {
+        // serialize the entry
+        let mut entry: Vec<u8> = Vec::new();
+        obj.serialize_into(&mut entry)
+            .map_err(|err| JournalError::SerializationError(err))?;
+
+        // update the journal
         match self {
-            Journal::Empty { nextlsn } => {
-                *self = Journal::NonEmpty {
+            MemoryJournal::Empty { id, nextlsn } => {
+                *self = MemoryJournal::NonEmpty {
+                    id: *id,
                     range: LsnRange::new(*nextlsn, *nextlsn),
                     data: vec![entry],
                 };
             }
-            Journal::NonEmpty { range, data } => {
+            MemoryJournal::NonEmpty { range, data, .. } => {
                 data.push(entry);
                 *range = range.extend_by(1);
             }
         }
+        Ok(())
     }
 
-    pub fn sync_request(&self, max_sync: usize) -> RequestedLsnRange {
+    fn iter(&self) -> JournalResult<Self::Iter<'_>> {
         match self {
-            Journal::Empty { nextlsn } => RequestedLsnRange::new(*nextlsn, max_sync),
-            Journal::NonEmpty { range, .. } => RequestedLsnRange::new(range.last() + 1, max_sync),
+            Self::Empty { .. } => Ok([].iter()),
+            Self::NonEmpty { data, .. } => Ok(data.iter()),
         }
     }
 
-    /// Satisfy a request for a range of LSNs
-    pub fn sync_prepare<'a>(&'a self, req: RequestedLsnRange) -> Option<JournalPartial<'a, T>> {
+    fn iter_range(&self, range: LsnRange) -> JournalResult<Self::Iter<'_>> {
         match self {
-            Journal::Empty { .. } => None,
-            Journal::NonEmpty { range, data } => {
-                if let Some(partial_range) = range.satisfy(req) {
-                    let offsets = range.intersection_offsets(&partial_range);
-                    Some(JournalPartial::new(partial_range, &data[offsets]))
-                } else {
-                    None
+            Self::Empty { .. } => Ok([].iter()),
+            Self::NonEmpty {
+                range: journal_range,
+                data,
+                ..
+            } => journal_range.intersect(&range).map_or_else(
+                || Ok([].iter()),
+                |intersection_range| {
+                    let offsets = journal_range.intersection_offsets(&intersection_range);
+                    Ok(data[offsets].iter())
+                },
+            ),
+        }
+    }
+
+    fn sync_request(&self, max_sync: usize) -> RequestedLsnRange {
+        match self {
+            MemoryJournal::Empty { nextlsn, .. } => RequestedLsnRange::new(*nextlsn, max_sync),
+            MemoryJournal::NonEmpty { range, .. } => {
+                RequestedLsnRange::new(range.last() + 1, max_sync)
+            }
+        }
+    }
+
+    fn sync_prepare(
+        &self,
+        req: RequestedLsnRange,
+    ) -> JournalResult<Option<JournalPartial<Self::Iter<'_>>>> {
+        match self {
+            MemoryJournal::Empty { .. } => Ok(None),
+            MemoryJournal::NonEmpty {
+                id, range, data, ..
+            } => range
+                .satisfy(req)
+                .map(|intersection_range| {
+                    let offsets = range.intersection_offsets(&intersection_range);
+                    Ok(JournalPartial {
+                        id: *id,
+                        range: intersection_range,
+                        iter: data[offsets].iter(),
+                    })
+                })
+                .transpose(),
+        }
+    }
+
+    fn sync_receive(&mut self, partial: JournalPartial<Self::Iter<'_>>) -> JournalResult<LsnRange> {
+        if partial.id != self.id() {
+            return Err(JournalError::WrongJournal {
+                partial_id: partial.id,
+                self_id: self.id(),
+            });
+        }
+
+        let partial_range = partial.range;
+        match self {
+            MemoryJournal::Empty { id, nextlsn } => {
+                // ensure that nextlsn is contained by partial.range()
+                if !partial_range.contains(*nextlsn) {
+                    return Err(JournalError::RangesMustBeContiguous {
+                        journal_debug: format!("{:?}", self),
+                        partial_range,
+                    });
                 }
-            }
-        }
-    }
-
-    /// Merge a partial into the journal starting at partial.start and possibly extending the journal.
-    /// The journal must intersect or meet the partial range.
-    pub fn sync_receive(&mut self, partial: JournalPartial<T>) -> Result<LsnRange> {
-        log::debug!("sync_receive({:?})", partial.range);
-        match self {
-            Journal::Empty { .. } => {
-                *self = Journal::NonEmpty {
-                    range: partial.range,
-                    data: partial.data.to_vec(),
+                *self = MemoryJournal::NonEmpty {
+                    id: *id,
+                    range: partial_range,
+                    data: partial.into_iter().cloned().collect(),
                 };
-                Ok(partial.range)
+                Ok(partial_range)
             }
-            Journal::NonEmpty { range, data } => {
-                if !(range.intersects(&partial.range) || range.immediately_preceeds(&partial.range))
+            MemoryJournal::NonEmpty { range, data, .. } => {
+                if !(range.intersects(&partial_range) || range.immediately_preceeds(&partial_range))
                 {
-                    return Err(anyhow::anyhow!(
-                        "journal range {:?} does not intersect or preceed partial range {:?}",
-                        range,
-                        partial.range,
-                    ));
+                    return Err(JournalError::RangesMustBeContiguous {
+                        journal_debug: format!("{:?}", self),
+                        partial_range,
+                    });
                 }
 
                 // insert partial.data into the journal at the correct position
-                let offsets = range.intersection_offsets(&partial.range);
+                let offsets = range.intersection_offsets(&partial_range);
                 if offsets.is_empty() {
                     // no intersection, so we can just append the partial to this journal
-                    data.extend_from_slice(partial.data);
+                    data.extend(partial.into_iter().cloned());
                 } else {
                     // intersection, so we need to replace the intersecting portion of the journal
-                    *data = [&data[..offsets.start], partial.data].concat();
+                    *data = data[..offsets.start]
+                        .iter()
+                        .chain(partial.into_iter())
+                        .cloned()
+                        .collect();
                 }
 
                 // update the range
-                *range = range.union(&partial.range);
+                *range = range.union(&partial_range);
 
                 // return our new range
                 Ok(*range)
@@ -132,42 +265,21 @@ where
         }
     }
 
-    /// Remove all entries from the journal in the provided range.
-    /// The provided range must intersect or preceed the journal's start.
-    pub fn remove_up_to(&mut self, lsn: Lsn) {
+    fn drop_prefix(&mut self, up_to: Lsn) -> JournalResult<()> {
         match self {
-            Journal::Empty { .. } => {}
-            Journal::NonEmpty { range, data } => {
-                if let Some(remaining_range) = range.trim_prefix(lsn) {
+            MemoryJournal::Empty { .. } => Ok(()),
+            MemoryJournal::NonEmpty { id, range, data } => {
+                if let Some(remaining_range) = range.trim_prefix(up_to) {
                     let offsets = range.intersection_offsets(&remaining_range);
                     *data = data[offsets].to_vec();
                     *range = remaining_range;
                 } else {
-                    *self = Journal::Empty {
+                    *self = MemoryJournal::Empty {
+                        id: *id,
                         nextlsn: range.last() + 1,
                     };
                 }
-            }
-        }
-    }
-
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &T> {
-        match self {
-            Journal::Empty { .. } => [].iter(),
-            Journal::NonEmpty { data, .. } => data.iter(),
-        }
-    }
-
-    /// Iterate over the entries in the journal in the given LsnRange
-    pub fn iter_range(&self, range: LsnRange) -> impl DoubleEndedIterator<Item = &T> {
-        match self {
-            Journal::Empty { .. } => [].iter(),
-            Journal::NonEmpty {
-                range: journal_range,
-                data,
-            } => {
-                let offsets = journal_range.intersection_offsets(&range);
-                data[offsets].iter()
+                Ok(())
             }
         }
     }

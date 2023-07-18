@@ -4,18 +4,19 @@ use std::fmt::Debug;
 
 use crate::{
     db::{open_with_vfs, readyonly_query},
-    journal::JournalPartial,
-    logical::{run_timeline_migration, Timeline, TimelineId},
+    journal::{Journal, JournalId, JournalPartial, MemoryJournal},
+    logical::{run_timeline_migration, Timeline},
     lsn::{LsnRange, RequestedLsnRange},
-    physical::{SparsePages, Storage},
-    Mutator, unixtime::UnixTime,
+    physical::Storage,
+    unixtime::UnixTime,
+    Mutator,
 };
 
 const MAX_TIMELINE_SYNC: usize = 10;
 
 pub struct Local<M: Mutator> {
-    storage: Box<Storage>,
-    timeline: Timeline<M>,
+    storage: Box<Storage<MemoryJournal>>,
+    timeline: Timeline<M, MemoryJournal>,
     sqlite: Connection,
     server_timeline_range: Option<LsnRange>,
 }
@@ -31,12 +32,18 @@ impl<M: Mutator> Debug for Local<M> {
 }
 
 impl<M: Mutator> Local<M> {
-    pub fn new(timeline_id: TimelineId, mutator: M, unixtime: impl UnixTime) -> Self {
-        let (mut sqlite, storage) = open_with_vfs(unixtime).expect("failed to open sqlite db");
+    pub fn new(journal_id: JournalId, mutator: M, unixtime: impl UnixTime) -> Self {
+        // TODO: storage id should be initialized from the server or our cache
+        // for now, we always set it to 0 on the client and the server
+        let journal = MemoryJournal::empty(0);
+        let (mut sqlite, storage) =
+            open_with_vfs(unixtime, journal).expect("failed to open sqlite db");
 
         run_timeline_migration(&mut sqlite).expect("failed to initialize timelines table");
 
-        let timeline = Timeline::new(timeline_id, mutator);
+        // TODO: journal_id can be loaded from cache or randomly initialized
+        let journal = MemoryJournal::empty(journal_id);
+        let timeline = Timeline::new(mutator, journal);
 
         Self {
             storage,
@@ -46,7 +53,7 @@ impl<M: Mutator> Local<M> {
         }
     }
 
-    pub fn id(&self) -> TimelineId {
+    pub fn id(&self) -> JournalId {
         self.timeline.id()
     }
 
@@ -62,7 +69,9 @@ impl<M: Mutator> Local<M> {
         readyonly_query(&mut self.sqlite, f)
     }
 
-    pub fn sync_timeline_prepare(&mut self) -> Option<JournalPartial<'_, M::Mutation>> {
+    pub fn sync_timeline_prepare(
+        &mut self,
+    ) -> anyhow::Result<Option<JournalPartial<<MemoryJournal as Journal>::Iter<'_>>>> {
         let req = match self.server_timeline_range {
             Some(range) => RequestedLsnRange::new(range.last() + 1, MAX_TIMELINE_SYNC),
             None => RequestedLsnRange::new(0, MAX_TIMELINE_SYNC),
@@ -80,7 +89,7 @@ impl<M: Mutator> Local<M> {
 
     pub fn sync_storage_receive(
         &mut self,
-        partial: JournalPartial<SparsePages>,
+        partial: JournalPartial<<MemoryJournal as Journal>::Iter<'_>>,
     ) -> anyhow::Result<()> {
         self.storage.revert();
         self.storage.sync_receive(partial)?;

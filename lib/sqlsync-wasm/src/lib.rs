@@ -1,7 +1,12 @@
 mod utils;
 
 use log::Level;
-use sqlsync::{unixtime::UnixTime, Mutator};
+use serde::{Deserialize, Serialize};
+use sqlsync::{
+    positioned_io::{PositionedCursor, PositionedReader},
+    unixtime::UnixTime,
+    Deserializable, Mutator, Serializable,
+};
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
@@ -44,17 +49,29 @@ impl log::Log for ConsoleLogger {
 struct WasmUnixTime;
 
 impl UnixTime for WasmUnixTime {
-    fn unix_timestamp(&self) -> i64 {
+    fn unix_timestamp_milliseconds(&self) -> i64 {
         js_sys::Date::now() as i64
     }
 }
 
 static LOGGER: ConsoleLogger = ConsoleLogger;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 enum Mutation {
     InitSchema,
     Increment,
+}
+
+impl Serializable for Mutation {
+    fn serialize_into<W: std::io::Write>(&self, writer: &mut W) -> anyhow::Result<()> {
+        Ok(bincode::serialize_into(writer, &self)?)
+    }
+}
+
+impl Deserializable for Mutation {
+    fn deserialize_from<R: PositionedReader>(reader: R) -> anyhow::Result<Self> {
+        Ok(bincode::deserialize_from(PositionedCursor::new(reader))?)
+    }
 }
 
 #[derive(Clone)]
@@ -115,7 +132,7 @@ pub fn run_inner() -> anyhow::Result<()> {
     let mut remote = sqlsync::Remote::new(MutatorImpl {}, WasmUnixTime {});
 
     // sync client -> server
-    let mut req = local.sync_timeline_prepare();
+    let mut req = local.sync_timeline_prepare()?;
     if let Some(req) = req.take() {
         let resp = remote.handle_client_sync_timeline(local_id, req)?;
         local.sync_timeline_response(resp);
@@ -126,10 +143,13 @@ pub fn run_inner() -> anyhow::Result<()> {
 
     // sync server -> client
     let req = local.sync_storage_request();
-    let resp = remote.handle_client_sync_storage(req);
+    let resp = remote.handle_client_sync_storage(req)?;
     if let Some(resp) = resp {
         local.sync_storage_receive(resp)?;
     }
+
+    // run another local increment
+    local.run(Mutation::Increment)?;
 
     // recheck the table
     local.query(|tx| {
@@ -139,7 +159,7 @@ pub fn run_inner() -> anyhow::Result<()> {
         let value: i64 = row.get(0)?;
         let date: String = row.get(1)?;
         let rand: i64 = row.get(2)?;
-        assert_eq!(value, 1);
+        assert_eq!(value, 2);
         log::info!("value: {}, date: {}, random: {}", value, date, rand);
         Ok(())
     })?;

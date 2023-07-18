@@ -3,13 +3,17 @@ use rusqlite::{Connection, OpenFlags, Transaction};
 use sqlite_vfs::FilePtr;
 
 use crate::{
+    journal::Journal,
     physical::{Storage, PAGESIZE},
     unixtime::UnixTime,
     vfs::StorageVfs,
 };
 
-pub fn open_with_vfs(unixtime: impl UnixTime) -> Result<(Connection, Box<Storage>)> {
-    let mut storage = Box::new(Storage::new());
+pub fn open_with_vfs<T: UnixTime, J: Journal>(
+    unixtime: T,
+    journal: J,
+) -> Result<(Connection, Box<Storage<J>>)> {
+    let mut storage = Box::new(Storage::new(journal));
     let storage_ptr = FilePtr::new(&mut storage);
 
     // generate random vfs name

@@ -1,6 +1,9 @@
 use std::fmt::Debug;
 
-use super::{page::SparsePages, PAGESIZE};
+use super::{
+    page::{SerializedPagesReader, SparsePages},
+    PAGESIZE,
+};
 use crate::{
     journal::{Journal, JournalPartial},
     lsn::{LsnRange, RequestedLsnRange},
@@ -11,20 +14,20 @@ use crate::{
 // per journal entry
 // idea: push this down to Journal via some kind of "include" callback to decide
 // which entries to include in order (once it returns false, return the partial)
-const MAX_SYNC: usize = 1;
+const MAX_SYNC: usize = 5;
 
 // This is the offset of the file change counter in the sqlite header which is
 // stored at page 0
 const FILE_CHANGE_COUNTER_OFFSET: usize = 24;
 
-pub struct Storage {
-    journal: Journal<SparsePages>,
+pub struct Storage<J: Journal> {
+    journal: J,
     pending: SparsePages,
 
     file_change_counter: u32,
 }
 
-impl Debug for Storage {
+impl<J: Journal> Debug for Storage<J> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Storage")
             .field(&self.journal)
@@ -33,17 +36,17 @@ impl Debug for Storage {
     }
 }
 
-impl Storage {
-    pub fn new() -> Self {
+impl<J: Journal> Storage<J> {
+    pub fn new(journal: J) -> Self {
         Self {
-            journal: Journal::new(),
+            journal,
             pending: SparsePages::new(),
             file_change_counter: 0,
         }
     }
 
-    pub fn commit(&mut self) {
-        self.journal.append(std::mem::take(&mut self.pending))
+    pub fn commit(&mut self) -> anyhow::Result<()> {
+        Ok(self.journal.append(std::mem::take(&mut self.pending))?)
     }
 
     pub fn revert(&mut self) {
@@ -54,24 +57,28 @@ impl Storage {
         self.journal.sync_request(MAX_SYNC)
     }
 
-    pub fn sync_prepare(&self, req: RequestedLsnRange) -> Option<JournalPartial<SparsePages>> {
-        self.journal.sync_prepare(req)
+    pub fn sync_prepare(
+        &self,
+        req: RequestedLsnRange,
+    ) -> anyhow::Result<Option<JournalPartial<J::Iter<'_>>>> {
+        Ok(self.journal.sync_prepare(req)?)
     }
 
     pub fn sync_receive(
         &mut self,
-        partial: JournalPartial<SparsePages>,
+        partial: JournalPartial<J::Iter<'_>>,
     ) -> anyhow::Result<LsnRange> {
-        self.journal.sync_receive(partial)
+        Ok(self.journal.sync_receive(partial)?)
     }
 }
 
-impl sqlite_vfs::File for Storage {
+impl<J: Journal> sqlite_vfs::File for Storage<J> {
     fn file_size(&self) -> sqlite_vfs::VfsResult<u64> {
         Ok(self
             .journal
             .iter()
-            .flat_map(|pages| pages.max_page_idx())
+            .map_err(|_err| sqlite_vfs::SQLITE_IOERR)?
+            .flat_map(|pages| SerializedPagesReader(pages).max_page_idx())
             .chain(self.pending.max_page_idx())
             .max()
             .map(|n| (n + 1) * (PAGESIZE as u64))
@@ -100,17 +107,18 @@ impl sqlite_vfs::File for Storage {
         let page_offset = (pos as usize) % PAGESIZE;
 
         // find the page by searching down through pending and then the journal
-        let page = self.pending.read(page_idx).or_else(|| {
-            self.journal
+        // TODO: profile this - especially considering the extra clone for pending pages
+        let page = match self.pending.read(page_idx) {
+            Some(page) => Some(page.clone()),
+            None => self
+                .journal
                 .iter()
+                .map_err(|_| sqlite_vfs::SQLITE_IOERR)?
                 .rev()
-                .enumerate()
-                .flat_map(|(i, pages)| {
-                    log::debug!("read: searching journal entry {} for page {}", i, page_idx);
-                    pages.read(page_idx)
-                })
-                .next()
-        });
+                .find_map(|pages| SerializedPagesReader(pages).read(page_idx).transpose())
+                .transpose()
+                .map_err(|_| sqlite_vfs::SQLITE_IOERR)?,
+        };
 
         if let Some(page) = page {
             // copy the page into the buffer at the offset

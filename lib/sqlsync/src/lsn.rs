@@ -44,6 +44,10 @@ impl LsnRange {
         }
     }
 
+    pub fn contains(&self, lsn: Lsn) -> bool {
+        self.first <= lsn && lsn <= self.last
+    }
+
     pub fn intersects(&self, other: &Self) -> bool {
         self.last >= other.first && self.first <= other.last
     }
@@ -81,6 +85,17 @@ impl LsnRange {
     pub fn extend_by(&self, len: u64) -> LsnRange {
         assert!(len > 0, "len must be >= 0");
         LsnRange::new(self.first, self.last + len)
+    }
+
+    pub fn intersect(&self, other: &Self) -> Option<LsnRange> {
+        if self.intersects(other) {
+            Some(LsnRange::new(
+                std::cmp::max(self.first, other.first),
+                std::cmp::min(self.last, other.last),
+            ))
+        } else {
+            None
+        }
     }
 
     /// Unions this range with another.
@@ -171,21 +186,39 @@ mod tests {
     }
 
     #[test]
+    fn lsnrange_contains() {
+        let range = LsnRange::new(5, 10);
+
+        assert!(!range.contains(0));
+        assert!(range.contains(5));
+        assert!(range.contains(6));
+        assert!(range.contains(10));
+        assert!(!range.contains(11));
+    }
+
+    #[test]
     fn lsnrange_intersects() {
         let range = LsnRange::new(5, 10);
 
         macro_rules! t {
-            ($other:expr, $range:expr) => {
+            ($other:expr, $intersection:expr, $offsets:expr) => {
                 assert_eq!(
                     !range.intersects(&$other),
-                    $range.is_empty(),
+                    $offsets.is_empty(),
                     "checking intersects: {:?}, {:?}",
                     range,
                     $other
                 );
                 assert_eq!(
+                    range.intersect(&$other),
+                    $intersection,
+                    "checking intersection: {:?}, {:?}",
+                    range,
+                    $other
+                );
+                assert_eq!(
                     range.intersection_offsets(&$other),
-                    $range,
+                    $offsets,
                     "checking intersection_offsets: {:?}, {:?}",
                     range,
                     $other
@@ -193,20 +226,26 @@ mod tests {
             };
         }
 
-        t!(LsnRange::new(0, 4), 0..0);
-        t!(LsnRange::new(0, 5), 0..1);
-        t!(LsnRange::new(0, 6), 0..2);
-        t!(LsnRange::new(0, 10), 0..6);
-        t!(LsnRange::new(0, 11), 0..6);
-        t!(LsnRange::new(5, 5), 0..1);
-        t!(LsnRange::new(5, 6), 0..2);
-        t!(LsnRange::new(5, 10), 0..6);
-        t!(LsnRange::new(5, 11), 0..6);
-        t!(LsnRange::new(9, 10), 4..6);
-        t!(LsnRange::new(10, 10), 5..6);
-        t!(LsnRange::new(10, 11), 5..6);
-        t!(LsnRange::new(11, 11), 0..0);
-        t!(LsnRange::new(20, 30), 0..0);
+        macro_rules! r {
+            ($first:expr, $last:expr) => {
+                LsnRange::new($first, $last)
+            };
+        }
+
+        t!(r!(0, 4), None, 0..0);
+        t!(r!(0, 5), Some(r!(5, 5)), 0..1);
+        t!(r!(0, 6), Some(r!(5, 6)), 0..2);
+        t!(r!(0, 10), Some(r!(5, 10)), 0..6);
+        t!(r!(0, 11), Some(r!(5, 10)), 0..6);
+        t!(r!(5, 5), Some(r!(5, 5)), 0..1);
+        t!(r!(5, 6), Some(r!(5, 6)), 0..2);
+        t!(r!(5, 10), Some(r!(5, 10)), 0..6);
+        t!(r!(5, 11), Some(r!(5, 10)), 0..6);
+        t!(r!(9, 10), Some(r!(9, 10)), 4..6);
+        t!(r!(10, 10), Some(r!(10, 10)), 5..6);
+        t!(r!(10, 11), Some(r!(10, 10)), 5..6);
+        t!(r!(11, 11), None, 0..0);
+        t!(r!(20, 30), None, 0..0);
     }
 
     #[test]

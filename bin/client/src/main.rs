@@ -1,5 +1,11 @@
 use anyhow::anyhow;
-use sqlsync::{named_params, unixtime::SystemUnixTime, Mutator, OptionalExtension, Transaction};
+use serde::{Deserialize, Serialize};
+use sqlsync::{
+    named_params,
+    positioned_io::{PositionedCursor, PositionedReader},
+    unixtime::SystemUnixTime,
+    Deserializable, Mutator, OptionalExtension, Serializable, Transaction,
+};
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -8,17 +14,19 @@ struct Task {
     sort: f64,
     description: String,
     completed: bool,
+    created_at: String,
 }
 
 fn query_tasks(tx: Transaction) -> anyhow::Result<Vec<Task>> {
     let mut stmt =
-        tx.prepare("select id, sort, description, completed from tasks order by sort")?;
+        tx.prepare("select id, sort, description, completed, created_at from tasks order by sort")?;
     let rows = stmt.query_map([], |row| {
         Ok(Task {
             id: row.get(0)?,
             sort: row.get(1)?,
             description: row.get(2)?,
             completed: row.get(3)?,
+            created_at: row.get(4)?,
         })
     })?;
 
@@ -31,7 +39,8 @@ fn query_tasks(tx: Transaction) -> anyhow::Result<Vec<Task>> {
 }
 
 fn query_task(tx: &Transaction, id: &i64) -> anyhow::Result<Option<Task>> {
-    let mut stmt = tx.prepare("select id, sort, description, completed from tasks where id = ?")?;
+    let mut stmt =
+        tx.prepare("select id, sort, description, completed, created_at from tasks where id = ?")?;
     let task: Option<Task> = stmt
         .query_row([id], |row| {
             Ok(Task {
@@ -39,6 +48,7 @@ fn query_task(tx: &Transaction, id: &i64) -> anyhow::Result<Option<Task>> {
                 sort: row.get(1)?,
                 description: row.get(2)?,
                 completed: row.get(3)?,
+                created_at: row.get(4)?,
             })
         })
         .optional()?;
@@ -83,13 +93,13 @@ fn query_max_sort(tx: &Transaction) -> anyhow::Result<f64> {
     Ok(max_sort.unwrap_or(0.))
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 struct PartialTask {
     description: Option<String>,
     completed: Option<bool>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 enum Mutation {
     InitSchema,
 
@@ -97,6 +107,18 @@ enum Mutation {
     RemoveTask { id: i64 },
     UpdateTask { id: i64, partial: PartialTask },
     MoveTask { id: i64, after: i64 },
+}
+
+impl Serializable for Mutation {
+    fn serialize_into<W: std::io::Write>(&self, writer: &mut W) -> anyhow::Result<()> {
+        Ok(bincode::serialize_into(writer, &self)?)
+    }
+}
+
+impl Deserializable for Mutation {
+    fn deserialize_from<R: PositionedReader>(reader: R) -> anyhow::Result<Self> {
+        Ok(bincode::deserialize_from(PositionedCursor::new(reader))?)
+    }
 }
 
 #[derive(Clone)]
@@ -112,7 +134,8 @@ impl Mutator for MutatorImpl {
                     id INTEGER PRIMARY KEY,
                     sort DOUBLE UNIQUE NOT NULL,
                     description TEXT NOT NULL,
-                    completed BOOLEAN NOT NULL
+                    completed BOOLEAN NOT NULL,
+                    created_at TEXT NOT NULL
                 )",
             )?,
 
@@ -120,8 +143,8 @@ impl Mutator for MutatorImpl {
                 log::debug!("appending task({}): {}", id, description);
                 let max_sort = query_max_sort(tx)?;
                 tx.execute(
-                    "insert into tasks (id, sort, description, completed)
-                    values (:id, :sort, :description, false)",
+                    "insert into tasks (id, sort, description, completed, created_at)
+                    values (:id, :sort, :description, false, datetime('now'))",
                     named_params! { ":id": id, ":sort": max_sort+1., ":description": description },
                 )
                 .map(|_| ())?
@@ -262,7 +285,7 @@ fn main() -> anyhow::Result<()> {
         ($client:ident -> server) => {
             let id = $client.id();
             debug_state!(start "syncing: client({}) -> server", id);
-            let req = $client.sync_timeline_prepare();
+            let req = $client.sync_timeline_prepare()?;
             if let Some(req) = req {
                 let server_range = remote.handle_client_sync_timeline(id, req)?;
                 $client.sync_timeline_response(server_range);
@@ -275,7 +298,7 @@ fn main() -> anyhow::Result<()> {
             let id = $client.id();
             debug_state!(start "syncing: server -> client({})", id);
             let req = $client.sync_storage_request();
-            let resp = remote.handle_client_sync_storage(req);
+            let resp = remote.handle_client_sync_storage(req)?;
             if let Some(resp) = resp {
                 $client.sync_storage_receive(resp)?;
             } else {
@@ -286,6 +309,11 @@ fn main() -> anyhow::Result<()> {
     }
 
     mutate!(local, InitSchema);
+
+    // init should be idempotent
+    mutate!(local2, InitSchema);
+    // and let's say that before anything else happened local2 did some stuff
+    mutate!(local2, AppendTask 4, "does this work?");
 
     sync!(local -> server);
 
@@ -305,6 +333,9 @@ fn main() -> anyhow::Result<()> {
     mutate!(local2, AppendTask 2, "eat lunch");
     mutate!(local, AppendTask 3, "go on a walk");
 
+    print_tasks!(local)?;
+    print_tasks!(local2)?;
+
     sync!(local -> server);
     sync!(local2 -> server);
 
@@ -314,10 +345,7 @@ fn main() -> anyhow::Result<()> {
     step_remote!();
 
     // sync down changes
-    // need to sync twice because each sync only moves one PartialPages
     sync!(server -> local);
-    sync!(server -> local);
-    sync!(server -> local2);
     sync!(server -> local2);
 
     print_tasks!(local)?;
