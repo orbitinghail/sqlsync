@@ -1,10 +1,15 @@
+use std::collections::HashMap;
+
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use sqlsync::{
+    client::ClientDocument,
+    mutate::Mutator,
     named_params,
     positioned_io::{PositionedCursor, PositionedReader},
-    unixtime::SystemUnixTime,
-    Deserializable, Mutator, OptionalExtension, Serializable, Transaction,
+    server::ServerDocument,
+    Deserializable, Document, LsnRange, MemoryJournal, MutableDocument, OptionalExtension,
+    QueryableDocument, RequestedLsnRange, Serializable, SteppableDocument, Transaction,
 };
 
 #[derive(Debug)]
@@ -197,13 +202,16 @@ fn main() -> anyhow::Result<()> {
         .env()
         .init()?;
 
-    let local_id = 1;
-    let mut local = sqlsync::Local::new(local_id, MutatorImpl {}, SystemUnixTime::new());
+    let doc_id = 1;
+    let m = MutatorImpl {};
 
-    let local_id_2 = 2;
-    let mut local2 = sqlsync::Local::new(local_id_2, MutatorImpl {}, SystemUnixTime::new());
+    let mut local: ClientDocument<MemoryJournal, _> = ClientDocument::open(doc_id, m.clone())?;
+    let mut local2: ClientDocument<MemoryJournal, _> = ClientDocument::open(doc_id, m.clone())?;
+    let mut remote: ServerDocument<MemoryJournal, _> = ServerDocument::open(doc_id, m.clone())?;
 
-    let mut remote = sqlsync::Remote::new(MutatorImpl {}, SystemUnixTime::new());
+    // temp hack to track the lsn ranges we get back from sync_receive
+    // key is a concatenation of the sync direction, like: `local->remote`
+    let mut hack_lsn_range_cache: HashMap<String, LsnRange> = HashMap::new();
 
     macro_rules! debug_state {
         (start $($log_args:tt)+) => {
@@ -242,7 +250,7 @@ fn main() -> anyhow::Result<()> {
     macro_rules! mutate {
         ($client:ident, InitSchema) => {
             log::info!("{}: initializing schema", std::stringify!($client));
-            $client.run(Mutation::InitSchema)?
+            $client.mutate(Mutation::InitSchema)?
         };
         ($client:ident, AppendTask $id:literal, $description:literal) => {
             log::info!(
@@ -251,18 +259,18 @@ fn main() -> anyhow::Result<()> {
                 $id,
                 $description
             );
-            $client.run(Mutation::AppendTask {
+            $client.mutate(Mutation::AppendTask {
                 id: $id,
                 description: $description.into(),
             })?
         };
         ($client:ident, RemoveTask $id:literal) => {
             log::info!("{}: removing task {}", std::stringify!($client), $id);
-            $client.run(Mutation::RemoveTask { id: $id })?
+            $client.mutate(Mutation::RemoveTask { id: $id })?
         };
         ($client:ident, UpdateTask $id:literal, $partial:expr) => {
             log::info!("{}: updating task {}", std::stringify!($client), $id);
-            $client.run(Mutation::UpdateTask {
+            $client.mutate(Mutation::UpdateTask {
                 id: $id,
                 partial: $partial,
             })?
@@ -274,7 +282,7 @@ fn main() -> anyhow::Result<()> {
                 $id,
                 $after
             );
-            $client.run(Mutation::MoveTask {
+            $client.mutate(Mutation::MoveTask {
                 id: $id,
                 after: $after,
             })?
@@ -282,27 +290,21 @@ fn main() -> anyhow::Result<()> {
     }
 
     macro_rules! sync {
-        ($client:ident -> server) => {
-            let id = $client.id();
-            debug_state!(start "syncing: client({}) -> server", id);
-            let req = $client.sync_timeline_prepare()?;
-            if let Some(req) = req {
-                let server_range = remote.handle_client_sync_timeline(id, req)?;
-                $client.sync_timeline_response(server_range);
+        ($from:ident -> $to:ident) => {
+            // compute request (TODO: replace once we have a LinkManager)
+            let key = format!("{}->{}", stringify!($from), stringify!($to));
+            let req = match hack_lsn_range_cache.get(&key) {
+                Some(range) => RequestedLsnRange::new(range.last()+1, 10),
+                None => RequestedLsnRange::new(0, 10),
+            };
+
+            debug_state!(start "syncing: {} -> {} ({:?})", stringify!($from), stringify!($to), req);
+
+            if let Some(partial) = $from.sync_prepare(req)? {
+                let range = $to.sync_receive(partial)?;
+                hack_lsn_range_cache.insert(key, range);
             } else {
-                log::info!("{}: nothing to sync", std::stringify!($client));
-            }
-            debug_state!(finish);
-        };
-        (server -> $client:ident) => {
-            let id = $client.id();
-            debug_state!(start "syncing: server -> client({})", id);
-            let req = $client.sync_storage_request();
-            let resp = remote.handle_client_sync_storage(req)?;
-            if let Some(resp) = resp {
-                $client.sync_storage_receive(resp)?;
-            } else {
-                log::info!("{}: nothing to sync", std::stringify!($client));
+                log::info!("{}: nothing to sync", stringify!($from));
             }
             debug_state!(finish);
         };
@@ -315,19 +317,18 @@ fn main() -> anyhow::Result<()> {
     // and let's say that before anything else happened local2 did some stuff
     mutate!(local2, AppendTask 4, "does this work?");
 
-    sync!(local -> server);
+    sync!(local -> remote);
 
     step_remote!();
 
-    sync!(server -> local);
+    sync!(remote -> local);
     print_tasks!(local)?;
 
-    sync!(server -> local2);
+    sync!(remote -> local2);
     print_tasks!(local2)?;
 
-    // at this point, everything is in sync
-    // now let's make some changes on both clients,
-    // then do a full sync, then check both clients
+    // at this point, remote has incorporated changes from local, but not local2
+    // let's continue to do work and see if everything converges
 
     mutate!(local, AppendTask 1, "work on sqlsync");
     mutate!(local2, AppendTask 2, "eat lunch");
@@ -336,8 +337,8 @@ fn main() -> anyhow::Result<()> {
     print_tasks!(local)?;
     print_tasks!(local2)?;
 
-    sync!(local -> server);
-    sync!(local2 -> server);
+    sync!(local -> remote);
+    sync!(local2 -> remote);
 
     // need to step twice to apply changes from both clients
     // should be applied as local then local2
@@ -345,8 +346,8 @@ fn main() -> anyhow::Result<()> {
     step_remote!();
 
     // sync down changes
-    sync!(server -> local);
-    sync!(server -> local2);
+    sync!(remote -> local);
+    sync!(remote -> local2);
 
     print_tasks!(local)?;
     print_tasks!(local2)?;

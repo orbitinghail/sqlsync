@@ -1,12 +1,15 @@
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
 use std::io;
 
-use crate::lsn::{Lsn, LsnRange, RequestedLsnRange};
+use crate::lsn::{Lsn, LsnRange, RequestedLsnRange, SatisfyError};
 use crate::positioned_io::PositionedReader;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum JournalError {
+    #[error("failed to open journal, error: {0}")]
+    FailedToOpenJournal(#[source] anyhow::Error),
+
     #[error("refusing to sync from journal id {partial_id} into journal id {self_id}")]
     WrongJournal {
         partial_id: JournalId,
@@ -19,16 +22,19 @@ pub enum JournalError {
         partial_range: LsnRange,
     },
 
+    #[error("failed to prepare journal partial from request: {0}")]
+    FailedToPrepareRequest(#[source] SatisfyError),
+
     #[error("failed to serialize object")]
     SerializationError(#[source] anyhow::Error),
 }
 
 pub type JournalResult<T> = std::result::Result<T, JournalError>;
 
-pub type JournalId = u64;
+pub type JournalId = i64;
 
 pub struct JournalPartial<I: DoubleEndedIterator> {
-    id: JournalId,
+    pub id: JournalId,
     pub range: LsnRange,
     iter: I,
 }
@@ -52,12 +58,14 @@ pub trait Deserializable: Sized {
     fn deserialize_from<R: PositionedReader>(reader: R) -> anyhow::Result<Self>;
 }
 
-pub trait Journal: std::fmt::Debug {
+pub trait Journal: Debug + Sized {
     type Entry: PositionedReader;
 
     type Iter<'a>: DoubleEndedIterator<Item = &'a Self::Entry>
     where
         <Self as Journal>::Entry: 'a;
+
+    fn open(id: JournalId) -> JournalResult<Self>;
 
     // TODO: eventually this needs to be a UUID of some kind
     fn id(&self) -> JournalId;
@@ -71,8 +79,6 @@ pub trait Journal: std::fmt::Debug {
     fn iter_range(&self, range: LsnRange) -> JournalResult<Self::Iter<'_>>;
 
     /// sync
-    fn sync_request(&self, max_sync: usize) -> RequestedLsnRange;
-
     fn sync_prepare(
         &self,
         req: RequestedLsnRange,
@@ -96,13 +102,7 @@ pub enum MemoryJournal {
     },
 }
 
-impl MemoryJournal {
-    pub fn empty(id: JournalId) -> MemoryJournal {
-        MemoryJournal::Empty { id, nextlsn: 0 }
-    }
-}
-
-impl std::fmt::Debug for MemoryJournal {
+impl Debug for MemoryJournal {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             MemoryJournal::Empty { id, nextlsn, .. } => f
@@ -122,6 +122,10 @@ impl std::fmt::Debug for MemoryJournal {
 impl Journal for MemoryJournal {
     type Entry = Vec<u8>;
     type Iter<'a> = std::slice::Iter<'a, Vec<u8>>;
+
+    fn open(id: JournalId) -> JournalResult<Self> {
+        Ok(MemoryJournal::Empty { id, nextlsn: 0 })
+    }
 
     fn id(&self) -> JournalId {
         match self {
@@ -177,15 +181,6 @@ impl Journal for MemoryJournal {
         }
     }
 
-    fn sync_request(&self, max_sync: usize) -> RequestedLsnRange {
-        match self {
-            MemoryJournal::Empty { nextlsn, .. } => RequestedLsnRange::new(*nextlsn, max_sync),
-            MemoryJournal::NonEmpty { range, .. } => {
-                RequestedLsnRange::new(range.last() + 1, max_sync)
-            }
-        }
-    }
-
     fn sync_prepare(
         &self,
         req: RequestedLsnRange,
@@ -194,17 +189,22 @@ impl Journal for MemoryJournal {
             MemoryJournal::Empty { .. } => Ok(None),
             MemoryJournal::NonEmpty {
                 id, range, data, ..
-            } => range
-                .satisfy(req)
-                .map(|intersection_range| {
+            } => range.satisfy(req).map_or_else(
+                |err| match err {
+                    SatisfyError::Pending => Ok(None),
+                    SatisfyError::Impossible { .. } => {
+                        Err(JournalError::FailedToPrepareRequest(err))
+                    }
+                },
+                |intersection_range| {
                     let offsets = range.intersection_offsets(&intersection_range);
-                    Ok(JournalPartial {
+                    Ok(Some(JournalPartial {
                         id: *id,
                         range: intersection_range,
                         iter: data[offsets].iter(),
-                    })
-                })
-                .transpose(),
+                    }))
+                },
+            ),
         }
     }
 

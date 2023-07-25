@@ -2,20 +2,19 @@ use libsqlite3_sys::SQLITE_IOERR;
 use log::{debug, trace};
 use sqlite_vfs::{File, FilePtr, OpenKind, Vfs, VfsResult};
 
-use crate::{journal::Journal, physical::Storage, unixtime::UnixTime};
+use crate::{journal::Journal, physical::Storage, unixtime::unix_timestamp_milliseconds};
 
-pub struct StorageVfs<T: UnixTime, J: Journal> {
-    unixtime: T,
+pub struct StorageVfs<J: Journal> {
     storage: FilePtr<Storage<J>>,
 }
 
-impl<T: UnixTime, J: Journal> StorageVfs<T, J> {
-    pub fn new(unixtime: T, storage: FilePtr<Storage<J>>) -> Self {
-        Self { unixtime, storage }
+impl<J: Journal> StorageVfs<J> {
+    pub fn new(storage: FilePtr<Storage<J>>) -> Self {
+        Self { storage }
     }
 }
 
-impl<T: UnixTime, J: Journal> Vfs for StorageVfs<T, J> {
+impl<J: Journal> Vfs for StorageVfs<J> {
     type File = FilePtr<Storage<J>>;
 
     fn open(
@@ -50,13 +49,13 @@ impl<T: UnixTime, J: Journal> Vfs for StorageVfs<T, J> {
 
     /// The xCurrentTime() method returns a Julian Day Number for the current date and time as a floating point value.
     fn current_time(&self) -> f64 {
-        let now = self.unixtime.unix_timestamp_milliseconds() as f64;
+        let now = unix_timestamp_milliseconds() as f64;
         2440587.5 + now / 864.0e5
     }
 
     /// The xCurrentTime() method returns a Julian Day Number for the current date and time as a floating point value.
     fn current_time_int64(&self) -> i64 {
-        let now = self.unixtime.unix_timestamp_milliseconds() as f64;
+        let now = unix_timestamp_milliseconds() as f64;
         ((2440587.5 + now / 864.0e5) * 864.0e5) as i64
     }
 }

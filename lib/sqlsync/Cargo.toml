@@ -16,5 +16,8 @@ rand = "0.8.4"
 time = "0.3"
 thiserror = "1.0.43"
 
+[target.wasm32-unknown-unknown.dependencies]
+js-sys = "0.3.64"
+
 [dev-dependencies]
 testutil = { path = "../testutil" }

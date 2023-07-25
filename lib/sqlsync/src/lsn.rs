@@ -1,6 +1,20 @@
 use std::{fmt::Debug, ops::Range};
 
+use thiserror::Error;
+
 pub type Lsn = u64;
+
+#[derive(Error, Debug)]
+pub enum SatisfyError {
+    #[error("lsn range {range:?} no longer contains requested lsns {req:?}")]
+    Impossible {
+        range: LsnRange,
+        req: RequestedLsnRange,
+    },
+
+    #[error("lsn range does not yet contain requested lsns")]
+    Pending,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct LsnRange {
@@ -32,15 +46,18 @@ impl LsnRange {
         (self.last - self.first + 1) as usize
     }
 
-    pub fn satisfy(&self, req: RequestedLsnRange) -> Option<LsnRange> {
+    pub fn satisfy(&self, req: RequestedLsnRange) -> Result<LsnRange, SatisfyError> {
+        if req.first < self.first {
+            return Err(SatisfyError::Impossible { range: *self, req });
+        }
         if self.first <= req.first && req.first <= self.last {
             let lastlsn = std::cmp::min(
                 self.last,
                 req.first.saturating_add(req.max_length as u64) - 1,
             );
-            Some(LsnRange::new(req.first, lastlsn))
+            Ok(LsnRange::new(req.first, lastlsn))
         } else {
-            None
+            Err(SatisfyError::Pending)
         }
     }
 
@@ -135,10 +152,21 @@ impl RequestedLsnRange {
     }
 }
 
+impl Debug for RequestedLsnRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("RequestedLsnRange")
+            .field(&self.first)
+            .field(&self.max_length)
+            .finish()
+    }
+}
+
 // write some tests for LsnRange and RequestedLsnRange
 #[cfg(test)]
 mod tests {
-    use testutil::assert_panic;
+    use testutil::{assert_matches, assert_panic};
+
+    use crate::lsn::SatisfyError;
 
     use super::{LsnRange, RequestedLsnRange};
 
@@ -165,24 +193,46 @@ mod tests {
     fn lsnrange_satisfy() {
         let range = LsnRange::new(5, 10);
 
-        assert_eq!(range.satisfy(RequestedLsnRange::new(0, 1)), None,);
-        assert_eq!(range.satisfy(RequestedLsnRange::new(0, 6)), None,);
-        assert_eq!(
-            range.satisfy(RequestedLsnRange::new(5, 1)),
-            Some(LsnRange::new(5, 5)),
+        macro_rules! req {
+            ($first:expr, $len:expr) => {
+                RequestedLsnRange::new($first, $len)
+            };
+        }
+
+        assert_matches!(
+            range.satisfy(req!(0, 1)),
+            Err(SatisfyError::Impossible { .. })
         );
-        assert_eq!(
-            range.satisfy(RequestedLsnRange::new(5, 2)),
-            Some(LsnRange::new(5, 6)),
+        assert_matches!(
+            range.satisfy(req!(0, 6)),
+            Err(SatisfyError::Impossible { .. })
         );
-        assert_eq!(
-            range.satisfy(RequestedLsnRange::new(5, 100)),
-            Some(LsnRange::new(5, 10)),
+        assert_matches!(
+            range.satisfy(req!(5, 1)),
+            Ok(LsnRange { first: 5, last: 5 })
         );
-        assert_eq!(
-            range.satisfy(RequestedLsnRange::new(5, usize::MAX)),
-            Some(LsnRange::new(5, 10)),
+        assert_matches!(
+            range.satisfy(req!(5, 2)),
+            Ok(LsnRange { first: 5, last: 6 })
         );
+        assert_matches!(
+            range.satisfy(req!(5, 100)),
+            Ok(LsnRange { first: 5, last: 10 })
+        );
+        assert_matches!(
+            range.satisfy(req!(7, usize::MAX)),
+            Ok(LsnRange { first: 7, last: 10 })
+        );
+        assert_matches!(
+            range.satisfy(req!(10, usize::MAX)),
+            Ok(LsnRange {
+                first: 10,
+                last: 10
+            })
+        );
+        assert_matches!(range.satisfy(req!(11, 1)), Err(SatisfyError::Pending));
+        assert_matches!(range.satisfy(req!(11, 10)), Err(SatisfyError::Pending));
+        assert_matches!(range.satisfy(req!(15, 10)), Err(SatisfyError::Pending));
     }
 
     #[test]

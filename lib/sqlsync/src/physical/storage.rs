@@ -10,12 +10,6 @@ use crate::{
     physical::page::Page,
 };
 
-// TODO: eventually we should decide on MAX_SYNC based on the number of pages
-// per journal entry
-// idea: push this down to Journal via some kind of "include" callback to decide
-// which entries to include in order (once it returns false, return the partial)
-const MAX_SYNC: usize = 5;
-
 // This is the offset of the file change counter in the sqlite header which is
 // stored at page 0
 const FILE_CHANGE_COUNTER_OFFSET: usize = 24;
@@ -46,15 +40,15 @@ impl<J: Journal> Storage<J> {
     }
 
     pub fn commit(&mut self) -> anyhow::Result<()> {
-        Ok(self.journal.append(std::mem::take(&mut self.pending))?)
+        if self.pending.num_pages() > 0 {
+            Ok(self.journal.append(std::mem::take(&mut self.pending))?)
+        } else {
+            Ok(())
+        }
     }
 
     pub fn revert(&mut self) {
         self.pending.clear()
-    }
-
-    pub fn sync_request(&self) -> RequestedLsnRange {
-        self.journal.sync_request(MAX_SYNC)
     }
 
     pub fn sync_prepare(

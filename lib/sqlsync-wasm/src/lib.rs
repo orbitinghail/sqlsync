@@ -3,9 +3,12 @@ mod utils;
 use log::Level;
 use serde::{Deserialize, Serialize};
 use sqlsync::{
+    client::ClientDocument,
+    mutate::Mutator,
     positioned_io::{PositionedCursor, PositionedReader},
-    unixtime::UnixTime,
-    Deserializable, Mutator, Serializable,
+    server::ServerDocument,
+    Deserializable, Document, MemoryJournal, MutableDocument, QueryableDocument, RequestedLsnRange,
+    Serializable, SteppableDocument,
 };
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
@@ -43,15 +46,6 @@ impl log::Log for ConsoleLogger {
     }
 
     fn flush(&self) {}
-}
-
-#[derive(Clone)]
-struct WasmUnixTime;
-
-impl UnixTime for WasmUnixTime {
-    fn unix_timestamp_milliseconds(&self) -> i64 {
-        js_sys::Date::now() as i64
-    }
 }
 
 static LOGGER: ConsoleLogger = ConsoleLogger;
@@ -110,11 +104,13 @@ pub fn run_inner() -> anyhow::Result<()> {
 
     log::set_logger(&LOGGER).map(|()| log::set_max_level(log::LevelFilter::Debug))?;
 
-    let local_id = 1;
-    let mut local = sqlsync::Local::new(local_id, MutatorImpl {}, WasmUnixTime {});
+    let doc_id = 1;
+    let m = MutatorImpl {};
 
-    local.run(Mutation::InitSchema)?;
-    local.run(Mutation::Increment)?;
+    let mut local: ClientDocument<MemoryJournal, _> = ClientDocument::open(doc_id, m.clone())?;
+
+    local.mutate(Mutation::InitSchema)?;
+    local.mutate(Mutation::Increment)?;
 
     local.query(|tx| {
         let mut stmt = tx.prepare("SELECT value, datetime('now'), random() FROM counter")?;
@@ -129,27 +125,25 @@ pub fn run_inner() -> anyhow::Result<()> {
     })?;
 
     // try syncing to server, running a step, and then syncing back
-    let mut remote = sqlsync::Remote::new(MutatorImpl {}, WasmUnixTime {});
+    let mut remote: ServerDocument<MemoryJournal, _> = ServerDocument::open(doc_id, m.clone())?;
 
     // sync client -> server
-    let mut req = local.sync_timeline_prepare()?;
-    if let Some(req) = req.take() {
-        let resp = remote.handle_client_sync_timeline(local_id, req)?;
-        local.sync_timeline_response(resp);
+    let req = RequestedLsnRange::new(0, 10);
+    if let Some(partial) = local.sync_prepare(req)? {
+        remote.sync_receive(partial)?;
     }
 
     // step remote (apply changes)
     remote.step()?;
 
     // sync server -> client
-    let req = local.sync_storage_request();
-    let resp = remote.handle_client_sync_storage(req)?;
-    if let Some(resp) = resp {
-        local.sync_storage_receive(resp)?;
+    let req = RequestedLsnRange::new(0, 10);
+    if let Some(partial) = remote.sync_prepare(req)? {
+        local.sync_receive(partial)?;
     }
 
     // run another local increment
-    local.run(Mutation::Increment)?;
+    local.mutate(Mutation::Increment)?;
 
     // recheck the table
     local.query(|tx| {

@@ -39,19 +39,10 @@ features = ["console"]
 wasm-bindgen-test = "0.3.37"
 testutil = { path = "../testutil" }
 
-[profile.release]
-# Tell `rustc` to optimize for small code size.
-opt-level = "s"
-
 [package.metadata.wasm-pack.profile.dev]
 wasm-opt = false
 
 [package.metadata.wasm-pack.profile.dev.wasm-bindgen]
-debug-js-glue = true
-demangle-name-section = true
-dwarf-debug-info = true
-
-[package.metadata.wasm-pack.profile.dev.wasm-bindgen-test]
 debug-js-glue = true
 demangle-name-section = true
 dwarf-debug-info = true

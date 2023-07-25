@@ -5,14 +5,10 @@ use sqlite_vfs::FilePtr;
 use crate::{
     journal::Journal,
     physical::{Storage, PAGESIZE},
-    unixtime::UnixTime,
     vfs::StorageVfs,
 };
 
-pub fn open_with_vfs<T: UnixTime, J: Journal>(
-    unixtime: T,
-    journal: J,
-) -> Result<(Connection, Box<Storage<J>>)> {
+pub fn open_with_vfs<J: Journal>(journal: J) -> Result<(Connection, Box<Storage<J>>)> {
     let mut storage = Box::new(Storage::new(journal));
     let storage_ptr = FilePtr::new(&mut storage);
 
@@ -20,7 +16,7 @@ pub fn open_with_vfs<T: UnixTime, J: Journal>(
     let vfs_name = format!("local-vfs-{}", rand::random::<u64>());
 
     // register the vfs globally
-    let vfs = StorageVfs::new(unixtime, storage_ptr);
+    let vfs = StorageVfs::new(storage_ptr);
     sqlite_vfs::register(&vfs_name, vfs).expect("failed to register local-vfs with sqlite");
 
     let sqlite = Connection::open_with_flags_and_vfs(
@@ -54,10 +50,12 @@ where
 }
 
 // run a closure on db in a txn, rolling back any changes
-pub fn readyonly_query<F>(sqlite: &mut Connection, f: F) -> Result<()>
+pub fn readonly_query<F>(sqlite: &mut Connection, f: F) -> Result<()>
 where
     F: FnOnce(Transaction) -> Result<()>,
 {
+    // TODO: this is a hack to get around rusqlite's lack of support for readonly txns
+    //       this can be better enforced by wrapping the tx in something that rejects commit
     f(sqlite.transaction()?)
     // will drop the tx right away, throwing away any changes
 }
