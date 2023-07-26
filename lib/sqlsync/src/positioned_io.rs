@@ -50,6 +50,12 @@ pub trait PositionedReader {
             Ok(())
         }
     }
+
+    fn read_all(&self) -> io::Result<Vec<u8>> {
+        let mut out = vec![0; self.size()?];
+        self.read_exact_at(0, &mut out)?;
+        Ok(out)
+    }
 }
 
 pub trait PositionedWriter {

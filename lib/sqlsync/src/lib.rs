@@ -2,9 +2,10 @@ mod db;
 mod document;
 mod journal;
 mod lsn;
-mod vfs;
-mod storage;
 mod page;
+mod serialization;
+mod storage;
+mod vfs;
 
 pub mod mutate;
 pub mod positioned_io;
@@ -13,7 +14,8 @@ pub mod unixtime;
 
 pub use document::*;
 
-pub use journal::{Deserializable, Serializable, MemoryJournal};
+pub use journal::MemoryJournal;
+pub use serialization::{Deserializable, Serializable};
 
 pub use lsn::{LsnRange, RequestedLsnRange};
 

@@ -6,7 +6,7 @@ use rusqlite::{Connection, Transaction};
 
 use crate::{
     db::{open_with_vfs, readonly_query, run_in_tx},
-    journal::{Journal, JournalId, JournalPartial},
+    journal::{Journal, JournalId, JournalIterator},
     lsn::{LsnRange, RequestedLsnRange},
     mutate::Mutator,
     storage::Storage,
@@ -31,7 +31,10 @@ impl<J: Journal, M: Mutator> Debug for ClientDocument<J, M> {
     }
 }
 
-impl<J: Journal, M: Mutator> Document<J, M> for ClientDocument<J, M> {
+impl<J: Journal, M: Mutator> Document for ClientDocument<J, M> {
+    type J = J;
+    type M = M;
+
     fn open(id: DocumentId, mutator: M) -> Result<Self> {
         let storage_journal = J::open(id)?;
         let (mut sqlite, storage) = open_with_vfs(storage_journal)?;
@@ -51,11 +54,11 @@ impl<J: Journal, M: Mutator> Document<J, M> for ClientDocument<J, M> {
         })
     }
 
-    fn sync_prepare(&self, req: RequestedLsnRange) -> Result<Option<JournalPartial<J::Iter<'_>>>> {
+    fn sync_prepare(&self, req: RequestedLsnRange) -> Result<Option<J::Iter>> {
         Ok(self.timeline.sync_prepare(req)?)
     }
 
-    fn sync_receive(&mut self, partial: JournalPartial<J::Iter<'_>>) -> Result<LsnRange> {
+    fn sync_receive(&mut self, partial: impl JournalIterator) -> Result<LsnRange> {
         self.storage.revert();
         let out = self.storage.sync_receive(partial)?;
         rebase_timeline(&mut self.timeline, &mut self.sqlite, &self.mutator)?;
@@ -63,8 +66,10 @@ impl<J: Journal, M: Mutator> Document<J, M> for ClientDocument<J, M> {
     }
 }
 
-impl<J: Journal, M: Mutator> MutableDocument<M> for ClientDocument<J, M> {
-    fn mutate(&mut self, m: <M as Mutator>::Mutation) -> Result<()> {
+impl<J: Journal, M: Mutator> MutableDocument for ClientDocument<J, M> {
+    type Mutation = <M as Mutator>::Mutation;
+
+    fn mutate(&mut self, m: Self::Mutation) -> Result<()> {
         run_in_tx(&mut self.sqlite, |tx| self.mutator.apply(tx, &m))?;
         self.timeline.append(m)?;
         Ok(())

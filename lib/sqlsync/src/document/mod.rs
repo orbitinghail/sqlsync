@@ -4,7 +4,7 @@ use anyhow::Result;
 use rusqlite::Transaction;
 
 use crate::{
-    journal::{Journal, JournalPartial},
+    journal::{Journal, JournalIterator},
     lsn::{LsnRange, RequestedLsnRange},
     mutate::Mutator,
 };
@@ -12,13 +12,16 @@ use crate::{
 pub mod client;
 pub mod server;
 
-type DocumentId = i64;
+pub type DocumentId = i64;
 
-pub trait Document<J: Journal, M: Mutator>: Debug + Sized {
-    fn open(id: DocumentId, mutator: M) -> Result<Self>;
+pub trait Document: Debug + Sized {
+    type J: Journal;
+    type M: Mutator;
 
-    fn sync_prepare(&self, req: RequestedLsnRange) -> Result<Option<JournalPartial<J::Iter<'_>>>>;
-    fn sync_receive(&mut self, partial: JournalPartial<J::Iter<'_>>) -> Result<LsnRange>;
+    fn open(id: DocumentId, mutator: Self::M) -> Result<Self>;
+
+    fn sync_prepare(&self, req: RequestedLsnRange) -> Result<Option<<Self::J as Journal>::Iter>>;
+    fn sync_receive(&mut self, partial: impl JournalIterator) -> Result<LsnRange>;
 }
 
 pub trait QueryableDocument {
@@ -27,8 +30,10 @@ pub trait QueryableDocument {
         F: FnOnce(Transaction) -> Result<()>;
 }
 
-pub trait MutableDocument<M: Mutator> {
-    fn mutate(&mut self, m: M::Mutation) -> Result<()>;
+pub trait MutableDocument {
+    type Mutation;
+
+    fn mutate(&mut self, m: Self::Mutation) -> Result<()>;
 }
 
 pub trait SteppableDocument {

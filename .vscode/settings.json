@@ -1,3 +1,4 @@
 {
-  "cSpell.words": ["Replayer"]
+  "cSpell.words": ["Replayer"],
+  "rust-analyzer.showUnlinkedFileNotification": false
 }

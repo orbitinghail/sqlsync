@@ -1,6 +1,6 @@
 use rusqlite::Transaction;
 
-use crate::journal::{Deserializable, Serializable};
+use crate::{Deserializable, Serializable};
 
 pub trait Mutator: Clone {
     type Mutation: Serializable + Deserializable;

@@ -2,9 +2,10 @@ use rusqlite::{named_params, Connection};
 
 use crate::{
     db::run_in_tx,
-    journal::{Deserializable, Journal},
+    journal::Journal,
     lsn::{Lsn, LsnRange},
     mutate::Mutator,
+    Deserializable,
 };
 
 const TIMELINES_TABLE_SQL: &str = "
@@ -123,4 +124,6 @@ pub fn apply_timeline_range<J: Journal, M: Mutator>(
 
         Ok(())
     })
+
+    // TODO: once the above tx commits we can GC applied entries in the timeline
 }

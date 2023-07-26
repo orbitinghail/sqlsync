@@ -1,93 +1,63 @@
+use std::collections::VecDeque;
 use std::fmt::{Debug, Formatter};
-use std::io;
 
 use crate::lsn::{Lsn, LsnRange, RequestedLsnRange, SatisfyError};
 use crate::positioned_io::PositionedReader;
-use thiserror::Error;
+use crate::Serializable;
 
-#[derive(Error, Debug)]
-pub enum JournalError {
-    #[error("failed to open journal, error: {0}")]
-    FailedToOpenJournal(#[source] anyhow::Error),
+use super::error::{JournalError, JournalResult};
+use super::{Journal, JournalId, JournalIterator};
 
-    #[error("refusing to sync from journal id {partial_id} into journal id {self_id}")]
-    WrongJournal {
-        partial_id: JournalId,
-        self_id: JournalId,
-    },
-
-    #[error("journal range {journal_debug} does not intersect or preceed partial range {partial_range:?}")]
-    RangesMustBeContiguous {
-        journal_debug: String,
-        partial_range: LsnRange,
-    },
-
-    #[error("failed to prepare journal partial from request: {0}")]
-    FailedToPrepareRequest(#[source] SatisfyError),
-
-    #[error("failed to serialize object")]
-    SerializationError(#[source] anyhow::Error),
+pub struct MemoryJournalIter {
+    id: JournalId,
+    range: Option<LsnRange>,
+    data: VecDeque<Vec<u8>>,
 }
 
-pub type JournalResult<T> = std::result::Result<T, JournalError>;
+impl MemoryJournalIter {
+    fn empty(id: JournalId) -> Self {
+        Self {
+            id,
+            range: None,
+            data: VecDeque::new(),
+        }
+    }
 
-pub type JournalId = i64;
-
-pub struct JournalPartial<I: DoubleEndedIterator> {
-    pub id: JournalId,
-    pub range: LsnRange,
-    iter: I,
-}
-
-impl<I: DoubleEndedIterator> IntoIterator for JournalPartial<I> {
-    type Item = I::Item;
-    type IntoIter = I;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter
+    fn new(id: JournalId, range: LsnRange, data: Vec<Vec<u8>>) -> Self {
+        Self {
+            id,
+            range: Some(range),
+            data: data.into(),
+        }
     }
 }
 
-pub trait Serializable {
-    /// serialize the object into the given writer
-    fn serialize_into<W: io::Write>(&self, writer: &mut W) -> anyhow::Result<()>;
+impl JournalIterator for MemoryJournalIter {
+    type Entry = Vec<u8>;
+
+    fn id(&self) -> JournalId {
+        self.id
+    }
+
+    fn range(&self) -> Option<LsnRange> {
+        self.range
+    }
 }
 
-pub trait Deserializable: Sized {
-    /// deserialize the object from the given reader
-    fn deserialize_from<R: PositionedReader>(reader: R) -> anyhow::Result<Self>;
+impl Iterator for MemoryJournalIter {
+    type Item = Vec<u8>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.range = self.range.and_then(|range| range.remove_first());
+        self.data.pop_front()
+    }
 }
 
-pub trait Journal: Debug + Sized {
-    type Entry: PositionedReader;
-
-    type Iter<'a>: DoubleEndedIterator<Item = &'a Self::Entry>
-    where
-        <Self as Journal>::Entry: 'a;
-
-    fn open(id: JournalId) -> JournalResult<Self>;
-
-    // TODO: eventually this needs to be a UUID of some kind
-    fn id(&self) -> JournalId;
-
-    /// append a new journal entry, and then write to it
-    fn append(&mut self, obj: impl Serializable) -> JournalResult<()>;
-
-    /// iterate over journal entries
-    fn iter(&self) -> JournalResult<Self::Iter<'_>>;
-
-    fn iter_range(&self, range: LsnRange) -> JournalResult<Self::Iter<'_>>;
-
-    /// sync
-    fn sync_prepare(
-        &self,
-        req: RequestedLsnRange,
-    ) -> JournalResult<Option<JournalPartial<Self::Iter<'_>>>>;
-
-    fn sync_receive(&mut self, partial: JournalPartial<Self::Iter<'_>>) -> JournalResult<LsnRange>;
-
-    /// drop the journal's prefix
-    fn drop_prefix(&mut self, up_to: Lsn) -> JournalResult<()>;
+impl DoubleEndedIterator for MemoryJournalIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.range = self.range.and_then(|range| range.remove_last());
+        self.data.pop_back()
+    }
 }
 
 pub enum MemoryJournal {
@@ -120,8 +90,7 @@ impl Debug for MemoryJournal {
 }
 
 impl Journal for MemoryJournal {
-    type Entry = Vec<u8>;
-    type Iter<'a> = std::slice::Iter<'a, Vec<u8>>;
+    type Iter = MemoryJournalIter;
 
     fn open(id: JournalId) -> JournalResult<Self> {
         Ok(MemoryJournal::Empty { id, nextlsn: 0 })
@@ -157,34 +126,38 @@ impl Journal for MemoryJournal {
         Ok(())
     }
 
-    fn iter(&self) -> JournalResult<Self::Iter<'_>> {
+    fn iter(&self) -> JournalResult<Self::Iter> {
         match self {
-            Self::Empty { .. } => Ok([].iter()),
-            Self::NonEmpty { data, .. } => Ok(data.iter()),
+            Self::Empty { id, .. } => Ok(MemoryJournalIter::empty(*id)),
+            Self::NonEmpty {
+                id, range, data, ..
+            } => Ok(MemoryJournalIter::new(*id, *range, data.to_vec())),
         }
     }
 
-    fn iter_range(&self, range: LsnRange) -> JournalResult<Self::Iter<'_>> {
+    fn iter_range(&self, range: LsnRange) -> JournalResult<Self::Iter> {
         match self {
-            Self::Empty { .. } => Ok([].iter()),
+            Self::Empty { id, .. } => Ok(MemoryJournalIter::empty(*id)),
             Self::NonEmpty {
+                id,
                 range: journal_range,
                 data,
                 ..
             } => journal_range.intersect(&range).map_or_else(
-                || Ok([].iter()),
+                || Ok(MemoryJournalIter::empty(*id)),
                 |intersection_range| {
                     let offsets = journal_range.intersection_offsets(&intersection_range);
-                    Ok(data[offsets].iter())
+                    Ok(MemoryJournalIter::new(
+                        *id,
+                        intersection_range,
+                        data[offsets].to_vec(),
+                    ))
                 },
             ),
         }
     }
 
-    fn sync_prepare(
-        &self,
-        req: RequestedLsnRange,
-    ) -> JournalResult<Option<JournalPartial<Self::Iter<'_>>>> {
+    fn sync_prepare(&self, req: RequestedLsnRange) -> JournalResult<Option<Self::Iter>> {
         match self {
             MemoryJournal::Empty { .. } => Ok(None),
             MemoryJournal::NonEmpty {
@@ -198,25 +171,27 @@ impl Journal for MemoryJournal {
                 },
                 |intersection_range| {
                     let offsets = range.intersection_offsets(&intersection_range);
-                    Ok(Some(JournalPartial {
-                        id: *id,
-                        range: intersection_range,
-                        iter: data[offsets].iter(),
-                    }))
+                    Ok(Some(MemoryJournalIter::new(
+                        *id,
+                        intersection_range,
+                        data[offsets].to_vec(),
+                    )))
                 },
             ),
         }
     }
 
-    fn sync_receive(&mut self, partial: JournalPartial<Self::Iter<'_>>) -> JournalResult<LsnRange> {
-        if partial.id != self.id() {
+    fn sync_receive(&mut self, partial: impl JournalIterator) -> JournalResult<LsnRange> {
+        if partial.id() != self.id() {
             return Err(JournalError::WrongJournal {
-                partial_id: partial.id,
+                partial_id: partial.id(),
                 self_id: self.id(),
             });
         }
 
-        let partial_range = partial.range;
+        let partial_range = partial.range().ok_or(JournalError::EmptyPartial)?;
+        let partial_data = partial.map(|e| e.read_all()).collect::<Result<_, _>>()?;
+
         match self {
             MemoryJournal::Empty { id, nextlsn } => {
                 // ensure that nextlsn is contained by partial.range()
@@ -226,10 +201,11 @@ impl Journal for MemoryJournal {
                         partial_range,
                     });
                 }
+
                 *self = MemoryJournal::NonEmpty {
                     id: *id,
                     range: partial_range,
-                    data: partial.into_iter().cloned().collect(),
+                    data: partial_data,
                 };
                 Ok(partial_range)
             }
@@ -244,17 +220,11 @@ impl Journal for MemoryJournal {
 
                 // insert partial.data into the journal at the correct position
                 let offsets = range.intersection_offsets(&partial_range);
-                if offsets.is_empty() {
-                    // no intersection, so we can just append the partial to this journal
-                    data.extend(partial.into_iter().cloned());
-                } else {
+                if !offsets.is_empty() {
                     // intersection, so we need to replace the intersecting portion of the journal
-                    *data = data[..offsets.start]
-                        .iter()
-                        .chain(partial.into_iter())
-                        .cloned()
-                        .collect();
+                    *data = data[..offsets.start].to_vec();
                 }
+                data.extend(partial_data);
 
                 // update the range
                 *range = range.union(&partial_range);

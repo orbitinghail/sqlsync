@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use super::page::{SerializedPagesReader, SparsePages, PAGESIZE};
 use crate::{
-    journal::{Journal, JournalPartial},
+    journal::{Journal, JournalIterator},
     lsn::{LsnRange, RequestedLsnRange},
     page::Page,
 };
@@ -48,17 +48,11 @@ impl<J: Journal> Storage<J> {
         self.pending.clear()
     }
 
-    pub fn sync_prepare(
-        &self,
-        req: RequestedLsnRange,
-    ) -> anyhow::Result<Option<JournalPartial<J::Iter<'_>>>> {
+    pub fn sync_prepare(&self, req: RequestedLsnRange) -> anyhow::Result<Option<J::Iter>> {
         Ok(self.journal.sync_prepare(req)?)
     }
 
-    pub fn sync_receive(
-        &mut self,
-        partial: JournalPartial<J::Iter<'_>>,
-    ) -> anyhow::Result<LsnRange> {
+    pub fn sync_receive(&mut self, partial: impl JournalIterator) -> anyhow::Result<LsnRange> {
         Ok(self.journal.sync_receive(partial)?)
     }
 }

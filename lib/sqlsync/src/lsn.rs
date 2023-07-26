@@ -99,6 +99,17 @@ impl LsnRange {
         Some(LsnRange::new(up_to + 1, self.last))
     }
 
+    pub fn remove_first(&self) -> Option<LsnRange> {
+        self.trim_prefix(self.first)
+    }
+
+    pub fn remove_last(&self) -> Option<LsnRange> {
+        if self.first >= self.last {
+            return None;
+        }
+        Some(LsnRange::new(self.first, self.last - 1))
+    }
+
     pub fn extend_by(&self, len: u64) -> LsnRange {
         assert!(len > 0, "len must be >= 0");
         LsnRange::new(self.first, self.last + len)
@@ -387,5 +398,16 @@ mod tests {
         assert_eq!(range.union(&LsnRange::new(11, 15)), LsnRange::new(5, 15));
         assert_eq!(range.union(&LsnRange::new(4, 11)), LsnRange::new(4, 11));
         assert_eq!(range.union(&LsnRange::new(0, 100)), LsnRange::new(0, 100));
+    }
+
+    #[test]
+    fn lsnrange_remove_first_last() {
+        let range = LsnRange::new(5, 10);
+        assert_eq!(range.remove_first(), Some(LsnRange::new(6, 10)));
+        assert_eq!(range.remove_last(), Some(LsnRange::new(5, 9)));
+
+        let range = LsnRange::new(5, 5);
+        assert_eq!(range.remove_first(), None);
+        assert_eq!(range.remove_last(), None);
     }
 }

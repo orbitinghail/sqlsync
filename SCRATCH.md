@@ -1,3 +1,11 @@
+# TASKS (start here)
+- id
+  - figure out which id abstraction to use, use it
+- opfs journal
+- file journal (perhaps s3 journal?)
+- libwasm
+- e2e demo
+
 # Observations
 - when syncing client -> server, if we don't have the server cursor we should request it (or the server should initialize us with it)
 - my solution still feels a bit fragile - it's starting to look like libsql's virtual wal might be a more robust solution as it gives me a very clean way to handle page lookups
@@ -45,75 +53,3 @@ triggers:
   - connect to server
   - client poll interval (optional)
   - server storage changed (server mutates journal)
-
-# network flows
-
-**connection open**
-client -> server: open documents [(storage_id, storage_range, timeline_id), ...]
-*establish websocket*
-server -> client: timeline LsnRange (or none) for the clients timeline_id for each doc
-client -> server: trigger timeline sync if needed
-server -> client: trigger storage sync if needed
-client: connected
-server: connected
-
-**timeline sync**
-client: prepare RequestedLsnRange from cached server LsnRange
-client -> server: sync_prepare
-server: ensure remote.step is scheduled
-server -> client: updated LsnRange
-
-**storage sync**
-server: prepare RequestedLsnRange from cached client LsnRange
-server -> client: sync_prepare
-client: rebase storage
-client -> server: updated LsnRange
-
-# architecture
-
-```rust
-LinkManager<D>
-  links: Map(link_id -> Link{
-    remote_lsn_range_cache: Map(doc_id -> LsnRange)
-    docs: Vec<doc_id>
-  })
-
-  docs: Map(doc_id -> D)
-
-  /// incoming messages are handled, and then responded to
-  fn handle_msg(link_id, msg) -> msg
-
-  /// poll for pending messages
-  /// check each doc for pending work essentially
-  ///   for example: timeline has changed since last poll
-  fn poll_msg() -> (link_id, msg)
-
-Document<J>
-  fn sync_prepare(req: RequestedLsnRange) -> JournalPartial<J::Iter>
-  fn sync_receive(partial: JournalPartial<J::Iter>) -> LsnRange
-
-ClientDocument:
-  timeline: Journal
-  storage: Journal
-  sqlite: (vfs -> *storage)
-
-impl Document for ClientDocument
-
-ServerDocument:
-  timelines: Map(timeline_id -> Journal)
-  timeline_receive_queue priority_heap({timestamp, journal_id, LsnRange})
-  storage: Journal
-  sqlite: (vfs -> *storage)
-
-impl Document for ServerDocument
-```
-
-# TASKS (start here)
-- link
-  - Build the LinkManager & Link layer + define messages
-- id
-  - figure out which id abstraction to use, use it
-- opfs journal
-- file journal (perhaps s3 journal?)
-- libwasm
-- e2e demo

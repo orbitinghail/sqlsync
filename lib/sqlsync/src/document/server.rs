@@ -6,8 +6,10 @@ use std::fmt::Debug;
 use rusqlite::Connection;
 
 use crate::db::open_with_vfs;
+use crate::journal::JournalIterator;
 use crate::timeline::{apply_timeline_range, run_timeline_migration};
 use crate::unixtime::unix_timestamp_milliseconds;
+use crate::RequestedLsnRange;
 use crate::{
     journal::{Journal, JournalId},
     lsn::LsnRange,
@@ -15,7 +17,7 @@ use crate::{
     storage::Storage,
 };
 
-use super::{Document, SteppableDocument};
+use super::{Document, DocumentId, SteppableDocument};
 
 #[derive(Debug, PartialEq, Eq)]
 struct ReceiveQueueEntry {
@@ -67,8 +69,11 @@ impl<J: Journal, M: Mutator> Debug for ServerDocument<J, M> {
     }
 }
 
-impl<J: Journal, M: Mutator> Document<J, M> for ServerDocument<J, M> {
-    fn open(id: super::DocumentId, mutator: M) -> Result<Self> {
+impl<J: Journal, M: Mutator> Document for ServerDocument<J, M> {
+    type J = J;
+    type M = M;
+
+    fn open(id: DocumentId, mutator: M) -> Result<Self> {
         let storage_journal = J::open(id)?;
         let (mut sqlite, storage) = open_with_vfs(storage_journal)?;
 
@@ -84,18 +89,12 @@ impl<J: Journal, M: Mutator> Document<J, M> for ServerDocument<J, M> {
         })
     }
 
-    fn sync_prepare(
-        &self,
-        req: crate::lsn::RequestedLsnRange,
-    ) -> Result<Option<crate::journal::JournalPartial<<J as Journal>::Iter<'_>>>> {
+    fn sync_prepare(&self, req: RequestedLsnRange) -> Result<Option<J::Iter>> {
         Ok(self.storage.sync_prepare(req)?)
     }
 
-    fn sync_receive(
-        &mut self,
-        partial: crate::journal::JournalPartial<<J as Journal>::Iter<'_>>,
-    ) -> Result<LsnRange> {
-        let id = partial.id;
+    fn sync_receive(&mut self, partial: impl JournalIterator) -> Result<LsnRange> {
+        let id = partial.id();
         let timeline = self.get_or_create_timeline_mut(id)?;
         let range = timeline.sync_receive(partial)?;
 
