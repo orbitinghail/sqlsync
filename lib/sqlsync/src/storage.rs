@@ -1,13 +1,10 @@
 use std::fmt::Debug;
 
-use super::{
-    page::{SerializedPagesReader, SparsePages},
-    PAGESIZE,
-};
+use super::page::{SerializedPagesReader, SparsePages, PAGESIZE};
 use crate::{
     journal::{Journal, JournalPartial},
     lsn::{LsnRange, RequestedLsnRange},
-    physical::page::Page,
+    page::Page,
 };
 
 // This is the offset of the file change counter in the sqlite header which is

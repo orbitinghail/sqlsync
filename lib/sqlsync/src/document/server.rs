@@ -12,7 +12,7 @@ use crate::{
     journal::{Journal, JournalId},
     lsn::LsnRange,
     mutate::Mutator,
-    physical::Storage,
+    storage::Storage,
 };
 
 use super::{Document, SteppableDocument};

@@ -6,8 +6,6 @@
   - or perhaps compact should always result in a new journal (easier with COW)
 - determine how many journal entries to sync based on the size of each entry rather than a fixed amount
 
-# TODO
-
 ## JS API + SharedWorker
 - sqlite + sqlsync + mutations should all run within a single (shared) web worker
 - one worker for all tabs/etc associated with the same origin
@@ -26,19 +24,12 @@
   - it appears that it works fine, the only remaining work is to optimize the file change counter logic
 - can use fileHandle.createSyncAccessHandle() + minimal overhead
 
-# Priorities
-- networking abstraction
-- opfs journal
-- file journal (perhaps s3 journal?)
-- libwasm
-- e2e demo
-
 # Network
 - abstracts protocol + encoding
 - socket based abstraction designed for websockets
 - shared worker can use websocket, so can own the entire sqlsync lifecycle
 
-Currently, networking has the following flow:
+Networking has the following flow:
 
 ## sync timeline
 triggers:
@@ -54,14 +45,6 @@ triggers:
   - connect to server
   - client poll interval (optional)
   - server storage changed (server mutates journal)
-
-In general, it seems that journals could be directly synchronized by the network layer without timeline/storage being directly involved? This isn't completely true since clients have to rebase after every storage sync.
-
-That said, it's feasible that we follow the same concept for both sides of the sync.
-
-# decisions
-
-- the network tier can manage caching LsnRanges for every remote journal it knows about
 
 # network flows
 
@@ -86,21 +69,7 @@ server -> client: sync_prepare
 client: rebase storage
 client -> server: updated LsnRange
 
-# current structure
-
-local
-  timeline
-  storage
-  sqlite (vfs -> *storage)
-  server_timeline_range
-
-remote
-  storage
-  timelines map(journal_id -> journal)
-  receive_queue priority_heap({timestamp, journal_id, LsnRange})
-  sqlite (vfs -> *storage)
-
-# proposed structure
+# architecture
 
 ```rust
 LinkManager<D>
@@ -138,3 +107,13 @@ ServerDocument:
 
 impl Document for ServerDocument
 ```
+
+# TASKS (start here)
+- link
+  - Build the LinkManager & Link layer + define messages
+- id
+  - figure out which id abstraction to use, use it
+- opfs journal
+- file journal (perhaps s3 journal?)
+- libwasm
+- e2e demo

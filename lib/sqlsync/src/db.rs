@@ -2,11 +2,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OpenFlags, Transaction};
 use sqlite_vfs::FilePtr;
 
-use crate::{
-    journal::Journal,
-    physical::{Storage, PAGESIZE},
-    vfs::StorageVfs,
-};
+use crate::{journal::Journal, page::PAGESIZE, storage::Storage, vfs::StorageVfs};
 
 pub fn open_with_vfs<J: Journal>(journal: J) -> Result<(Connection, Box<Storage<J>>)> {
     let mut storage = Box::new(Storage::new(journal));

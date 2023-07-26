@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, io::Write, mem::size_of};
 
 use crate::{positioned_io::PositionedReader, Serializable};
 
-use super::PAGESIZE;
+pub const PAGESIZE: usize = 4096;
 
 pub type PageIdx = u64;
 const PAGE_IDX_SIZE: usize = size_of::<PageIdx>();

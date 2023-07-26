@@ -2,8 +2,9 @@ mod db;
 mod document;
 mod journal;
 mod lsn;
-mod physical;
 mod vfs;
+mod storage;
+mod page;
 
 pub mod mutate;
 pub mod positioned_io;

@@ -9,7 +9,7 @@ use crate::{
     journal::{Journal, JournalId, JournalPartial},
     lsn::{LsnRange, RequestedLsnRange},
     mutate::Mutator,
-    physical::Storage,
+    storage::Storage,
     timeline::{rebase_timeline, run_timeline_migration},
 };
 

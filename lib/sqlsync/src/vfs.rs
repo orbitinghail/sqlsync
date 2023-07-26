@@ -2,7 +2,7 @@ use libsqlite3_sys::SQLITE_IOERR;
 use log::{debug, trace};
 use sqlite_vfs::{File, FilePtr, OpenKind, Vfs, VfsResult};
 
-use crate::{journal::Journal, physical::Storage, unixtime::unix_timestamp_milliseconds};
+use crate::{journal::Journal, storage::Storage, unixtime::unix_timestamp_milliseconds};
 
 pub struct StorageVfs<J: Journal> {
     storage: FilePtr<Storage<J>>,
