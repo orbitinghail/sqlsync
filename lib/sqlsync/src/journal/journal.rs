@@ -1,43 +1,39 @@
 use std::fmt::Debug;
+use std::io;
+use std::result::Result;
 
-use crate::lsn::{Lsn, LsnRange, RequestedLsnRange};
-use crate::positioned_io::PositionedReader;
+use thiserror::Error;
+
+use crate::lsn::Lsn;
 use crate::Serializable;
 
-use super::error::JournalResult;
+use super::{Scannable, Syncable};
 
 pub type JournalId = i64;
 
-pub trait JournalIterator: DoubleEndedIterator<Item = Self::Entry> {
-    type Entry: PositionedReader;
+#[derive(Error, Debug)]
+pub enum JournalError {
+    #[error("failed to open journal, error: {0}")]
+    FailedToOpenJournal(#[source] anyhow::Error),
 
-    fn id(&self) -> JournalId;
-    fn range(&self) -> Option<LsnRange>;
+    #[error("io error: {0}")]
+    IoError(#[from] io::Error),
 
-    fn is_empty(&self) -> bool {
-        self.range().is_none()
-    }
+    #[error("failed to serialize object")]
+    SerializationError(#[source] io::Error),
 }
 
-pub trait Journal: Debug + Sized {
-    type Iter: JournalIterator;
+pub type JournalResult<T> = Result<T, JournalError>;
 
+pub trait Journal: Syncable + Scannable + Debug + Sized {
     fn open(id: JournalId) -> JournalResult<Self>;
 
     // TODO: eventually this needs to be a UUID of some kind
+    /// this journal's id
     fn id(&self) -> JournalId;
 
     /// append a new journal entry, and then write to it
     fn append(&mut self, obj: impl Serializable) -> JournalResult<()>;
-
-    /// iterate over journal entries
-    fn iter(&self) -> JournalResult<Self::Iter>;
-    fn iter_range(&self, range: LsnRange) -> JournalResult<Self::Iter>;
-
-    /// sync
-    fn sync_prepare(&self, req: RequestedLsnRange) -> JournalResult<Option<Self::Iter>>;
-
-    fn sync_receive(&mut self, partial: impl JournalIterator) -> JournalResult<LsnRange>;
 
     /// drop the journal's prefix
     fn drop_prefix(&mut self, up_to: Lsn) -> JournalResult<()>;

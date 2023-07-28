@@ -1,15 +1,20 @@
-use std::collections::HashMap;
+///! This example demonstrates setting up sqlsync in process between two clients
+///! and a server. There is no networking in this example so it's easy to follow
+///! the sync & rebase logic between the different nodes.
+///
+use std::{collections::HashMap, io};
 
 use anyhow::anyhow;
+use bincode::ErrorKind;
 use serde::{Deserialize, Serialize};
 use sqlsync::{
-    client::ClientDocument,
+    coordinator::CoordinatorDocument,
+    local::LocalDocument,
     mutate::Mutator,
     named_params,
     positioned_io::{PositionedCursor, PositionedReader},
-    server::ServerDocument,
-    Deserializable, Document, LsnRange, MemoryJournal, MutableDocument, OptionalExtension,
-    QueryableDocument, RequestedLsnRange, Serializable, SteppableDocument, Transaction,
+    Deserializable, Journal, LsnRange, MemoryJournal, OptionalExtension, RequestedLsnRange,
+    Serializable, Syncable, Transaction,
 };
 
 #[derive(Debug)]
@@ -115,14 +120,26 @@ enum Mutation {
 }
 
 impl Serializable for Mutation {
-    fn serialize_into<W: std::io::Write>(&self, writer: &mut W) -> anyhow::Result<()> {
-        Ok(bincode::serialize_into(writer, &self)?)
+    fn serialize_into<W: std::io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        match bincode::serialize_into(writer, &self) {
+            Ok(_) => Ok(()),
+            Err(err) => match err.as_ref() {
+                ErrorKind::Io(err) => Err(err.kind().into()),
+                _ => Err(io::Error::new(io::ErrorKind::Other, err)),
+            },
+        }
     }
 }
 
 impl Deserializable for Mutation {
-    fn deserialize_from<R: PositionedReader>(reader: R) -> anyhow::Result<Self> {
-        Ok(bincode::deserialize_from(PositionedCursor::new(reader))?)
+    fn deserialize_from<R: PositionedReader>(reader: R) -> io::Result<Self> {
+        match bincode::deserialize_from(PositionedCursor::new(reader)) {
+            Ok(mutation) => Ok(mutation),
+            Err(err) => match err.as_ref() {
+                ErrorKind::Io(err) => Err(err.kind().into()),
+                _ => Err(io::Error::new(io::ErrorKind::Other, err)),
+            },
+        }
     }
 }
 
@@ -205,9 +222,17 @@ fn main() -> anyhow::Result<()> {
     let doc_id = 1;
     let m = MutatorImpl {};
 
-    let mut local: ClientDocument<MemoryJournal, _> = ClientDocument::open(doc_id, m.clone())?;
-    let mut local2: ClientDocument<MemoryJournal, _> = ClientDocument::open(doc_id, m.clone())?;
-    let mut remote: ServerDocument<MemoryJournal, _> = ServerDocument::open(doc_id, m.clone())?;
+    let mut local = LocalDocument::open(
+        MemoryJournal::open(doc_id)?,
+        MemoryJournal::open(10)?,
+        m.clone(),
+    )?;
+    let mut local2 = LocalDocument::open(
+        MemoryJournal::open(doc_id)?,
+        MemoryJournal::open(11)?,
+        m.clone(),
+    )?;
+    let mut remote = CoordinatorDocument::open(MemoryJournal::open(doc_id)?, m.clone())?;
 
     // temp hack to track the lsn ranges we get back from sync_receive
     // key is a concatenation of the sync direction, like: `local->remote`
@@ -300,8 +325,10 @@ fn main() -> anyhow::Result<()> {
 
             debug_state!(start "syncing: {} -> {} ({:?})", stringify!($from), stringify!($to), req);
 
-            if let Some(partial) = $from.sync_prepare(req)? {
-                let range = $to.sync_receive(partial)?;
+            let partial = $from.sync_prepare(req)?;
+            if let Some(partial) = partial {
+                // let partial = partial.map(|e| Ok(PositionedCursor::new(e)));
+                let range = $to.sync_receive(partial.into_read_partial())?;
                 hack_lsn_range_cache.insert(key, range);
             } else {
                 log::info!("{}: nothing to sync", stringify!($from));

@@ -1,14 +1,16 @@
 mod utils;
 
+use std::io;
+
+use bincode::ErrorKind;
 use log::Level;
 use serde::{Deserialize, Serialize};
 use sqlsync::{
-    client::ClientDocument,
+    coordinator::CoordinatorDocument,
+    local::LocalDocument,
     mutate::Mutator,
     positioned_io::{PositionedCursor, PositionedReader},
-    server::ServerDocument,
-    Deserializable, Document, MemoryJournal, MutableDocument, QueryableDocument, RequestedLsnRange,
-    Serializable, SteppableDocument,
+    Deserializable, Journal, MemoryJournal, RequestedLsnRange, Serializable, Syncable,
 };
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
@@ -57,14 +59,26 @@ enum Mutation {
 }
 
 impl Serializable for Mutation {
-    fn serialize_into<W: std::io::Write>(&self, writer: &mut W) -> anyhow::Result<()> {
-        Ok(bincode::serialize_into(writer, &self)?)
+    fn serialize_into<W: std::io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        match bincode::serialize_into(writer, &self) {
+            Ok(_) => Ok(()),
+            Err(err) => match err.as_ref() {
+                ErrorKind::Io(err) => Err(err.kind().into()),
+                _ => Err(io::Error::new(io::ErrorKind::Other, err)),
+            },
+        }
     }
 }
 
 impl Deserializable for Mutation {
-    fn deserialize_from<R: PositionedReader>(reader: R) -> anyhow::Result<Self> {
-        Ok(bincode::deserialize_from(PositionedCursor::new(reader))?)
+    fn deserialize_from<R: PositionedReader>(reader: R) -> io::Result<Self> {
+        match bincode::deserialize_from(PositionedCursor::new(reader)) {
+            Ok(mutation) => Ok(mutation),
+            Err(err) => match err.as_ref() {
+                ErrorKind::Io(err) => Err(err.kind().into()),
+                _ => Err(io::Error::new(io::ErrorKind::Other, err)),
+            },
+        }
     }
 }
 
@@ -107,7 +121,10 @@ pub fn run_inner() -> anyhow::Result<()> {
     let doc_id = 1;
     let m = MutatorImpl {};
 
-    let mut local: ClientDocument<MemoryJournal, _> = ClientDocument::open(doc_id, m.clone())?;
+    let client_id = 10;
+    let storage = MemoryJournal::open(doc_id)?;
+    let timeline = MemoryJournal::open(client_id)?;
+    let mut local = LocalDocument::open(storage, timeline, m.clone())?;
 
     local.mutate(Mutation::InitSchema)?;
     local.mutate(Mutation::Increment)?;
@@ -125,12 +142,13 @@ pub fn run_inner() -> anyhow::Result<()> {
     })?;
 
     // try syncing to server, running a step, and then syncing back
-    let mut remote: ServerDocument<MemoryJournal, _> = ServerDocument::open(doc_id, m.clone())?;
+    let storage_journal = MemoryJournal::open(doc_id)?;
+    let mut remote = CoordinatorDocument::open(storage_journal, m.clone())?;
 
     // sync client -> server
     let req = RequestedLsnRange::new(0, 10);
     if let Some(partial) = local.sync_prepare(req)? {
-        remote.sync_receive(partial)?;
+        remote.sync_receive(partial.into_read_partial())?;
     }
 
     // step remote (apply changes)
@@ -139,7 +157,7 @@ pub fn run_inner() -> anyhow::Result<()> {
     // sync server -> client
     let req = RequestedLsnRange::new(0, 10);
     if let Some(partial) = remote.sync_prepare(req)? {
-        local.sync_receive(partial)?;
+        local.sync_receive(partial.into_read_partial())?;
     }
 
     // run another local increment

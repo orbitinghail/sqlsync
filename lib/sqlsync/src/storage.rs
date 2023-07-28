@@ -1,8 +1,10 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, io};
+
+use sqlite_vfs::SQLITE_IOERR;
 
 use super::page::{SerializedPagesReader, SparsePages, PAGESIZE};
 use crate::{
-    journal::{Journal, JournalIterator},
+    journal::{Cursor, Journal, JournalPartial, SyncResult, Syncable},
     lsn::{LsnRange, RequestedLsnRange},
     page::Page,
 };
@@ -47,25 +49,44 @@ impl<J: Journal> Storage<J> {
     pub fn revert(&mut self) {
         self.pending.clear()
     }
+}
 
-    pub fn sync_prepare(&self, req: RequestedLsnRange) -> anyhow::Result<Option<J::Iter>> {
-        Ok(self.journal.sync_prepare(req)?)
+impl<J: Journal> Syncable for Storage<J> {
+    type Cursor<'a> = <J as Syncable>::Cursor<'a> where Self: 'a;
+
+    fn source_id(&self) -> crate::JournalId {
+        self.journal.id()
     }
 
-    pub fn sync_receive(&mut self, partial: impl JournalIterator) -> anyhow::Result<LsnRange> {
-        Ok(self.journal.sync_receive(partial)?)
+    fn sync_prepare<'a>(
+        &'a mut self,
+        req: RequestedLsnRange,
+    ) -> SyncResult<Option<JournalPartial<Self::Cursor<'a>>>> {
+        self.journal.sync_prepare(req)
+    }
+
+    fn sync_request(&mut self, id: crate::JournalId) -> SyncResult<RequestedLsnRange> {
+        self.journal.sync_request(id)
+    }
+
+    fn sync_receive<C>(&mut self, partial: JournalPartial<C>) -> SyncResult<LsnRange>
+    where
+        C: Cursor + io::Read,
+    {
+        self.journal.sync_receive(partial)
     }
 }
 
 impl<J: Journal> sqlite_vfs::File for Storage<J> {
     fn file_size(&self) -> sqlite_vfs::VfsResult<u64> {
-        Ok(self
-            .journal
-            .iter()
-            .map_err(|_err| sqlite_vfs::SQLITE_IOERR)?
-            .flat_map(|pages| SerializedPagesReader(pages).max_page_idx())
-            .chain(self.pending.max_page_idx())
-            .max()
+        let mut max_page_idx = self.pending.max_page_idx();
+        let mut cursor = self.journal.scan();
+        while cursor.advance().map_err(|_| SQLITE_IOERR)? {
+            let pages = SerializedPagesReader(&cursor);
+            max_page_idx = max_page_idx.max(Some(pages.max_page_idx().map_err(|_| SQLITE_IOERR)?));
+        }
+
+        Ok(max_page_idx
             .map(|n| (n + 1) * (PAGESIZE as u64))
             .unwrap_or(0))
     }
@@ -92,18 +113,13 @@ impl<J: Journal> sqlite_vfs::File for Storage<J> {
         let page_offset = (pos as usize) % PAGESIZE;
 
         // find the page by searching down through pending and then the journal
-        // TODO: profile this - especially considering the extra clone for pending pages
-        let page = match self.pending.read(page_idx) {
-            Some(page) => Some(page.clone()),
-            None => self
-                .journal
-                .iter()
-                .map_err(|_| sqlite_vfs::SQLITE_IOERR)?
-                .rev()
-                .find_map(|pages| SerializedPagesReader(pages).read(page_idx).transpose())
-                .transpose()
-                .map_err(|_| sqlite_vfs::SQLITE_IOERR)?,
-        };
+        // TODO: figure out how to eliminate this needless clone
+        let mut page = self.pending.read(page_idx).cloned();
+        let mut cursor = self.journal.scan_rev();
+        while page.is_none() && cursor.advance().map_err(|_| SQLITE_IOERR)? {
+            let pages = SerializedPagesReader(&cursor);
+            page = pages.read(page_idx).map_err(|_| SQLITE_IOERR)?;
+        }
 
         if let Some(page) = page {
             // copy the page into the buffer at the offset

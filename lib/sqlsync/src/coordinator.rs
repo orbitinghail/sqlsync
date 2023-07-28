@@ -2,11 +2,12 @@ use anyhow::Result;
 use std::collections::hash_map::Entry;
 use std::collections::{BinaryHeap, HashMap};
 use std::fmt::Debug;
+use std::io;
 
 use rusqlite::Connection;
 
 use crate::db::open_with_vfs;
-use crate::journal::JournalIterator;
+use crate::journal::{Cursor, JournalPartial, SyncResult, Syncable};
 use crate::timeline::{apply_timeline_range, run_timeline_migration};
 use crate::unixtime::unix_timestamp_milliseconds;
 use crate::RequestedLsnRange;
@@ -16,8 +17,6 @@ use crate::{
     mutate::Mutator,
     storage::Storage,
 };
-
-use super::{Document, DocumentId, SteppableDocument};
 
 #[derive(Debug, PartialEq, Eq)]
 struct ReceiveQueueEntry {
@@ -43,7 +42,7 @@ impl Ord for ReceiveQueueEntry {
     }
 }
 
-pub struct ServerDocument<J: Journal, M: Mutator> {
+pub struct CoordinatorDocument<J: Journal, M: Mutator> {
     mutator: M,
     storage: Box<Storage<J>>,
     sqlite: Connection,
@@ -51,31 +50,18 @@ pub struct ServerDocument<J: Journal, M: Mutator> {
     timeline_receive_queue: BinaryHeap<ReceiveQueueEntry>,
 }
 
-impl<J: Journal, M: Mutator> ServerDocument<J, M> {
-    fn get_or_create_timeline_mut(&mut self, id: JournalId) -> Result<&mut J> {
-        match self.timelines.entry(id) {
-            Entry::Occupied(entry) => Ok(entry.into_mut()),
-            Entry::Vacant(entry) => Ok(entry.insert(J::open(id)?)),
-        }
-    }
-}
-
-impl<J: Journal, M: Mutator> Debug for ServerDocument<J, M> {
+impl<J: Journal, M: Mutator> Debug for CoordinatorDocument<J, M> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("ServerDocument")
+        f.debug_tuple("CoordinatorDocument")
             .field(&self.storage)
             .field(&("timelines", &self.timelines.values()))
             .finish()
     }
 }
 
-impl<J: Journal, M: Mutator> Document for ServerDocument<J, M> {
-    type J = J;
-    type M = M;
-
-    fn open(id: DocumentId, mutator: M) -> Result<Self> {
-        let storage_journal = J::open(id)?;
-        let (mut sqlite, storage) = open_with_vfs(storage_journal)?;
+impl<J: Journal, M: Mutator> CoordinatorDocument<J, M> {
+    pub fn open(storage: J, mutator: M) -> Result<Self> {
+        let (mut sqlite, storage) = open_with_vfs(storage)?;
 
         // TODO: this feels awkward here
         run_timeline_migration(&mut sqlite)?;
@@ -89,35 +75,18 @@ impl<J: Journal, M: Mutator> Document for ServerDocument<J, M> {
         })
     }
 
-    fn sync_prepare(&self, req: RequestedLsnRange) -> Result<Option<J::Iter>> {
-        Ok(self.storage.sync_prepare(req)?)
+    fn get_or_create_timeline_mut(&mut self, id: JournalId) -> Result<&mut J> {
+        match self.timelines.entry(id) {
+            Entry::Occupied(entry) => Ok(entry.into_mut()),
+            Entry::Vacant(entry) => Ok(entry.insert(J::open(id)?)),
+        }
     }
 
-    fn sync_receive(&mut self, partial: impl JournalIterator) -> Result<LsnRange> {
-        let id = partial.id();
-        let timeline = self.get_or_create_timeline_mut(id)?;
-        let range = timeline.sync_receive(partial)?;
-
-        // TODO: this can sometimes queue more work than needed - specifically
-        // if we have already received the partial, the associated range will
-        // have also already been applied. This is fine since applying the same
-        // range multiple times is idempotent, but may be worth fixing at some
-        // point
-        self.timeline_receive_queue.push(ReceiveQueueEntry {
-            id,
-            range,
-            timestamp: unix_timestamp_milliseconds(),
-        });
-        Ok(range)
-    }
-}
-
-impl<J: Journal, M: Mutator> SteppableDocument for ServerDocument<J, M> {
-    fn has_pending_work(&self) -> bool {
+    pub fn has_pending_work(&self) -> bool {
         !self.timeline_receive_queue.is_empty()
     }
 
-    fn step(&mut self) -> anyhow::Result<()> {
+    pub fn step(&mut self) -> anyhow::Result<()> {
         // check to see if we have anything in the receive queue
         let entry = self.timeline_receive_queue.pop();
 
@@ -139,5 +108,46 @@ impl<J: Journal, M: Mutator> SteppableDocument for ServerDocument<J, M> {
         }
 
         Ok(())
+    }
+}
+
+impl<J: Journal, M: Mutator> Syncable for CoordinatorDocument<J, M> {
+    type Cursor<'a> = <J as Syncable>::Cursor<'a> where Self: 'a;
+
+    fn source_id(&self) -> JournalId {
+        self.storage.source_id()
+    }
+
+    fn sync_prepare<'a>(
+        &'a mut self,
+        req: RequestedLsnRange,
+    ) -> SyncResult<Option<JournalPartial<Self::Cursor<'a>>>> {
+        self.storage.sync_prepare(req)
+    }
+
+    fn sync_request(&mut self, id: JournalId) -> SyncResult<RequestedLsnRange> {
+        let timeline = self.get_or_create_timeline_mut(id)?;
+        timeline.sync_request(id)
+    }
+
+    fn sync_receive<C>(&mut self, partial: JournalPartial<C>) -> SyncResult<LsnRange>
+    where
+        C: Cursor + io::Read,
+    {
+        let id = partial.id();
+        let timeline = self.get_or_create_timeline_mut(id)?;
+        let range = timeline.sync_receive(partial)?;
+
+        // TODO: this can sometimes queue more work than needed - specifically
+        // if we have already received the partial, the associated range will
+        // have also already been applied. This is fine since applying the same
+        // range multiple times is idempotent, but may be worth fixing at some
+        // point
+        self.timeline_receive_queue.push(ReceiveQueueEntry {
+            id,
+            range,
+            timestamp: unix_timestamp_milliseconds(),
+        });
+        Ok(range)
     }
 }

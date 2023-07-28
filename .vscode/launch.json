@@ -1,0 +1,36 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug end-to-end-local",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+        "args": ["build", "--example=end-to-end-local"],
+        "filter": {
+          "name": "end-to-end-local",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug end-to-end-local-net",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+        "args": ["build", "--example=end-to-end-local-net"],
+        "filter": {
+          "name": "end-to-end-local-net",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

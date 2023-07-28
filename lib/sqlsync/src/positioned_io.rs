@@ -1,5 +1,7 @@
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
+use crate::Cursor;
+
 /**
  * The traits in this file copy certain methods and docstrings from the position-io module
  * https://crates.io/crates/positioned-io
@@ -143,6 +145,29 @@ pub struct PositionedCursor<I> {
 impl<I> PositionedCursor<I> {
     pub fn new(inner: I) -> Self {
         Self { inner, pos: 0 }
+    }
+}
+
+impl<I: PositionedReader> PositionedReader for PositionedCursor<I> {
+    fn read_at(&self, pos: usize, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read_at(self.pos + pos, buf)
+    }
+
+    fn size(&self) -> io::Result<usize> {
+        self.inner.size()
+    }
+}
+
+// useful for wrapping a Cursor + PositionedRead into a Cursor + Read
+// used in JournalPartial.into_read_partial()
+impl<C: Cursor> Cursor for PositionedCursor<C> {
+    fn advance(&mut self) -> io::Result<bool> {
+        self.pos = 0;
+        self.inner.advance()
+    }
+
+    fn remaining(&self) -> usize {
+        self.inner.remaining()
     }
 }
 

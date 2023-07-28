@@ -2,7 +2,7 @@ use rusqlite::{named_params, Connection};
 
 use crate::{
     db::run_in_tx,
-    journal::Journal,
+    journal::{Cursor, Journal},
     lsn::{Lsn, LsnRange},
     mutate::Mutator,
     Deserializable,
@@ -57,13 +57,12 @@ pub fn rebase_timeline<J: Journal, M: Mutator>(
 
     // reapply remaining mutations in the journal
     run_in_tx(sqlite, |tx| {
-        timeline
-            .iter()?
-            .map(|entry| {
-                let mutation = M::Mutation::deserialize_from(entry)?;
-                mutator.apply(tx, &mutation)
-            })
-            .collect::<anyhow::Result<_>>()
+        let mut cursor = timeline.scan();
+        while cursor.advance()? {
+            let mutation = M::Mutation::deserialize_from(&cursor)?;
+            mutator.apply(tx, &mutation)?;
+        }
+        Ok(())
     })?;
 
     Ok(())
@@ -94,16 +93,11 @@ pub fn apply_timeline_range<J: Journal, M: Mutator>(
 
         if let Some(range) = range {
             // ok, some or all of the provided range needs to be applied so let's do that
-
-            // Collecting into a Result<Vec> from from a Vec<Result> will stop
-            // iterating at the first error
-            timeline
-                .iter_range(range)?
-                .map(|entry| {
-                    let mutation = M::Mutation::deserialize_from(entry)?;
-                    mutator.apply(tx, &mutation)
-                })
-                .collect::<anyhow::Result<_>>()?;
+            let mut cursor = timeline.scan_range(range);
+            while cursor.advance()? {
+                let mutation = M::Mutation::deserialize_from(&cursor)?;
+                mutator.apply(tx, &mutation)?;
+            }
 
             log::debug!(
                 "updating timeline {} to lsn {:?}",

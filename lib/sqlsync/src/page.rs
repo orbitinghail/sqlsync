@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, io::Write, mem::size_of};
+use std::{
+    collections::BTreeMap,
+    io::{self, Write},
+    mem::size_of,
+};
 
 use crate::{positioned_io::PositionedReader, Serializable};
 
@@ -45,7 +49,7 @@ impl SparsePages {
 
 /// The serialized form of SparsePages can be read using the SerializedPagesReader object below
 impl Serializable for SparsePages {
-    fn serialize_into<W: Write>(&self, writer: &mut W) -> anyhow::Result<()> {
+    fn serialize_into<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         assert!(
             self.pages.len() > 0,
             "cannot serialize empty sparse pages obj"
@@ -54,7 +58,7 @@ impl Serializable for SparsePages {
         // serialize the max page idx
         let max_page_idx = self
             .max_page_idx()
-            .ok_or_else(|| anyhow::anyhow!("no pages"))?;
+            .expect("cannot serialize empty sparse pages obj");
         writer.write_all(&max_page_idx.to_be_bytes())?;
 
         // serialize the pages, sorted by page_idx
@@ -76,19 +80,19 @@ impl Serializable for SparsePages {
 pub struct SerializedPagesReader<R: PositionedReader>(pub R);
 
 impl<R: PositionedReader> SerializedPagesReader<R> {
-    pub fn num_pages(&self) -> anyhow::Result<usize> {
+    pub fn num_pages(&self) -> io::Result<usize> {
         let file_size = self.0.size()?;
         let num_pages = (file_size - PAGE_IDX_SIZE) / (PAGE_IDX_SIZE + PAGESIZE);
         Ok(num_pages)
     }
 
-    pub fn max_page_idx(&self) -> anyhow::Result<PageIdx> {
+    pub fn max_page_idx(&self) -> io::Result<PageIdx> {
         let mut buf = [0; PAGE_IDX_SIZE];
         self.0.read_exact_at(0, &mut buf)?;
         Ok(PageIdx::from_be_bytes(buf))
     }
 
-    pub fn read(&self, page_idx: PageIdx) -> anyhow::Result<Option<Page>> {
+    pub fn read(&self, page_idx: PageIdx) -> io::Result<Option<Page>> {
         let num_pages = self.num_pages()?;
 
         let mut left: usize = 0;

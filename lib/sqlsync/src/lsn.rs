@@ -1,5 +1,6 @@
 use std::{fmt::Debug, ops::Range};
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub type Lsn = u64;
@@ -16,7 +17,7 @@ pub enum SatisfyError {
     Pending,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LsnRange {
     /// first marks the beginning of the range, inclusive.
     first: Lsn,
@@ -24,7 +25,7 @@ pub struct LsnRange {
     last: Lsn,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestedLsnRange {
     /// first marks the beginning of the range, inclusive.
     first: Lsn,
@@ -145,6 +146,10 @@ impl LsnRange {
             std::cmp::max(self.last, other.last),
         )
     }
+
+    pub fn request_next(&self, max_length: usize) -> RequestedLsnRange {
+        RequestedLsnRange::new(self.last + 1, max_length)
+    }
 }
 
 impl Debug for LsnRange {
@@ -160,6 +165,11 @@ impl RequestedLsnRange {
     pub fn new(first: Lsn, max_length: usize) -> Self {
         assert!(max_length > 0, "max_length must be > 0");
         RequestedLsnRange { first, max_length }
+    }
+
+    pub fn next(range: Option<LsnRange>, max_length: usize) -> Self {
+        let first = range.map(|r| r.last + 1).unwrap_or(0);
+        RequestedLsnRange::new(first, max_length)
     }
 }
 
