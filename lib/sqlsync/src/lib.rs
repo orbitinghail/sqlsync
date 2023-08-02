@@ -17,6 +17,6 @@ pub mod unixtime;
 pub use journal::*;
 pub use serialization::{Deserializable, Serializable};
 
-pub use lsn::{LsnRange, RequestedLsnRange};
+pub use lsn::{LsnRange, RequestedLsnRange, Lsn};
 
 pub use rusqlite::{named_params, OptionalExtension, Transaction};

@@ -480,6 +480,7 @@ dependencies = [
  "serde",
  "sqlsync",
  "testutil",
+ "thiserror",
  "wasm-bindgen",
  "wasm-bindgen-test",
  "web-sys",

@@ -9,7 +9,7 @@ use crate::Serializable;
 
 use super::{Scannable, Syncable};
 
-pub type JournalId = i64;
+pub type JournalId = i32;
 
 #[derive(Error, Debug)]
 pub enum JournalError {

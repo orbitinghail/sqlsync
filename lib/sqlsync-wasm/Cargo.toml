@@ -13,6 +13,7 @@ js-sys = "0.3.64"
 log = { version="0.4.19", features=["std"] }
 anyhow = "1.0.71"
 bincode = "1.3.3"
+thiserror = "1.0.43"
 serde = { version = "1.0.171", features = ["derive"] }
 
 sqlsync = { path = "../sqlsync" }
