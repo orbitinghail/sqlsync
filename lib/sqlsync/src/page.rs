@@ -42,8 +42,16 @@ impl SparsePages {
         self.pages.keys().max().copied()
     }
 
-    pub fn read(&self, page_idx: PageIdx) -> Option<&Page> {
-        self.pages.get(&page_idx)
+    pub fn read(&self, page_idx: PageIdx, page_offset: usize, buf: &mut [u8]) -> usize {
+        self.pages
+            .get(&page_idx)
+            .map(|page| {
+                let end = page_offset + buf.len();
+                assert!(end <= PAGESIZE, "page offset out of bounds");
+                buf.copy_from_slice(&page[page_offset..end]);
+                buf.len()
+            })
+            .unwrap_or(0)
     }
 }
 
@@ -92,7 +100,13 @@ impl<R: PositionedReader> SerializedPagesReader<R> {
         Ok(PageIdx::from_be_bytes(buf))
     }
 
-    pub fn read(&self, page_idx: PageIdx) -> io::Result<Option<Page>> {
+    pub fn read(&self, page_idx: PageIdx, page_offset: usize, buf: &mut [u8]) -> io::Result<usize> {
+        assert!(page_offset < PAGESIZE, "page_offset must be < PAGESIZE");
+        assert!(
+            page_offset + buf.len() <= PAGESIZE,
+            "refusing to read more than one page"
+        );
+
         let num_pages = self.num_pages()?;
 
         let mut left: usize = 0;
@@ -107,10 +121,9 @@ impl<R: PositionedReader> SerializedPagesReader<R> {
             let mid_idx = PageIdx::from_be_bytes(page_idx_buf);
 
             if mid_idx == page_idx {
-                let mut page = [0; PAGESIZE];
-                self.0
-                    .read_exact_at(mid_offset + PAGE_IDX_SIZE, &mut page)?;
-                return Ok(Some(page));
+                let read_start = mid_offset + PAGE_IDX_SIZE + page_offset;
+                self.0.read_exact_at(read_start, buf)?;
+                return Ok(buf.len());
             } else if mid_idx < page_idx {
                 left = mid + 1;
             } else {
@@ -118,6 +131,6 @@ impl<R: PositionedReader> SerializedPagesReader<R> {
             }
         }
 
-        Ok(None)
+        Ok(0)
     }
 }

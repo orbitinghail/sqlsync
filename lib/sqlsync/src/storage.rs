@@ -113,28 +113,25 @@ impl<J: Journal> sqlite_vfs::File for Storage<J> {
         let page_offset = (pos as usize) % PAGESIZE;
 
         // find the page by searching down through pending and then the journal
-        // TODO: figure out how to eliminate this needless clone
-        let mut page = self.pending.read(page_idx).cloned();
+        let mut n = self.pending.read(page_idx, page_offset, buf);
         let mut cursor = self.journal.scan_rev();
-        while page.is_none() && cursor.advance().map_err(|_| SQLITE_IOERR)? {
+        while n == 0 && cursor.advance().map_err(|_| SQLITE_IOERR)? {
             let pages = SerializedPagesReader(&cursor);
-            page = pages.read(page_idx).map_err(|_| SQLITE_IOERR)?;
+            n = pages
+                .read(page_idx, page_offset, buf)
+                .map_err(|_| SQLITE_IOERR)?;
         }
 
-        if let Some(page) = page {
-            // copy the page into the buffer at the offset
-            let start = page_offset;
-            let end = start + buf.len();
-            assert!(end <= PAGESIZE);
-            buf.copy_from_slice(&page[start..end]);
+        if n != 0 {
+            assert!(n == buf.len(), "read should always fill the buffer");
 
             // disable any sqlite caching by forcing the file change
             // counter to be different every time sqlite reads the file header
             // TODO: optimize the file change counter by monitoring when sqlite
             // writes a new counter and whenever we sync from the server
             if page_idx == 0
-                && start <= FILE_CHANGE_COUNTER_OFFSET
-                && end >= FILE_CHANGE_COUNTER_OFFSET + 4
+                && page_offset <= FILE_CHANGE_COUNTER_OFFSET
+                && page_offset + buf.len() >= FILE_CHANGE_COUNTER_OFFSET + 4
             {
                 // if pos = 0, then this should be FILE_CHANGE_COUNTER_OFFSET
                 // if pos = FILE_CHANGE_COUNTER_OFFSET, this this should be 0
