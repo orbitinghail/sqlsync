@@ -1,20 +1,39 @@
 # TASKS (start here)
+- libwasm
 - id
   - figure out which id abstraction to use, use it
 - opfs journal
 - file journal (perhaps s3 journal?)
-- libwasm
-- e2e demo
+- log compaction
 
-# Observations
-- when syncing client -> server, if we don't have the server cursor we should request it (or the server should initialize us with it)
-- my solution still feels a bit fragile - it's starting to look like libsql's virtual wal might be a more robust solution as it gives me a very clean way to handle page lookups
-- better id gen for layers and timelines
-- should each entry in a journal track a potential range of LSNs rather than a single LSN? this may make sync after compact easier to reason about? otherwise LSNs are effectively mutable
-  - or perhaps compact should always result in a new journal (easier with COW)
-- determine how many journal entries to sync based on the size of each entry rather than a fixed amount
+# Log compaction
+With the rebase sync architecture, compacting the storage log is very easy and safe. At any point the coordinator can snapshot and start a new log from the snapshot.
 
-## JS API + SharedWorker
+The snapshot algorithm can work like this to improve efficiency on the clients:
+- coordinator snapshots the log at a particular LSN
+- appends a "end log" message to the previous log which contains the new log id and a hash of the snapshot
+- upon receiving this marker, a client can run the snapshot process locally and check that it gets the same snapshot
+- if it does, the client knows it can create a new local storage log from that snapshot and continue delta replicating from the server
+- if anything goes wrong, the client can drop their storage log and download the full snapshot from the server
+
+This algorithm depends on the server continuing to serve the old log for some
+period of time - this time window determines how many clients will be able to
+efficiently switch over.
+
+Since the coordinator also wants to be durable in a serverless setting, it's
+likely that the old logs will already be backed up to storage. Thus the
+coordinator can always serve from the last log lazily without keeping it in
+memory. (at least until GC runs and kills old logs, but that should never hit
+the immediately previous log)
+
+# Storage Replication Frames
+
+Currently we send a fixed number of journal entries during each sync. This is
+probably fine for timelines, but not great for storage.
+
+It would be better to dynamically calculate the number of entries to sync based on some "weight" measurement. For example, the weight of storage entires could be the number of associated pages.
+
+# JS API + SharedWorker
 - sqlite + sqlsync + mutations should all run within a single (shared) web worker
 - one worker for all tabs/etc associated with the same origin
 - Document oriented model, create if not exists semantics
@@ -22,34 +41,4 @@
 - does document init require net connection?
     - document id can be client generated (dups rejected on eventual sync)
     - timeline id can be client generated
-    - storage id needs to be deferred (or potentially derived from doc id)
-    - storage id could == document id
-
-## Persistence (Storage)
-- plumb down a persistence layer
-- goal is to back it with the OPFS API (potentially falling back to IndexedDB)
-- can we leverage the sqlite page cache again?
-  - it appears that it works fine, the only remaining work is to optimize the file change counter logic
-- can use fileHandle.createSyncAccessHandle() + minimal overhead
-
-# Network
-- abstracts protocol + encoding
-- socket based abstraction designed for websockets
-- shared worker can use websocket, so can own the entire sqlsync lifecycle
-
-Networking has the following flow:
-
-## sync timeline
-triggers:
-  - connect to server
-  - timeline changed (client mutates journal)
-
-sync_timeline_prepare (journal.sync_prepare)
-handle_client_sync_timeline (lookup timeline, journal.sync_receive)
-sync_timeline_response (caches server lsn range)
-
-## sync storage
-triggers:
-  - connect to server
-  - client poll interval (optional)
-  - server storage changed (server mutates journal)
+    - storage id == document id (although this breaks once we do compaction)
