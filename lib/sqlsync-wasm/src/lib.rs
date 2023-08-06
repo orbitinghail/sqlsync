@@ -1,13 +1,14 @@
 mod utils;
 
-use std::io;
+use std::{io, any::Any};
 
+use anyhow::anyhow;
 use sqlsync::{
     local::LocalDocument, mutate::Mutator, positioned_io::PositionedReader, Cursor, Deserializable,
-    Journal, JournalId, Lsn, MemoryJournal, Scannable, Serializable, Syncable,
+    Journal, JournalId, Lsn, MemoryJournal, Scannable, Serializable, Syncable, Transaction, ToSql,
 };
 use utils::{ConsoleLogger, WasmResult};
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{convert::IntoWasmAbi, prelude::*};
 
 static LOGGER: ConsoleLogger = ConsoleLogger;
 
@@ -38,6 +39,59 @@ impl SqlSyncDocument {
     pub fn hello_world(&mut self) -> WasmResult<()> {
         log::info!("HELLO WORLD FROM WASM");
         Ok(self.doc.mutate(Mutation::Foo)?)
+    }
+}
+
+#[wasm_bindgen]
+extern "C" {
+    type Mutation;
+
+    fn mutation_from_bytes(data: Vec<u8>) -> Mutation;
+
+    #[wasm_bindgen(method)]
+    fn serialize(this: &Mutation) -> Vec<u8>;
+
+    #[derive(Clone)]
+    type MutatorHandle;
+
+    #[wasm_bindgen(method, catch)]
+    fn apply(
+        this: &MutatorHandle,
+        mutation: &Mutation,
+        execute: &mut dyn FnMut(String, Vec<JsValue>) -> WasmResult<()>,
+        // query: &mut dyn FnMut(String, Vec<JsValue>) -> WasmResult<()>,
+    ) -> WasmResult<()>;
+}
+
+impl Mutator for MutatorHandle {
+    type Mutation = Mutation;
+
+    fn apply(&self, tx: &mut Transaction, mutation: &Self::Mutation) -> anyhow::Result<()> {
+        self.apply(mutation, &mut |sql, params| {
+            let params: Result<Vec<String>, _> = params.iter().map(|v| {
+                if v.is_string() {
+                    Ok(v.as_string().unwrap())
+                } else {
+                    Err(anyhow!("expected string"))
+                }
+            }).collect();
+            Ok(tx.execute(&sql, params?)?)
+            Ok(())
+        });
+        Ok(())
+    }
+}
+
+impl Serializable for Mutation {
+    fn serialize_into<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        writer.write_all(&self.serialize())
+    }
+}
+
+impl Deserializable for Mutation {
+    fn deserialize_from<R: PositionedReader>(reader: R) -> io::Result<Self> {
+        let data = reader.read_all()?;
+        Ok(mutation_from_bytes(data))
     }
 }
 
@@ -135,35 +189,5 @@ impl Syncable for OPFSJournal {
         C: Cursor + io::Read,
     {
         todo!()
-    }
-}
-
-#[derive(Debug, Clone)]
-struct MutatorImpl {}
-
-enum Mutation {
-    Foo,
-}
-
-impl Serializable for Mutation {
-    fn serialize_into<W: io::Write>(&self, _: &mut W) -> io::Result<()> {
-        Ok(())
-    }
-}
-impl Deserializable for Mutation {
-    fn deserialize_from<R: PositionedReader>(_: R) -> io::Result<Self> {
-        Ok(Mutation::Foo)
-    }
-}
-
-impl Mutator for MutatorImpl {
-    type Mutation = Mutation;
-
-    fn apply(
-        &self,
-        tx: &mut sqlsync::Transaction,
-        mutation: &Self::Mutation,
-    ) -> anyhow::Result<()> {
-        Ok(())
     }
 }
