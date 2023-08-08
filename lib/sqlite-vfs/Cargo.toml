@@ -10,8 +10,12 @@ documentation = "https://docs.rs/sqlite-vfs"
 keywords = ["sqlite", "vfs"]
 
 [dependencies]
-getrandom = { version="0.2.4", features = ["js"] }
-libsqlite3-sys = { git = "https://github.com/trevyn/rusqlite", branch = "wasm32-unknown-unknown", features = ["bundled"] }
+getrandom = { version = "0.2.4", features = ["js"] }
 log = "0.4"
 rand = "0.8"
 time = "0.3"
+
+[dependencies.libsqlite3-sys]
+git = "https://github.com/trevyn/rusqlite"
+branch = "wasm32-unknown-unknown"
+features = ["bundled"]

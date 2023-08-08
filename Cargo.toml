@@ -1,10 +1,3 @@
 [workspace]
 
-members = [
-    "lib/sqlsync",
-    "lib/sqlsync-wasm",
-
-    "lib/sqlite-vfs",
-
-    "lib/testutil",
-]
+members = ["lib/sqlsync", "lib/sqlsync-wasm", "lib/sqlite-vfs", "lib/testutil"]
