@@ -21,7 +21,8 @@ use sqlsync::{
     coordinator::CoordinatorDocument,
     mutate::Mutator,
     positioned_io::{PositionedCursor, PositionedReader},
-    Deserializable, MemoryJournal, Serializable, Transaction,
+    sqlite::Transaction,
+    MemoryJournal, Serializable,
 };
 
 const DOC_ID: JournalId = 1;
@@ -70,12 +71,6 @@ impl Serializable for Mutation {
     }
 }
 
-impl Deserializable for Mutation {
-    fn deserialize_from<R: PositionedReader>(reader: R) -> io::Result<Self> {
-        deserialize_from(PositionedCursor::new(reader))
-    }
-}
-
 #[derive(Clone)]
 struct MutatorImpl {}
 
@@ -108,6 +103,13 @@ impl Mutator for MutatorImpl {
         }
 
         Ok(())
+    }
+
+    fn deserialize_mutation_from<R: PositionedReader>(
+        &self,
+        reader: R,
+    ) -> anyhow::Result<Self::Mutation> {
+        Ok(deserialize_from(PositionedCursor::new(reader))?)
     }
 }
 

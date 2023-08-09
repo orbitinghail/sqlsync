@@ -11,10 +11,9 @@ use sqlsync::{
     coordinator::CoordinatorDocument,
     local::LocalDocument,
     mutate::Mutator,
-    named_params,
     positioned_io::{PositionedCursor, PositionedReader},
-    Deserializable, Journal, LsnRange, MemoryJournal, OptionalExtension, RequestedLsnRange,
-    Serializable, Syncable, Transaction,
+    sqlite::{named_params, OptionalExtension, Transaction},
+    Journal, LsnRange, MemoryJournal, RequestedLsnRange, Serializable, Syncable,
 };
 
 #[derive(Debug)]
@@ -131,18 +130,6 @@ impl Serializable for Mutation {
     }
 }
 
-impl Deserializable for Mutation {
-    fn deserialize_from<R: PositionedReader>(reader: R) -> io::Result<Self> {
-        match bincode::deserialize_from(PositionedCursor::new(reader)) {
-            Ok(mutation) => Ok(mutation),
-            Err(err) => match err.as_ref() {
-                ErrorKind::Io(err) => Err(err.kind().into()),
-                _ => Err(io::Error::new(io::ErrorKind::Other, err)),
-            },
-        }
-    }
-}
-
 #[derive(Clone)]
 struct MutatorImpl {}
 
@@ -210,6 +197,13 @@ impl Mutator for MutatorImpl {
             }
         }
         Ok(())
+    }
+
+    fn deserialize_mutation_from<R: PositionedReader>(
+        &self,
+        reader: R,
+    ) -> anyhow::Result<Self::Mutation> {
+        Ok(bincode::deserialize_from(PositionedCursor::new(reader))?)
     }
 }
 
