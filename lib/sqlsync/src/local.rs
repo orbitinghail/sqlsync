@@ -49,9 +49,9 @@ impl<J: Journal, M: Mutator> LocalDocument<J, M> {
         Ok(())
     }
 
-    pub fn query<F>(&mut self, f: F) -> Result<()>
+    pub fn query<F, O>(&mut self, f: F) -> Result<O>
     where
-        F: FnOnce(Transaction) -> Result<()>,
+        F: FnOnce(Transaction) -> Result<O>,
     {
         readonly_query(&mut self.sqlite, f)
     }

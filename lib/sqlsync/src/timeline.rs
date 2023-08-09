@@ -5,7 +5,6 @@ use crate::{
     journal::{Cursor, Journal},
     lsn::{Lsn, LsnRange},
     mutate::Mutator,
-    Deserializable,
 };
 
 const TIMELINES_TABLE_SQL: &str = "
@@ -59,7 +58,7 @@ pub fn rebase_timeline<J: Journal, M: Mutator>(
     run_in_tx(sqlite, |tx| {
         let mut cursor = timeline.scan();
         while cursor.advance()? {
-            let mutation = M::Mutation::deserialize_from(&cursor)?;
+            let mutation = mutator.deserialize_mutation_from(&cursor)?;
             mutator.apply(tx, &mutation)?;
         }
         Ok(())
@@ -95,7 +94,7 @@ pub fn apply_timeline_range<J: Journal, M: Mutator>(
             // ok, some or all of the provided range needs to be applied so let's do that
             let mut cursor = timeline.scan_range(range);
             while cursor.advance()? {
-                let mutation = M::Mutation::deserialize_from(&cursor)?;
+                let mutation = mutator.deserialize_mutation_from(&cursor)?;
                 mutator.apply(tx, &mutation)?;
             }
 

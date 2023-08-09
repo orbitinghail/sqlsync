@@ -46,9 +46,9 @@ where
 }
 
 // run a closure on db in a txn, rolling back any changes
-pub fn readonly_query<F>(sqlite: &mut Connection, f: F) -> Result<()>
+pub fn readonly_query<F, O>(sqlite: &mut Connection, f: F) -> Result<O>
 where
-    F: FnOnce(Transaction) -> Result<()>,
+    F: FnOnce(Transaction) -> Result<O>,
 {
     // TODO: this is a hack to get around rusqlite's lack of support for readonly txns
     //       this can be better enforced by wrapping the tx in something that rejects commit

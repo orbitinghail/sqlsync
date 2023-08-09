@@ -19,4 +19,6 @@ pub use serialization::{Deserializable, Serializable};
 
 pub use lsn::{Lsn, LsnRange, RequestedLsnRange};
 
-pub use rusqlite::{named_params, OptionalExtension, Params, ToSql, Transaction};
+pub mod sqlite {
+    pub use rusqlite::*;
+}
