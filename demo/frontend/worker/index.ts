@@ -22,9 +22,8 @@ const NewMutation = (m: Mutation): Mutation & Serializer => {
 class MutatorHandle implements sqlsync.IMutatorHandle<Mutation & Serializer> {
   apply(
     mutation: Mutation,
-    execute: sqlsync.ExecuteFn,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    query: sqlsync.QueryFn
+    execute: sqlsync.ExecuteFn
+    // query: sqlsync.QueryFn
   ): void {
     switch (mutation.type) {
       case "initSql":

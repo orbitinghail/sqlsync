@@ -2,6 +2,7 @@
 name = "sqlsync"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -25,7 +26,7 @@ git = "https://github.com/trevyn/rusqlite"
 branch = "wasm32-unknown-unknown"
 features = ["bundled"]
 
-[target.wasm32-unknown-unknown.dependencies]
+[target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.64"
 
 [dev-dependencies]

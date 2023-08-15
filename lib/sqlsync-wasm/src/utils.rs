@@ -1,12 +1,12 @@
 use std::io;
 
-use js_sys::{Reflect, Uint8Array};
+use js_sys::Uint8Array;
 use log::Level;
 use sqlsync::{
     sqlite::{
-        self, params_from_iter,
-        types::{ToSqlOutput, Value, ValueRef},
-        ToSql, Transaction,
+        self,
+        types::{FromSqlError, ToSqlOutput, Value, ValueRef},
+        ToSql,
     },
     JournalError,
 };
@@ -56,7 +56,7 @@ pub enum WasmError {
     SqliteError(#[from] sqlite::Error),
 
     #[error(transparent)]
-    FromSqlError(#[from] sqlite::types::FromSqlError),
+    FromSqlError(#[from] FromSqlError),
 
     #[error("JsValue error: {0:?}")]
     JsError(JsValue),
@@ -107,7 +107,7 @@ impl From<WasmError> for io::Error {
 pub struct JsValueToSql<'a>(pub &'a JsValue);
 
 impl<'a> ToSql for JsValueToSql<'a> {
-    fn to_sql(&self) -> sqlsync::sqlite::Result<ToSqlOutput<'_>> {
+    fn to_sql(&self) -> sqlite::Result<ToSqlOutput<'_>> {
         let js_type = self.0.js_typeof().as_string().unwrap();
         match js_type.as_str() {
             "undefined" => Ok(ToSqlOutput::Owned(Value::Null)),
@@ -115,7 +115,7 @@ impl<'a> ToSql for JsValueToSql<'a> {
             "boolean" => Ok(ToSqlOutput::Owned(self.0.as_bool().unwrap().into())),
             "number" => Ok(ToSqlOutput::Owned(self.0.as_f64().unwrap().into())),
             "string" => Ok(ToSqlOutput::Owned(self.0.as_string().unwrap().into())),
-            _ => Err(sqlsync::sqlite::Error::ToSqlConversionFailure(
+            _ => Err(sqlite::Error::ToSqlConversionFailure(
                 format!("failed to convert from {}", js_type).into(),
             )),
         }

@@ -17,7 +17,7 @@ static LOGGER: ConsoleLogger = ConsoleLogger;
 
 #[wasm_bindgen(typescript_custom_section)]
 const TYPESCRIPT_INTERFACE: &'static str = r#"
-type SqlValue = string | number | boolean | null | undefined;
+type SqlValue = undefined | null | boolean | number | string;
 
 type ExecuteFn = (sql: string, params: SqlValue[]) => number;
 
@@ -34,8 +34,6 @@ interface IMutatorHandle<M extends IMutation> {
     apply(mutation: M, execute: ExecuteFn, query: QueryFn): void;
     deserializeMutation(data: Uint8Array): M;
 }
-
-type SqlValue = undefined | null | boolean | number | string;
 
 interface SqlSyncDocument {
   query<T>(sql: string, params: SqlValue[]): T[];
