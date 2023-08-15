@@ -6,20 +6,31 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-pub struct LogParams {
+pub struct LogRequest {
     pub message: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Query {
+pub struct QueryRequest {
     pub sql: String,
     pub params: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct QueryResult {
+pub struct QueryResponse {
     pub columns: Vec<String>,
     pub rows: Vec<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ExecRequest {
+    pub sql: String,
+    pub params: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ExecResponse {
+    pub changes: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -2,7 +2,9 @@ use std::{collections::BTreeMap, mem::MaybeUninit, sync::Once};
 
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::types::{LogParams, Query, QueryResult};
+use crate::types::{
+    ExecRequest, ExecResponse, LogRequest, QueryRequest, QueryResponse, ReducerError,
+};
 
 pub type FFIBuf = Vec<u8>;
 pub type FFIBufPtr = *mut u8;
@@ -84,21 +86,29 @@ pub fn ffi_buf_len(ptr: FFIBufPtr) -> FFIBufLen {
 }
 
 extern "C" {
-    pub fn host_query(query: FFIBufPtr) -> FFIBufPtr;
+    fn host_query(query_req: FFIBufPtr) -> FFIBufPtr;
 
-    pub fn host_log(params: FFIBufPtr);
+    fn host_execute(exec_req: FFIBufPtr) -> FFIBufPtr;
+
+    fn host_log(log_req: FFIBufPtr);
 }
 
-pub fn log(s: String) -> Result<(), bincode::Error> {
-    let params = fbm().encode(&LogParams { message: s })?;
-    unsafe { host_log(params) }
+pub fn log(s: String) -> Result<(), ReducerError> {
+    let req = fbm().encode(&LogRequest { message: s })?;
+    unsafe { host_log(req) }
     Ok(())
 }
 
-pub fn query(req: Query) -> Result<QueryResult, bincode::Error> {
-    let req_ptr = fbm().encode(&req)?;
-    let res_ptr = unsafe { host_query(req_ptr) };
-    fbm().decode(res_ptr)
+pub fn query(req: QueryRequest) -> Result<QueryResponse, ReducerError> {
+    let req = fbm().encode(&req)?;
+    let res = unsafe { host_query(req) };
+    Ok(fbm().decode(res)?)
+}
+
+pub fn execute(req: ExecRequest) -> Result<ExecResponse, ReducerError> {
+    let req = fbm().encode(&req)?;
+    let res = unsafe { host_execute(req) };
+    Ok(fbm().decode(res)?)
 }
 
 #[macro_export]
