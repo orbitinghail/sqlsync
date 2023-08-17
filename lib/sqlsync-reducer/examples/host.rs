@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use sqlsync_reducer::host_ffi::{self, register_host_fns, FFIBufPtr, HostState, WasmExports};
 use sqlsync_reducer::types::{ExecResponse, QueryResponse, ReducerError};
 use wasmi::{Engine, Linker, Module, Store};
-
 #[derive(Serialize, Deserialize)]
 enum Mutation {
     Set(String, String),

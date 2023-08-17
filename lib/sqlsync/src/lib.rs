@@ -2,6 +2,7 @@ mod db;
 mod journal;
 mod lsn;
 mod page;
+mod reducer;
 mod serialization;
 mod storage;
 mod vfs;

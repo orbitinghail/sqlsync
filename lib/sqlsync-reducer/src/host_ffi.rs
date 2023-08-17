@@ -7,7 +7,9 @@ use wasmi::{
     AsContext, AsContextMut, Caller, Instance, Linker, Memory, TypedFunc,
 };
 
-use crate::types::{ExecRequest, ExecResponse, LogRequest, QueryRequest, QueryResponse};
+use crate::types::{
+    ExecRequest, ExecResponse, LogRequest, QueryRequest, QueryResponse, ReducerError,
+};
 
 pub type FFIBuf = Vec<u8>;
 pub type FFIBufPtr = u32;
@@ -31,16 +33,16 @@ impl<T> HostState<T> {
         self.wasm_exports = Some(exports)
     }
 
+    pub fn exports(&self) -> WasmExports {
+        self.wasm_exports.as_ref().unwrap().to_owned()
+    }
+
     pub fn state_ref(&self) -> &T {
         &self.state
     }
 
     pub fn state_mut(&mut self) -> &mut T {
         &mut self.state
-    }
-
-    pub fn exports(&self) -> WasmExports {
-        self.wasm_exports.as_ref().unwrap().to_owned()
     }
 }
 
@@ -50,6 +52,7 @@ pub struct WasmExports {
     ffi_buf_allocate: TypedFunc<FFIBufLen, FFIBufPtr>,
     ffi_buf_deallocate: TypedFunc<FFIBufPtr, ()>,
     ffi_buf_len: TypedFunc<FFIBufPtr, FFIBufLen>,
+    reduce: TypedFunc<FFIBufPtr, FFIBufPtr>,
 }
 
 impl WasmExports {
@@ -59,13 +62,28 @@ impl WasmExports {
             instance.get_typed_func::<FFIBufLen, FFIBufPtr>(store, "ffi_buf_allocate")?;
         let ffi_buf_deallocate = instance.get_typed_func::<u32, ()>(store, "ffi_buf_deallocate")?;
         let ffi_buf_len = instance.get_typed_func::<u32, u32>(store, "ffi_buf_len")?;
+        let reduce = instance.get_typed_func::<FFIBufPtr, FFIBufPtr>(store, "reduce")?;
 
         Ok(Self {
             memory,
             ffi_buf_allocate,
             ffi_buf_deallocate,
             ffi_buf_len,
+            reduce,
         })
+    }
+
+    pub fn reduce(&self, mut ctx: impl AsContextMut, mutation: &[u8]) -> Result<(), HostFFIError> {
+        let ptr = persist(*self, &mut ctx, mutation)?;
+        let outptr = self.reduce.call(&mut ctx, ptr)?;
+
+        if outptr == 0 {
+            Ok(())
+        } else {
+            // let err: ReducerError = decode(*self, &mut ctx, outptr)?;
+            // Err(Trap::new(err))
+            Ok(())
+        }
     }
 }
 
@@ -132,6 +150,18 @@ pub fn consume(
     Ok(buf)
 }
 
+pub fn persist(
+    exports: WasmExports,
+    mut store: impl AsContextMut,
+    buf: &[u8],
+) -> Result<FFIBufPtr, HostFFIError> {
+    let len = buf.len() as FFIBufLen;
+    let ptr = exports.ffi_buf_allocate.call(&mut store, len)?;
+    let mem = exports.memory.data_mut(&mut store);
+    mem[ptr as usize..(ptr + len) as usize].copy_from_slice(buf);
+    Ok(ptr)
+}
+
 pub fn decode<T: DeserializeOwned>(
     exports: WasmExports,
     mut store: impl AsContextMut,
@@ -147,17 +177,14 @@ pub fn encode<T: Serialize>(
     data: T,
 ) -> Result<FFIBufPtr, HostFFIError> {
     let bytes = bincode::serialize(&data)?;
-    let len = bytes.len() as FFIBufLen;
-    let ptr = exports.ffi_buf_allocate.call(&mut store, len)?;
-    let mem = exports.memory.data_mut(&mut store);
-    mem[ptr as usize..(ptr + len) as usize].copy_from_slice(&bytes);
-    Ok(ptr)
+    persist(exports, &mut store, &bytes)
 }
 
 #[derive(Debug)]
 pub enum HostFFIError {
     BincodeError(bincode::Error),
     WasmTrap(Trap),
+    SqliteErr(rusqlite::Error),
     Other(String),
 }
 
@@ -170,6 +197,12 @@ impl Display for HostFFIError {
 impl Error for HostFFIError {}
 
 impl HostError for HostFFIError {}
+
+impl From<rusqlite::Error> for HostFFIError {
+    fn from(value: rusqlite::Error) -> Self {
+        Self::SqliteErr(value)
+    }
+}
 
 impl From<bincode::Error> for HostFFIError {
     fn from(e: bincode::Error) -> Self {

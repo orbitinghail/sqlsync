@@ -1,5 +1,7 @@
 // build guest.wasm using: `cargo build --target wasm32-unknown-unknown --example guest`
 
+use std::future::Future;
+
 use serde::{Deserialize, Serialize};
 use sqlsync_reducer::{
     export_reducer,
@@ -16,7 +18,13 @@ enum Mutation {
     Delete(String),
 }
 
+async fn test_async() {
+    log("test_async".into()).unwrap();
+}
+
 fn reducer(mutation: Mutation) -> Result<(), ReducerError> {
+    let t = test_async();
+
     log(format!("received mutation: {:?}", mutation))?;
     log("running query".into())?;
 

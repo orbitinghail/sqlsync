@@ -3,5 +3,6 @@
   "lldb.dereferencePointers": true,
   "lldb.consoleMode": "commands",
   // this allows rust-analyzer to compile sqlsync_reducer::host_ffi
-  "rust-analyzer.cargo.features": ["host"]
+  "rust-analyzer.cargo.features": ["host"],
+  "rust-analyzer.showUnlinkedFileNotification": false
 }

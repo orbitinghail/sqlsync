@@ -13,8 +13,14 @@ log = "0.4.14"
 anyhow = "1.0.40"
 rand = "0.8.4"
 time = "0.3"
+wasmi = { version = "0.31.0" }
 thiserror = "1.0.43"
 serde = { version = "1.0.171", features = ["derive"] }
+
+[dependencies.sqlsync-reducer]
+path = "../sqlsync-reducer"
+default-features = false
+features = ["host"]
 
 [dependencies.libsqlite3-sys]
 git = "https://github.com/trevyn/rusqlite"
