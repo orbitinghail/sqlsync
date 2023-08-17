@@ -8,13 +8,13 @@ use rusqlite::Connection;
 
 use crate::db::open_with_vfs;
 use crate::journal::{Cursor, JournalPartial, SyncResult, Syncable};
+use crate::reducer::Reducer;
 use crate::timeline::{apply_timeline_range, run_timeline_migration};
 use crate::unixtime::unix_timestamp_milliseconds;
 use crate::RequestedLsnRange;
 use crate::{
     journal::{Journal, JournalId},
     lsn::LsnRange,
-    mutate::Mutator,
     storage::Storage,
 };
 
@@ -42,15 +42,15 @@ impl Ord for ReceiveQueueEntry {
     }
 }
 
-pub struct CoordinatorDocument<J: Journal, M: Mutator> {
-    mutator: M,
+pub struct CoordinatorDocument<J: Journal> {
+    reducer: Reducer,
     storage: Box<Storage<J>>,
     sqlite: Connection,
     timelines: HashMap<JournalId, J>,
     timeline_receive_queue: BinaryHeap<ReceiveQueueEntry>,
 }
 
-impl<J: Journal, M: Mutator> Debug for CoordinatorDocument<J, M> {
+impl<J: Journal> Debug for CoordinatorDocument<J> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("CoordinatorDocument")
             .field(&self.storage)
@@ -59,15 +59,15 @@ impl<J: Journal, M: Mutator> Debug for CoordinatorDocument<J, M> {
     }
 }
 
-impl<J: Journal, M: Mutator> CoordinatorDocument<J, M> {
-    pub fn open(storage: J, mutator: M) -> Result<Self> {
+impl<J: Journal> CoordinatorDocument<J> {
+    pub fn open(storage: J, reducer_wasm_bytes: &[u8]) -> Result<Self> {
         let (mut sqlite, storage) = open_with_vfs(storage)?;
 
         // TODO: this feels awkward here
         run_timeline_migration(&mut sqlite)?;
 
         Ok(Self {
-            mutator,
+            reducer: Reducer::new(reducer_wasm_bytes)?,
             storage,
             sqlite,
             timelines: HashMap::new(),
@@ -99,7 +99,7 @@ impl<J: Journal, M: Mutator> CoordinatorDocument<J, M> {
             })?;
 
             // apply part of the timeline (per the receive queue entry) to the db
-            apply_timeline_range(timeline, &mut self.sqlite, &self.mutator, entry.range)?;
+            apply_timeline_range(timeline, &mut self.sqlite, &mut self.reducer, entry.range)?;
 
             // commit changes
             self.storage.commit()?;
@@ -111,7 +111,7 @@ impl<J: Journal, M: Mutator> CoordinatorDocument<J, M> {
     }
 }
 
-impl<J: Journal, M: Mutator> Syncable for CoordinatorDocument<J, M> {
+impl<J: Journal> Syncable for CoordinatorDocument<J> {
     type Cursor<'a> = <J as Syncable>::Cursor<'a> where Self: 'a;
 
     fn source_id(&self) -> JournalId {

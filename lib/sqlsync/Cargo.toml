@@ -37,6 +37,20 @@ js-sys = "0.3.64"
 
 [dev-dependencies]
 testutil = { path = "../testutil" }
+futures = "0.3.28"
 simple_logger = "4.1.0"
 bincode = "1.3.3"
 anyhow = { version = "1.0.40", features = ["backtrace"] }
+
+[dev-dependencies.sqlsync-reducer]
+path = "../sqlsync-reducer"
+default-features = true
+features = ["host"]
+
+[[example]]
+name = "task-reducer"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "counter-reducer"
+crate-type = ["cdylib"]

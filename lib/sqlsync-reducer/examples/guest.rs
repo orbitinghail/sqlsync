@@ -1,11 +1,7 @@
 // build guest.wasm using: `cargo build --target wasm32-unknown-unknown --example guest`
 
 use serde::{Deserialize, Serialize};
-use sqlsync_reducer::{
-    guest_reactor::{execute, query},
-    init_reducer,
-    types::ReducerError,
-};
+use sqlsync_reducer::{execute, init_reducer, query, types::ReducerError};
 
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
@@ -21,14 +17,10 @@ async fn reducer(mutation: Mutation) -> Result<(), ReducerError> {
 
     log::info!("running query and execute at the same time");
 
-    let query_future = query(
-        "SELECT * FROM foo WHERE bar = ?".to_owned(),
-        vec!["baz".to_owned()],
-    );
-    let exec_future = execute(
-        "SELECT * FROM foo WHERE bar = ?".to_owned(),
-        vec!["baz".to_owned()],
-    );
+    let x: Option<i64> = None;
+    let query_future = query!("SELECT * FROM foo WHERE bar = ?", "baz", 1, 1.23, x);
+    let exec_future = execute!("SELECT * FROM foo WHERE bar = ?", "baz");
+
     let (result, result2) = futures::join!(query_future, exec_future);
 
     log::info!("query result: {:?}", result);
@@ -36,12 +28,13 @@ async fn reducer(mutation: Mutation) -> Result<(), ReducerError> {
 
     log::info!("running another query");
 
-    let result = execute(
-        "SELECT * FROM foo WHERE bar = ?".to_owned(),
-        vec!["baz".to_owned()],
-    )
-    .await;
+    let query_future = query!("SELECT * FROM foo WHERE bar = ?", "baz");
+
+    let result = execute!("SELECT * FROM foo WHERE bar = ?", "baz").await;
     log::info!("result: {:?}", result);
+
+    let result = query_future.await;
+    log::info!("final query result: {:?}", result);
 
     Ok(())
 }

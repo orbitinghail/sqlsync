@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, mem::MaybeUninit, sync::Once};
+use std::{collections::BTreeMap, mem::MaybeUninit, panic, sync::Once};
 
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -109,4 +109,17 @@ impl log::Log for FFILogger {
     fn flush(&self) {
         // noop
     }
+}
+
+pub fn install_panic_hook() {
+    static SET_PANIC_HOOK: Once = Once::new();
+    SET_PANIC_HOOK.call_once(|| {
+        std::panic::set_hook(Box::new(panic_hook));
+    });
+}
+
+fn panic_hook(info: &panic::PanicInfo) {
+    let record: LogRecord = info.into();
+    let record_ptr = fbm().encode(&record).unwrap();
+    unsafe { host_log(record_ptr) }
 }

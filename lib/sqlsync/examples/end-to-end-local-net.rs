@@ -17,13 +17,7 @@ use sqlsync::Syncable;
 use sqlsync::{Journal, JournalId, LsnRange};
 
 use serde::{Deserialize, Serialize};
-use sqlsync::{
-    coordinator::CoordinatorDocument,
-    mutate::Mutator,
-    positioned_io::{PositionedCursor, PositionedReader},
-    sqlite::Transaction,
-    MemoryJournal, Serializable,
-};
+use sqlsync::{coordinator::CoordinatorDocument, positioned_io::PositionedReader, MemoryJournal};
 
 const DOC_ID: JournalId = 1;
 
@@ -58,59 +52,11 @@ where
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 enum Mutation {
     InitSchema,
     Incr,
     Decr,
-}
-
-impl Serializable for Mutation {
-    fn serialize_into<W: std::io::Write>(&self, writer: &mut W) -> io::Result<()> {
-        serialize_into(writer, &self)
-    }
-}
-
-#[derive(Clone)]
-struct MutatorImpl {}
-
-impl Mutator for MutatorImpl {
-    type Mutation = Mutation;
-
-    fn apply(&self, tx: &mut Transaction, mutation: &Self::Mutation) -> anyhow::Result<()> {
-        match mutation {
-            Mutation::InitSchema => tx.execute_batch(
-                "
-                    CREATE TABLE IF NOT EXISTS counter (
-                        idx INTEGER PRIMARY KEY,
-                        value INTEGER
-                    );
-                    INSERT OR IGNORE INTO counter (idx, value) VALUES (0, 0);
-                ",
-            )?,
-            Mutation::Incr => tx.execute_batch(
-                "
-                    INSERT INTO counter (idx, value) VALUES (0, 0)
-                    ON CONFLICT (idx) DO UPDATE SET value = value + 1
-                ",
-            )?,
-            Mutation::Decr => tx.execute_batch(
-                "
-                    INSERT INTO counter (idx, value) VALUES (0, 0)
-                    ON CONFLICT (idx) DO UPDATE SET value = value - 1
-                ",
-            )?,
-        }
-
-        Ok(())
-    }
-
-    fn deserialize_mutation_from<R: PositionedReader>(
-        &self,
-        reader: R,
-    ) -> anyhow::Result<Self::Mutation> {
-        Ok(deserialize_from(PositionedCursor::new(reader))?)
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -327,9 +273,13 @@ fn protocol_sync_receive<'a>(
 }
 
 fn start_server(listener: TcpListener) -> anyhow::Result<()> {
+    let wasm_bytes = include_bytes!(
+        "../../../target/wasm32-unknown-unknown/debug/examples/counter_reducer.wasm"
+    );
+
     // build a ServerDocument and protect it with a mutex since multiple threads will be accessing it
     let storage_journal = MemoryJournal::open(DOC_ID)?;
-    let coordinator = CoordinatorDocument::open(storage_journal, MutatorImpl {})?;
+    let coordinator = CoordinatorDocument::open(storage_journal, &wasm_bytes[..])?;
     let coordinator = Arc::new(Mutex::new(coordinator));
 
     loop {
@@ -345,7 +295,7 @@ fn start_server(listener: TcpListener) -> anyhow::Result<()> {
 }
 
 fn handle_client(
-    doc: Arc<Mutex<CoordinatorDocument<MemoryJournal, MutatorImpl>>>,
+    doc: Arc<Mutex<CoordinatorDocument<MemoryJournal>>>,
     mut socket: TcpStream,
 ) -> anyhow::Result<()> {
     log::info!("server: received client connection");
@@ -407,14 +357,18 @@ fn handle_client(
 fn start_client(addr: impl ToSocketAddrs) -> anyhow::Result<()> {
     let mut socket = TcpStream::connect(addr)?;
 
+    let wasm_bytes = include_bytes!(
+        "../../../target/wasm32-unknown-unknown/debug/examples/counter_reducer.wasm"
+    );
+
     // generate random timeline id and open doc
     let timeline_id: JournalId = thread_rng().gen::<u8>().into();
     let timeline_journal = MemoryJournal::open(timeline_id)?;
     let storage_journal = MemoryJournal::open(DOC_ID)?;
-    let mut doc = LocalDocument::open(storage_journal, timeline_journal, MutatorImpl {})?;
+    let mut doc = LocalDocument::open(storage_journal, timeline_journal, &wasm_bytes[..])?;
 
     // initialize schema
-    doc.mutate(Mutation::InitSchema)?;
+    doc.mutate(&bincode::serialize(&Mutation::InitSchema)?)?;
 
     // begin hello protocol
     log::info!("client({}): starting hello protocol", timeline_id);
@@ -459,7 +413,7 @@ fn start_client(addr: impl ToSocketAddrs) -> anyhow::Result<()> {
                 log::info!("client({}): counter values: {:?}", timeline_id, rows?);
                 Ok(())
             })?;
-            doc.mutate(mutation)?;
+            doc.mutate(&bincode::serialize(&mutation)?)?;
         }
 
         // wait for the server to send us a sync request

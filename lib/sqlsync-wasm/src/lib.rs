@@ -5,7 +5,6 @@ use std::io;
 use js_sys::Reflect;
 use sqlsync::{
     local::LocalDocument,
-    mutate::Mutator,
     positioned_io::PositionedReader,
     sqlite::{params_from_iter, Transaction},
     Journal, JournalId, MemoryJournal, Serializable,

@@ -181,7 +181,7 @@ impl HostError for WasmFFIError {}
 
 impl From<Trap> for WasmFFIError {
     fn from(value: Trap) -> Self {
-        value.into()
+        WasmFFIError::WasmError(value.into())
     }
 }
 

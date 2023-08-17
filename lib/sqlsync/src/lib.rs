@@ -10,7 +10,6 @@ mod vfs;
 pub mod coordinator;
 pub mod local;
 
-pub mod mutate;
 pub mod positioned_io;
 pub mod timeline;
 pub mod unixtime;

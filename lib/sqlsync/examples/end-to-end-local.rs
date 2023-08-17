@@ -2,18 +2,12 @@
 ///! and a server. There is no networking in this example so it's easy to follow
 ///! the sync & rebase logic between the different nodes.
 ///
-use std::{collections::HashMap, io};
+use std::collections::HashMap;
 
-use anyhow::anyhow;
-use bincode::ErrorKind;
 use serde::{Deserialize, Serialize};
 use sqlsync::{
-    coordinator::CoordinatorDocument,
-    local::LocalDocument,
-    mutate::Mutator,
-    positioned_io::{PositionedCursor, PositionedReader},
-    sqlite::{named_params, OptionalExtension, Transaction},
-    Journal, LsnRange, MemoryJournal, RequestedLsnRange, Serializable, Syncable,
+    coordinator::CoordinatorDocument, local::LocalDocument, sqlite::Transaction, Journal, LsnRange,
+    MemoryJournal, RequestedLsnRange, Syncable,
 };
 
 #[derive(Debug)]
@@ -47,164 +41,29 @@ fn query_tasks(tx: Transaction) -> anyhow::Result<Vec<Task>> {
     Ok(tasks)
 }
 
-fn query_task(tx: &Transaction, id: &i64) -> anyhow::Result<Option<Task>> {
-    let mut stmt =
-        tx.prepare("select id, sort, description, completed, created_at from tasks where id = ?")?;
-    let task: Option<Task> = stmt
-        .query_row([id], |row| {
-            Ok(Task {
-                id: row.get(0)?,
-                sort: row.get(1)?,
-                description: row.get(2)?,
-                completed: row.get(3)?,
-                created_at: row.get(4)?,
-            })
-        })
-        .optional()?;
-
-    Ok(task)
-}
-
-fn query_task_exists(tx: &Transaction, id: &i64) -> anyhow::Result<bool> {
-    let mut stmt = tx.prepare("select exists(select 1 from tasks where id = ?)")?;
-    let exists: bool = stmt.query_row([id], |row| row.get(0))?;
-    Ok(exists)
-}
-
-fn query_sort_after(tx: &Transaction, id: &i64) -> anyhow::Result<f64> {
-    // query for the sort of the task with the given id and the sort of the task immediately following it (or None)
-    let mut stmt = tx.prepare(
-        "
-            select sort, next_sort from (
-                select id, sort, lead(sort) over w as next_sort
-                from tasks
-                window w as (order by sort rows between current row and 1 following)
-            ) where id = ?
-        ",
-    )?;
-
-    let sorts = stmt
-        .query_row([id], |row| {
-            Ok((row.get::<_, f64>(0)?, row.get::<_, Option<f64>>(1)?))
-        })
-        .optional()?;
-
-    match sorts {
-        Some((sort, Some(next_sort))) => Ok((sort + next_sort) / 2.),
-        Some((sort, None)) => Ok(sort + 1.),
-        None => Err(anyhow!("task not found")),
-    }
-}
-
-fn query_max_sort(tx: &Transaction) -> anyhow::Result<f64> {
-    let mut stmt = tx.prepare("select max(sort) from tasks")?;
-    let max_sort: Option<f64> = stmt.query_row([], |row| row.get(0))?;
-    Ok(max_sort.unwrap_or(0.))
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-struct PartialTask {
-    description: Option<String>,
-    completed: Option<bool>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 enum Mutation {
     InitSchema,
 
-    AppendTask { id: i64, description: String },
-    RemoveTask { id: i64 },
-    UpdateTask { id: i64, partial: PartialTask },
-    MoveTask { id: i64, after: i64 },
-}
+    AppendTask {
+        id: i64,
+        description: String,
+    },
 
-impl Serializable for Mutation {
-    fn serialize_into<W: std::io::Write>(&self, writer: &mut W) -> io::Result<()> {
-        match bincode::serialize_into(writer, &self) {
-            Ok(_) => Ok(()),
-            Err(err) => match err.as_ref() {
-                ErrorKind::Io(err) => Err(err.kind().into()),
-                _ => Err(io::Error::new(io::ErrorKind::Other, err)),
-            },
-        }
-    }
-}
+    RemoveTask {
+        id: i64,
+    },
 
-#[derive(Clone)]
-struct MutatorImpl {}
+    UpdateTask {
+        id: i64,
+        description: Option<String>,
+        completed: Option<bool>,
+    },
 
-impl Mutator for MutatorImpl {
-    type Mutation = Mutation;
-
-    fn apply(&self, tx: &mut Transaction, mutation: &Self::Mutation) -> anyhow::Result<()> {
-        match mutation {
-            Mutation::InitSchema => tx.execute_batch(
-                "CREATE TABLE IF NOT EXISTS tasks (
-                    id INTEGER PRIMARY KEY,
-                    sort DOUBLE UNIQUE NOT NULL,
-                    description TEXT NOT NULL,
-                    completed BOOLEAN NOT NULL,
-                    created_at TEXT NOT NULL
-                )",
-            )?,
-
-            Mutation::AppendTask { id, description } => {
-                log::debug!("appending task({}): {}", id, description);
-                let max_sort = query_max_sort(tx)?;
-                tx.execute(
-                    "insert into tasks (id, sort, description, completed, created_at)
-                    values (:id, :sort, :description, false, datetime('now'))",
-                    named_params! { ":id": id, ":sort": max_sort+1., ":description": description },
-                )
-                .map(|_| ())?
-            }
-
-            Mutation::RemoveTask { id } => tx
-                .execute(
-                    "delete from tasks where id = :id",
-                    named_params! { ":id": id },
-                )
-                .map(|_| ())?,
-
-            Mutation::UpdateTask { id, partial } => {
-                let task = query_task(tx, id)?;
-
-                if let Some(task) = task {
-                    tx.execute(
-                        "update tasks set
-                            description = :description,
-                            completed = :completed
-                        where id = :id",
-                        named_params! {
-                            ":id": id,
-                            ":description": partial.description.as_ref().unwrap_or(&task.description),
-                            ":completed": partial.completed.as_ref().unwrap_or(&task.completed),
-                        },
-                    )
-                    .map(|_| ())?
-                }
-            }
-
-            Mutation::MoveTask { id, after } => {
-                if query_task_exists(tx, id)? {
-                    let new_sort = query_sort_after(tx, after)?;
-                    tx.execute(
-                        "update tasks set sort = :sort where id = :id",
-                        named_params! { ":id": id, ":sort": new_sort },
-                    )
-                    .map(|_| ())?
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn deserialize_mutation_from<R: PositionedReader>(
-        &self,
-        reader: R,
-    ) -> anyhow::Result<Self::Mutation> {
-        Ok(bincode::deserialize_from(PositionedCursor::new(reader))?)
-    }
+    MoveTask {
+        id: i64,
+        after: i64,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -214,19 +73,21 @@ fn main() -> anyhow::Result<()> {
         .init()?;
 
     let doc_id = 1;
-    let m = MutatorImpl {};
+    // build task_reducer.wasm using: `cargo build --target wasm32-unknown-unknown --example task-reducer`
+    let wasm_bytes =
+        include_bytes!("../../../target/wasm32-unknown-unknown/debug/examples/task_reducer.wasm");
 
     let mut local = LocalDocument::open(
         MemoryJournal::open(doc_id)?,
         MemoryJournal::open(10)?,
-        m.clone(),
+        &wasm_bytes[..],
     )?;
     let mut local2 = LocalDocument::open(
         MemoryJournal::open(doc_id)?,
         MemoryJournal::open(11)?,
-        m.clone(),
+        &wasm_bytes[..],
     )?;
-    let mut remote = CoordinatorDocument::open(MemoryJournal::open(doc_id)?, m.clone())?;
+    let mut remote = CoordinatorDocument::open(MemoryJournal::open(doc_id)?, &wasm_bytes[..])?;
 
     // temp hack to track the lsn ranges we get back from sync_receive
     // key is a concatenation of the sync direction, like: `local->remote`
@@ -269,7 +130,7 @@ fn main() -> anyhow::Result<()> {
     macro_rules! mutate {
         ($client:ident, InitSchema) => {
             log::info!("{}: initializing schema", std::stringify!($client));
-            $client.mutate(Mutation::InitSchema)?
+            mutate!($client, Mutation::InitSchema)?
         };
         ($client:ident, AppendTask $id:literal, $description:literal) => {
             log::info!(
@@ -278,21 +139,28 @@ fn main() -> anyhow::Result<()> {
                 $id,
                 $description
             );
-            $client.mutate(Mutation::AppendTask {
-                id: $id,
-                description: $description.into(),
-            })?
+            mutate!(
+                $client,
+                Mutation::AppendTask {
+                    id: $id,
+                    description: $description.into(),
+                }
+            )?
         };
         ($client:ident, RemoveTask $id:literal) => {
             log::info!("{}: removing task {}", std::stringify!($client), $id);
-            $client.mutate(Mutation::RemoveTask { id: $id })?
+            mutate!($client, Mutation::RemoveTask { id: $id })?
         };
-        ($client:ident, UpdateTask $id:literal, $partial:expr) => {
+        ($client:ident, UpdateTask $id:literal, $description:expr, $completed:expr) => {
             log::info!("{}: updating task {}", std::stringify!($client), $id);
-            $client.mutate(Mutation::UpdateTask {
-                id: $id,
-                partial: $partial,
-            })?
+            mutate!(
+                $client,
+                Mutation::UpdateTask {
+                    id: $id,
+                    description: $description,
+                    completed: $completed,
+                }
+            )?
         };
         ($client:ident, MoveTask $id:literal after $after:literal) => {
             log::info!(
@@ -301,10 +169,16 @@ fn main() -> anyhow::Result<()> {
                 $id,
                 $after
             );
-            $client.mutate(Mutation::MoveTask {
-                id: $id,
-                after: $after,
-            })?
+            mutate!(
+                $client,
+                Mutation::MoveTask {
+                    id: $id,
+                    after: $after,
+                }
+            )?
+        };
+        ($client:ident, $mutation:expr) => {
+            $client.mutate(&bincode::serialize(&$mutation)?)
         };
     }
 

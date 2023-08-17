@@ -11,3 +11,9 @@ pub trait Deserializable: Sized {
     /// deserialize the object from the given reader
     fn deserialize_from<R: PositionedReader>(reader: R) -> io::Result<Self>;
 }
+
+impl Serializable for &[u8] {
+    fn serialize_into<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        writer.write_all(self)
+    }
+}

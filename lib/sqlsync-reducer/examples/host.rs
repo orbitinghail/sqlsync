@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
 
     let engine = Engine::default();
     let module = Module::new(&engine, &wasm_bytes[..])?;
-    let mut linker = <Linker<WasmFFI>>::new(&engine);
+    let mut linker = Linker::new(&engine);
 
     register_log_handler(&mut linker)?;
 
@@ -53,16 +53,18 @@ fn main() -> anyhow::Result<()> {
         for (id, req) in requests_inner {
             match req {
                 Request::Query { .. } => {
+                    log::info!("received query request: {:?}", req);
                     let ptr = ffi.encode(
                         &mut store,
                         &QueryResponse {
-                            columns: vec!["foo".to_string(), "bar".to_string()],
-                            rows: vec![vec!["baz".to_string(), "qux".to_string()]],
+                            columns: vec!["foo".into(), "bar".into()],
+                            rows: vec![vec!["baz".into(), "qux".into()].into()],
                         },
                     )?;
                     responses.insert(id, ptr);
                 }
                 Request::Exec { .. } => {
+                    log::info!("received exec request: {:?}", req);
                     let ptr = ffi.encode(&mut store, &ExecResponse { changes: 1 })?;
                     responses.insert(id, ptr);
                 }

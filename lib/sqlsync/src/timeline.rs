@@ -4,7 +4,8 @@ use crate::{
     db::run_in_tx,
     journal::{Cursor, Journal},
     lsn::{Lsn, LsnRange},
-    mutate::Mutator,
+    positioned_io::PositionedReader,
+    reducer::Reducer,
 };
 
 const TIMELINES_TABLE_SQL: &str = "
@@ -31,10 +32,10 @@ pub fn run_timeline_migration(sqlite: &mut Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn rebase_timeline<J: Journal, M: Mutator>(
+pub fn rebase_timeline<J: Journal>(
     timeline: &mut J,
     sqlite: &mut Connection,
-    mutator: &M,
+    reducer: &mut Reducer,
 ) -> anyhow::Result<()> {
     let applied_lsn: Option<Lsn> = sqlite
         .query_row(
@@ -58,8 +59,8 @@ pub fn rebase_timeline<J: Journal, M: Mutator>(
     run_in_tx(sqlite, |tx| {
         let mut cursor = timeline.scan();
         while cursor.advance()? {
-            let mutation = mutator.deserialize_mutation_from(&cursor)?;
-            mutator.apply(tx, &mutation)?;
+            let mutation = cursor.read_all()?;
+            reducer.apply(tx, &mutation)?;
         }
         Ok(())
     })?;
@@ -67,10 +68,10 @@ pub fn rebase_timeline<J: Journal, M: Mutator>(
     Ok(())
 }
 
-pub fn apply_timeline_range<J: Journal, M: Mutator>(
+pub fn apply_timeline_range<J: Journal>(
     timeline: &J,
     sqlite: &mut Connection,
-    mutator: &M,
+    reducer: &mut Reducer,
     range: LsnRange,
 ) -> anyhow::Result<()> {
     run_in_tx(sqlite, |tx| {
@@ -94,8 +95,8 @@ pub fn apply_timeline_range<J: Journal, M: Mutator>(
             // ok, some or all of the provided range needs to be applied so let's do that
             let mut cursor = timeline.scan_range(range);
             while cursor.advance()? {
-                let mutation = mutator.deserialize_mutation_from(&cursor)?;
-                mutator.apply(tx, &mutation)?;
+                let mutation = cursor.read_all()?;
+                reducer.apply(tx, &mutation)?;
             }
 
             log::debug!(

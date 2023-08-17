@@ -11,7 +11,10 @@ use serde::de::DeserializeOwned;
 
 use crate::{
     guest_ffi::{fbm, FFIBufPtr},
-    types::{ExecResponse, QueryResponse, ReducerError, Request, RequestId, Requests, Responses},
+    types::{
+        ExecResponse, QueryResponse, ReducerError, Request, RequestId, Requests, Responses,
+        SqliteValue,
+    },
 };
 
 pub fn reactor() -> &'static mut Reactor {
@@ -123,16 +126,30 @@ impl<T: DeserializeOwned> Future for ResponseFuture<T> {
     }
 }
 
-pub fn query(sql: String, params: Vec<String>) -> ResponseFuture<QueryResponse> {
+pub fn raw_query(sql: String, params: Vec<SqliteValue>) -> ResponseFuture<QueryResponse> {
     let request = Request::Query { sql, params };
     let id = reactor().queue_request(request);
     ResponseFuture::new(id)
 }
 
-pub fn execute(sql: String, params: Vec<String>) -> ResponseFuture<ExecResponse> {
+pub fn raw_execute(sql: String, params: Vec<SqliteValue>) -> ResponseFuture<ExecResponse> {
     let request = Request::Exec { sql, params };
     let id = reactor().queue_request(request);
     ResponseFuture::new(id)
+}
+
+#[macro_export]
+macro_rules! query {
+    ($sql:expr $(, $arg:expr)*) => {
+        sqlsync_reducer::guest_reactor::raw_query($sql.into(), vec![$($arg.into()),*])
+    };
+}
+
+#[macro_export]
+macro_rules! execute {
+    ($sql:expr $(, $arg:expr)*) => {
+        sqlsync_reducer::guest_reactor::raw_execute($sql.into(), vec![$($arg.into()),*])
+    };
 }
 
 #[macro_export]
@@ -161,6 +178,7 @@ macro_rules! init_reducer {
         #[no_mangle]
         pub extern "C" fn ffi_init_reducer() {
             LOGGER.init(log::Level::Trace).unwrap();
+            sqlsync_reducer::guest_ffi::install_panic_hook();
         }
     };
 }
