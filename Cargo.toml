@@ -4,7 +4,6 @@ members = [
     "lib/sqlsync",
     "lib/sqlsync-wasm",
     "lib/sqlsync-reducer",
-    "lib/sqlsync-reducer-reactor",
     "lib/sqlite-vfs",
     "lib/testutil",
 ]

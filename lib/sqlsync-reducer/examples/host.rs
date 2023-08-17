@@ -1,9 +1,14 @@
 // run this example with: `cargo wasi run --example host --features host`
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
-use sqlsync_reducer::host_ffi::{self, register_host_fns, FFIBufPtr, HostState, WasmExports};
-use sqlsync_reducer::types::{ExecResponse, QueryResponse, ReducerError};
+use sqlsync_reducer::{
+    host_ffi::{register_log_handler, WasmFFI},
+    types::{ExecResponse, QueryResponse, Request},
+};
 use wasmi::{Engine, Linker, Module, Store};
+
 #[derive(Serialize, Deserialize)]
 enum Mutation {
     Set(String, String),
@@ -11,53 +16,61 @@ enum Mutation {
 }
 
 fn main() -> anyhow::Result<()> {
+    simple_logger::SimpleLogger::new()
+        .with_level(log::LevelFilter::Trace)
+        .env()
+        .init()?;
+
     // build guest.wasm using: `cargo build --target wasm32-unknown-unknown --example guest`
     let wasm_bytes =
         include_bytes!("../../../target/wasm32-unknown-unknown/debug/examples/guest.wasm");
 
     let engine = Engine::default();
     let module = Module::new(&engine, &wasm_bytes[..])?;
-    let mut linker = <Linker<HostState<i32>>>::new(&engine);
+    let mut linker = <Linker<WasmFFI>>::new(&engine);
 
-    register_host_fns(
-        &mut linker,
-        |_, msg| {
-            println!("wasm_log: {}", msg);
-        },
-        |state, query| {
-            println!("wasm_query: {:?}", query);
-            *state += 1;
-            println!("state is: {}", state);
-            Ok(QueryResponse {
-                columns: vec!["hello".to_string(), "world".to_string()],
-                rows: vec![vec!["hello".to_string(), "world".to_string()]],
-            })
-        },
-        |state, exec| {
-            println!("wasm_exec: {:?}", exec);
-            *state += 1;
-            println!("state is: {}", state);
-            Ok(ExecResponse { changes: 1 })
-        },
-    )?;
+    register_log_handler(&mut linker)?;
 
-    let mut store = Store::new(&engine, HostState::new(123));
+    let mut store = Store::new(&engine, WasmFFI::uninitialized());
     let instance = linker.instantiate(&mut store, &module)?.start(&mut store)?;
 
-    // load instance exports, and save it into the store
-    let exports = WasmExports::new(&store, &instance)?;
-    store.data_mut().initialize(exports);
+    // initialize the FFI
+    let ffi = WasmFFI::initialized(&store, &instance)?;
+    (*store.data_mut()) = ffi.clone();
 
-    // write mutation to the ffi_buffer
+    // initialize the reducer
+    ffi.init_reducer(&mut store)?;
+
     let mutation = Mutation::Set("hello".to_string(), "world".to_string());
-    let mutation_ptr = host_ffi::encode(store.data().exports(), &mut store, mutation)?;
+    let mutation = &bincode::serialize(&mutation)?;
 
-    let reduce = instance.get_typed_func::<FFIBufPtr, FFIBufPtr>(&store, "reduce")?;
-    let result = reduce.call(&mut store, mutation_ptr)?;
+    // kick off the reducer
+    let mut requests = ffi.reduce(&mut store, mutation)?;
 
-    if result != 0 {
-        let err: ReducerError = host_ffi::decode(store.data().exports(), &mut store, result)?;
-        anyhow::bail!(err);
+    while let Some(requests_inner) = requests {
+        // process requests
+        let mut responses = BTreeMap::new();
+        for (id, req) in requests_inner {
+            match req {
+                Request::Query { .. } => {
+                    let ptr = ffi.encode(
+                        &mut store,
+                        &QueryResponse {
+                            columns: vec!["foo".to_string(), "bar".to_string()],
+                            rows: vec![vec!["baz".to_string(), "qux".to_string()]],
+                        },
+                    )?;
+                    responses.insert(id, ptr);
+                }
+                Request::Exec { .. } => {
+                    let ptr = ffi.encode(&mut store, &ExecResponse { changes: 1 })?;
+                    responses.insert(id, ptr);
+                }
+            }
+        }
+
+        // step the reactor forward
+        requests = ffi.reactor_step(&mut store, Some(responses))?;
     }
 
     Ok(())

@@ -2,13 +2,23 @@ use std::{collections::BTreeMap, mem::MaybeUninit, sync::Once};
 
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::types::{
-    ExecRequest, ExecResponse, LogRequest, QueryRequest, QueryResponse, ReducerError,
-};
+use crate::types::LogRecord;
 
 pub type FFIBuf = Vec<u8>;
 pub type FFIBufPtr = *mut u8;
 pub type FFIBufLen = u32;
+
+pub fn fbm() -> &'static mut FFIBufManager {
+    static mut SINGLETON: MaybeUninit<FFIBufManager> = MaybeUninit::uninit();
+    static ONCE: Once = Once::new();
+    unsafe {
+        ONCE.call_once(|| {
+            let singleton = FFIBufManager::new();
+            SINGLETON.write(singleton);
+        });
+        SINGLETON.assume_init_mut()
+    }
+}
 
 pub struct FFIBufManager {
     // map from pointer to buffer to length of buffer
@@ -58,18 +68,6 @@ impl FFIBufManager {
     }
 }
 
-pub fn fbm() -> &'static mut FFIBufManager {
-    static mut FFI_BUF_MANAGER: MaybeUninit<FFIBufManager> = MaybeUninit::uninit();
-    static ONCE: Once = Once::new();
-    unsafe {
-        ONCE.call_once(|| {
-            let singleton = FFIBufManager::new();
-            FFI_BUF_MANAGER.write(singleton);
-        });
-        FFI_BUF_MANAGER.assume_init_mut()
-    }
-}
-
 #[no_mangle]
 pub fn ffi_buf_allocate(length: FFIBufLen) -> FFIBufPtr {
     fbm().alloc(length)
@@ -86,46 +84,29 @@ pub fn ffi_buf_len(ptr: FFIBufPtr) -> FFIBufLen {
 }
 
 extern "C" {
-    fn host_query(query_req: FFIBufPtr) -> FFIBufPtr;
-
-    fn host_execute(exec_req: FFIBufPtr) -> FFIBufPtr;
-
     fn host_log(log_req: FFIBufPtr);
 }
 
-pub fn log(s: String) -> Result<(), ReducerError> {
-    let req = fbm().encode(&LogRequest { message: s })?;
-    unsafe { host_log(req) }
-    Ok(())
+pub struct FFILogger;
+
+impl FFILogger {
+    pub fn init(&'static self, max_level: log::Level) -> Result<(), log::SetLoggerError> {
+        log::set_logger(self).map(|_| log::set_max_level(max_level.to_level_filter()))
+    }
 }
 
-pub fn query(req: QueryRequest) -> Result<QueryResponse, ReducerError> {
-    let req = fbm().encode(&req)?;
-    let res = unsafe { host_query(req) };
-    Ok(fbm().decode(res)?)
-}
+impl log::Log for FFILogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::max_level()
+    }
 
-pub fn execute(req: ExecRequest) -> Result<ExecResponse, ReducerError> {
-    let req = fbm().encode(&req)?;
-    let res = unsafe { host_execute(req) };
-    Ok(fbm().decode(res)?)
-}
+    fn log(&self, record: &log::Record) {
+        let record: LogRecord = record.into();
+        let record_ptr = fbm().encode(&record).unwrap();
+        unsafe { host_log(record_ptr) }
+    }
 
-#[macro_export]
-macro_rules! export_reducer {
-    // fn should be (Mutation) -> Result<(), ReducerError>
-    ($mutation:ty, $fn:ident) => {
-        #[no_mangle]
-        pub fn reduce(mutation_ptr: FFIBufPtr) -> FFIBufPtr {
-            use sqlsync_reducer::types::ReducerError;
-            fn inner(mutation_ptr: FFIBufPtr) -> Result<(), ReducerError> {
-                let mutation: $mutation = fbm().decode(mutation_ptr)?;
-                $fn(mutation)
-            }
-            match inner(mutation_ptr) {
-                Ok(()) => std::ptr::null_mut(),
-                Err(e) => fbm().encode(&e).unwrap(),
-            }
-        }
-    };
+    fn flush(&self) {
+        // noop
+    }
 }

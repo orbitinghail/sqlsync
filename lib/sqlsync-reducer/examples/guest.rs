@@ -1,12 +1,10 @@
 // build guest.wasm using: `cargo build --target wasm32-unknown-unknown --example guest`
 
-use std::future::Future;
-
 use serde::{Deserialize, Serialize};
 use sqlsync_reducer::{
-    export_reducer,
-    ffi::{execute, fbm, log, query, FFIBufPtr},
-    types::{ExecRequest, QueryRequest, ReducerError},
+    guest_reactor::{execute, query},
+    init_reducer,
+    types::ReducerError,
 };
 
 #[global_allocator]
@@ -18,29 +16,34 @@ enum Mutation {
     Delete(String),
 }
 
-async fn test_async() {
-    log("test_async".into()).unwrap();
-}
+async fn reducer(mutation: Mutation) -> Result<(), ReducerError> {
+    log::info!("received mutation: {:?}", mutation);
 
-fn reducer(mutation: Mutation) -> Result<(), ReducerError> {
-    let t = test_async();
+    log::info!("running query and execute at the same time");
 
-    log(format!("received mutation: {:?}", mutation))?;
-    log("running query".into())?;
+    let query_future = query(
+        "SELECT * FROM foo WHERE bar = ?".to_owned(),
+        vec!["baz".to_owned()],
+    );
+    let exec_future = execute(
+        "SELECT * FROM foo WHERE bar = ?".to_owned(),
+        vec!["baz".to_owned()],
+    );
+    let (result, result2) = futures::join!(query_future, exec_future);
 
-    let result = query(QueryRequest {
-        sql: "SELECT * FROM foo WHERE bar = ?".to_owned(),
-        params: vec!["baz".to_owned()],
-    })?;
-    log(format!("query result: {:?}", result))?;
+    log::info!("query result: {:?}", result);
+    log::info!("exec result: {:?}", result2);
 
-    let result = execute(ExecRequest {
-        sql: "SELECT * FROM foo WHERE bar = ?".to_owned(),
-        params: vec!["baz".to_owned()],
-    })?;
-    log(format!("exec result: {:?}", result))?;
+    log::info!("running another query");
+
+    let result = execute(
+        "SELECT * FROM foo WHERE bar = ?".to_owned(),
+        vec!["baz".to_owned()],
+    )
+    .await;
+    log::info!("result: {:?}", result);
 
     Ok(())
 }
 
-export_reducer!(Mutation, reducer);
+init_reducer!(Mutation, reducer);
