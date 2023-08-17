@@ -168,7 +168,7 @@ pub enum WasmFFIError {
     WasmError(#[from] wasmi::Error),
 
     #[error("ReducerError: {0}")]
-    ReducerError(#[from] ReducerError),
+    ReducerError(ReducerError),
 
     #[error("No export named `memory` found in Wasm instance")]
     MemoryNotFound,
@@ -178,6 +178,12 @@ pub enum WasmFFIError {
 }
 
 impl HostError for WasmFFIError {}
+
+impl From<ReducerError> for WasmFFIError {
+    fn from(value: ReducerError) -> Self {
+        WasmFFIError::ReducerError(value)
+    }
+}
 
 impl From<Trap> for WasmFFIError {
     fn from(value: Trap) -> Self {

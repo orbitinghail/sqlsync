@@ -12,7 +12,9 @@ enum Mutation {
     Delete(String),
 }
 
-async fn reducer(mutation: Mutation) -> Result<(), ReducerError> {
+async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
+    let mutation: Mutation = bincode::deserialize(&mutation)?;
+
     log::info!("received mutation: {:?}", mutation);
 
     log::info!("running query and execute at the same time");
@@ -39,4 +41,4 @@ async fn reducer(mutation: Mutation) -> Result<(), ReducerError> {
     Ok(())
 }
 
-init_reducer!(Mutation, reducer);
+init_reducer!(reducer);

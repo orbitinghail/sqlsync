@@ -1,7 +1,5 @@
 // build task-reducer.wasm using: "cargo build --target wasm32-unknown-unknown --example task-reducer"
 
-use std::panic;
-
 use serde::{Deserialize, Serialize};
 use sqlsync_reducer::{execute, init_reducer, query, types::ReducerError};
 
@@ -62,7 +60,8 @@ async fn query_sort_after(id: i64) -> Result<f64, ReducerError> {
     }
 }
 
-async fn reducer(mutation: Mutation) -> Result<(), ReducerError> {
+async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
+    let mutation: Mutation = bincode::deserialize(&mutation)?;
     match mutation {
         Mutation::InitSchema => {
             execute!(
@@ -120,4 +119,4 @@ async fn reducer(mutation: Mutation) -> Result<(), ReducerError> {
     Ok(())
 }
 
-init_reducer!(Mutation, reducer);
+init_reducer!(reducer);

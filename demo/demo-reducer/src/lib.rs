@@ -4,14 +4,16 @@ use serde::{Deserialize, Serialize};
 use sqlsync_reducer::{execute, init_reducer, types::ReducerError};
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "type")]
 enum Mutation {
     InitSchema,
-    Incr,
-    Decr,
+    Incr { value: i32 },
+    Decr { value: i32 },
 }
 
+init_reducer!(reducer);
 async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
-    let mutation: Mutation = bincode::deserialize(&mutation)?;
+    let mutation: Mutation = serde_json::from_slice(&mutation[..])?;
 
     match mutation {
         Mutation::InitSchema => {
@@ -26,18 +28,20 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
             );
         }
 
-        Mutation::Incr => {
+        Mutation::Incr { value } => {
             execute!(
                 "INSERT INTO counter (id, value) VALUES (0, 0)
-                ON CONFLICT (id) DO UPDATE SET value = value + 1"
+                ON CONFLICT (id) DO UPDATE SET value = value + ?",
+                value
             )
             .await;
         }
 
-        Mutation::Decr => {
+        Mutation::Decr { value } => {
             execute!(
                 "INSERT INTO counter (id, value) VALUES (0, 0)
-                ON CONFLICT (id) DO UPDATE SET value = value - 1"
+                ON CONFLICT (id) DO UPDATE SET value = value - ?",
+                value
             )
             .await;
         }
@@ -45,5 +49,3 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
 
     Ok(())
 }
-
-init_reducer!(reducer);

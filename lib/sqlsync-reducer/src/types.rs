@@ -109,12 +109,12 @@ impl LogRecord {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ReducerError {
-    BincodeError(String),
-
     ConversionError {
         value: SqliteValue,
         target_type: String,
     },
+
+    Unknown(String),
 }
 
 impl Display for ReducerError {
@@ -123,11 +123,9 @@ impl Display for ReducerError {
     }
 }
 
-impl Error for ReducerError {}
-
-impl From<bincode::Error> for ReducerError {
-    fn from(e: bincode::Error) -> Self {
-        Self::BincodeError(e.to_string())
+impl<E: Error> From<E> for ReducerError {
+    fn from(e: E) -> Self {
+        Self::Unknown(e.to_string())
     }
 }
 

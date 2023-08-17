@@ -154,19 +154,17 @@ macro_rules! execute {
 
 #[macro_export]
 macro_rules! init_reducer {
-    // fn should be (Mutation) -> Future<Output = Result<(), ReducerError>>
-    ($mutation:ty, $fn:ident) => {
+    // fn should be (Vec<u8>) -> Future<Output = Result<(), ReducerError>>
+    ($fn:ident) => {
         #[no_mangle]
         pub fn ffi_reduce(
             mutation_ptr: sqlsync_reducer::guest_ffi::FFIBufPtr,
         ) -> sqlsync_reducer::guest_ffi::FFIBufPtr {
             let reactor = sqlsync_reducer::guest_reactor::reactor();
             let fbm = sqlsync_reducer::guest_ffi::fbm();
+            let mutation = fbm.consume(mutation_ptr);
 
-            reactor.spawn(Box::pin(async move {
-                let mutation: $mutation = sqlsync_reducer::guest_ffi::fbm().decode(mutation_ptr)?;
-                $fn(mutation).await
-            }));
+            reactor.spawn(Box::pin(async move { $fn(mutation).await }));
 
             let requests = reactor.step(None);
             fbm.encode(&requests).unwrap()
