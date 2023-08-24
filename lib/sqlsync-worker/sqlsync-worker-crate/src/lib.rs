@@ -9,16 +9,17 @@ static LOGGER: ConsoleLogger = ConsoleLogger;
 
 #[wasm_bindgen(typescript_custom_section)]
 const TYPESCRIPT_INTERFACE: &'static str = r#"
-type SqlValue = undefined | null | boolean | number | string;
+export type SqlValue = undefined | null | boolean | number | string;
+export type Row = { [key: string]: SqlValue };
 
 interface SqlSyncDocument {
+  query(sql: string, params: SqlValue[]): Row[];
   query<T>(sql: string, params: SqlValue[]): T[];
-  query(sql: string, params: SqlValue[]): object[];
 }
 "#;
 
 #[wasm_bindgen(start)]
-pub fn init() {
+pub fn main() {
     utils::set_panic_hook();
     log::set_logger(&LOGGER).unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -49,7 +50,8 @@ impl SqlSyncDocument {
         Ok(self.doc.mutate(mutation)?)
     }
 
-    #[wasm_bindgen]
+    // defined in typescript_custom_section for better param and result types
+    #[wasm_bindgen(skip_typescript)]
     pub fn query(&mut self, sql: String, params: Vec<JsValue>) -> WasmResult<Vec<js_sys::Object>> {
         Ok(self.doc.query(|tx| {
             let params = params_from_iter(params.iter().map(|v| JsValueToSql(v)));

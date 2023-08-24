@@ -1,0 +1,32 @@
+{
+  "name": "sqlsync-worker",
+  "version": "0.0.1",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/sqlsync-worker.umd.cjs",
+  "module": "./dist/sqlsync-worker.js",
+  "exports": {
+    ".": "./dist/main.js",
+    "./worker.js": "./dist/worker.js",
+    "./sqlsync.wasm": "./dist/assets/sqlsync_worker_crate_bg.wasm"
+  },
+  "types": "./dist/sqlsync-worker.d.ts",
+  "scripts": {
+    "dev": "vite",
+    "build-test-reducer": "cargo build -p test-reducer --target wasm32-unknown-unknown",
+    "build-wasm": "cd sqlsync-worker-crate && wasm-pack build --dev --target web",
+    "build-wasm-release": "cd sqlsync-worker-crate && wasm-pack build --release --target web",
+    "build": "pnpm run build-wasm && tsc && vite build",
+    "build-release": "pnpm run build-wasm-release && tsc && vite build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.5.4",
+    "@types/sharedworker": "^0.0.102",
+    "typescript": "^5.2.2",
+    "vite": "^4.4.9",
+    "vite-plugin-dts": "^3.5.2",
+    "vite-plugin-wasm-pack": "^0.1.12"
+  }
+}

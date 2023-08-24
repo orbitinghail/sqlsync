@@ -3,9 +3,6 @@
 use serde::{Deserialize, Serialize};
 use sqlsync_reducer::{execute, init_reducer, query, types::ReducerError};
 
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
 #[derive(Serialize, Deserialize, Debug)]
 enum Mutation {
     Set(String, String),

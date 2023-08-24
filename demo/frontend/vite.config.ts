@@ -1,12 +1,15 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
-import topLevelAwait from "vite-plugin-top-level-await";
-import wasm from "vite-plugin-wasm";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), wasm(), topLevelAwait()],
-  worker: {
-    plugins: [wasm(), topLevelAwait()],
+  plugins: [react()],
+  server: {
+    fs: {
+      allow: [
+        searchForWorkspaceRoot(process.cwd()),
+        "../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm",
+      ],
+    },
   },
 });

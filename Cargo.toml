@@ -1,11 +1,17 @@
 [workspace]
+resolver = "2"
 
 members = [
     "lib/sqlsync",
-    "lib/sqlsync-wasm",
+    "lib/sqlsync-worker/sqlsync-worker-crate",
+    "lib/sqlsync-worker/test-reducer",
     "lib/sqlsync-reducer",
     "lib/sqlite-vfs",
     "lib/testutil",
 
     "demo/demo-reducer",
 ]
+
+[profile.release]
+lto = true
+strip = "debuginfo"

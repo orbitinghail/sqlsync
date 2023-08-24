@@ -1,10 +1,8 @@
-// build: "cargo build --target wasm32-unknown-unknown -p demo-reducer"
-
 use serde::{Deserialize, Serialize};
 use sqlsync_reducer::{execute, init_reducer, types::ReducerError};
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "type")]
+#[serde(tag = "tag")]
 enum Mutation {
     InitSchema,
     Incr { value: i32 },

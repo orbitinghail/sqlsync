@@ -1,9 +1,7 @@
 {
-  "extends": "./tsconfig.json",
   "compilerOptions": {
     "composite": true,
-    "noEmit": false,
     "lib": ["ES2020", "WebWorker"]
   },
-  "include": ["worker"]
+  "include": ["src/worker.ts", "src/types.d.ts"]
 }

@@ -36,7 +36,7 @@ impl log::Log for ConsoleLogger {
             Level::Trace => console::debug_1,
         };
 
-        console_log(&format!("{}", record.args()).into());
+        console_log(&format!("sqlsync: {}", record.args()).into());
     }
 
     fn flush(&self) {}

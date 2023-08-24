@@ -1,5 +1,5 @@
 [package]
-name = "sqlsync-wasm"
+name = "sqlsync-worker-crate"
 version = "0.1.0"
 authors = ["Carl Sverre <carl@orbitinghail.dev>"]
 edition = "2018"
@@ -8,7 +8,7 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-wasm-bindgen = "0.2.87"
+wasm-bindgen = { version = "0.2.87", features = [] }
 js-sys = "0.3.64"
 log = { version = "0.4.19", features = ["std"] }
 anyhow = "1.0.71"
@@ -16,7 +16,7 @@ bincode = "1.3.3"
 thiserror = "1.0.43"
 serde = { version = "1.0.171", features = ["derive"] }
 
-sqlsync = { path = "../sqlsync" }
+sqlsync = { path = "../../sqlsync" }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`.
@@ -24,11 +24,7 @@ console_error_panic_hook = { version = "0.1.7" }
 
 [dependencies.web-sys]
 version = "0.3.64"
-features = ["console"]
-
-[dev-dependencies]
-wasm-bindgen-test = "0.3.37"
-testutil = { path = "../testutil" }
+features = ["console", "SharedWorkerGlobalScope", "MessageEvent", "MessagePort"]
 
 [package.metadata.wasm-pack.profile.dev]
 wasm-opt = false

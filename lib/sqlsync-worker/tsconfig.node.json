@@ -2,17 +2,11 @@
   "compilerOptions": {
     "composite": true,
     "skipLibCheck": true,
-    "module": "ESNext",
+    "module": "NodeNext",
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "types": ["node"]
   },
-  "include": [
-    // "./node_modules/sqlsync-wasm/sqlsync_wasm.d.ts",
-    "vite.config.ts",
-    "tailwind.config.js",
-    "vite-plugin-wasm.d.ts",
-    "postcss.config.js"
-  ]
+  "include": ["vite.config.ts"]
 }
