@@ -1,9 +1,8 @@
 # TASKS (start here)
-- libwasm
 - id
   - figure out which id abstraction to use, use it
 - opfs journal
-- file journal (perhaps s3 journal?)
+- s3 or durable functions journal
 - log compaction
 
 # Log compaction
@@ -32,13 +31,3 @@ Currently we send a fixed number of journal entries during each sync. This is
 probably fine for timelines, but not great for storage.
 
 It would be better to dynamically calculate the number of entries to sync based on some "weight" measurement. For example, the weight of storage entires could be the number of associated pages.
-
-# JS API + SharedWorker
-- sqlite + sqlsync + mutations should all run within a single (shared) web worker
-- one worker for all tabs/etc associated with the same origin
-- Document oriented model, create if not exists semantics
-- is it one worker per doc? or one worker overall?
-- does document init require net connection?
-    - document id can be client generated (dups rejected on eventual sync)
-    - timeline id can be client generated
-    - storage id == document id (although this breaks once we do compaction)

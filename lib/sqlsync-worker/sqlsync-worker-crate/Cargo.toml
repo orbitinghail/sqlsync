@@ -24,7 +24,7 @@ console_error_panic_hook = { version = "0.1.7" }
 
 [dependencies.web-sys]
 version = "0.3.64"
-features = ["console", "SharedWorkerGlobalScope", "MessageEvent", "MessagePort"]
+features = ["console"]
 
 [package.metadata.wasm-pack.profile.dev]
 wasm-opt = false
