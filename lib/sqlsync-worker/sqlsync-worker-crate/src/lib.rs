@@ -1,7 +1,9 @@
 mod utils;
 
+use std::convert::TryInto;
+
 use js_sys::Reflect;
-use sqlsync::{local::LocalDocument, sqlite::params_from_iter, Journal, JournalId, MemoryJournal};
+use sqlsync::{local::LocalDocument, sqlite::params_from_iter, Journal, MemoryJournal};
 use utils::{ConsoleLogger, JsValueFromSql, JsValueToSql, WasmError, WasmResult};
 use wasm_bindgen::prelude::*;
 
@@ -27,12 +29,12 @@ pub fn main() {
 
 #[wasm_bindgen]
 pub fn open(
-    doc_id: JournalId,
-    timeline_id: JournalId,
+    doc_id: String,
+    timeline_id: String,
     reducer_wasm_bytes: &[u8],
 ) -> WasmResult<SqlSyncDocument> {
-    let storage = MemoryJournal::open(doc_id)?;
-    let timeline = MemoryJournal::open(timeline_id)?;
+    let storage = MemoryJournal::open(doc_id.try_into()?)?;
+    let timeline = MemoryJournal::open(timeline_id.try_into()?)?;
 
     Ok(SqlSyncDocument {
         doc: LocalDocument::open(storage, timeline, reducer_wasm_bytes)?,

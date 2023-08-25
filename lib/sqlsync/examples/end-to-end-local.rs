@@ -6,8 +6,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use sqlsync::{
-    coordinator::CoordinatorDocument, local::LocalDocument, sqlite::Transaction, Journal, LsnRange,
-    MemoryJournal, RequestedLsnRange, Syncable,
+    coordinator::CoordinatorDocument, local::LocalDocument, sqlite::Transaction, Journal,
+    JournalId, LsnRange, MemoryJournal, RequestedLsnRange, Syncable,
 };
 
 #[derive(Debug)]
@@ -72,19 +72,19 @@ fn main() -> anyhow::Result<()> {
         .env()
         .init()?;
 
-    let doc_id = 1;
+    let doc_id = JournalId::new();
     // build task_reducer.wasm using: `cargo build --target wasm32-unknown-unknown --example task-reducer`
     let wasm_bytes =
         include_bytes!("../../../target/wasm32-unknown-unknown/debug/examples/task_reducer.wasm");
 
     let mut local = LocalDocument::open(
         MemoryJournal::open(doc_id)?,
-        MemoryJournal::open(10)?,
+        MemoryJournal::open(JournalId::new())?,
         &wasm_bytes[..],
     )?;
     let mut local2 = LocalDocument::open(
         MemoryJournal::open(doc_id)?,
-        MemoryJournal::open(11)?,
+        MemoryJournal::open(JournalId::new())?,
         &wasm_bytes[..],
     )?;
     let mut remote = CoordinatorDocument::open(MemoryJournal::open(doc_id)?, &wasm_bytes[..])?;

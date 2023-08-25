@@ -16,6 +16,7 @@ time = "0.3"
 wasmi = { version = "0.31.0" }
 thiserror = "1.0.43"
 serde = { version = "1.0.171", features = ["derive"] }
+uuid = { version = "1.4.1", features = ["v4", "serde"] }
 
 [dependencies.sqlsync-reducer]
 path = "../sqlsync-reducer"

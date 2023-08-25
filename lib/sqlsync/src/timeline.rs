@@ -10,7 +10,7 @@ use crate::{
 
 const TIMELINES_TABLE_SQL: &str = "
     CREATE TABLE IF NOT EXISTS __sqlsync_timelines (
-        id INTEGER PRIMARY KEY,
+        id BLOB PRIMARY KEY,
         lsn INTEGER NOT NULL
     )
 ";

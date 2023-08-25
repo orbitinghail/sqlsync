@@ -12,7 +12,7 @@ import {
 } from "./types";
 
 let booted = false;
-const docs = new Map<number, SqlSyncDocument>();
+const docs = new Map<string, SqlSyncDocument>();
 
 addEventListener("connect", (e: Event) => {
   let evt = e as MessageEvent;
@@ -70,26 +70,36 @@ async function handle_message(port: MessagePort, msg: WithId<SqlSyncRequest>) {
   let response: SqlSyncResponse<SqlSyncRequest> | ErrorResponse;
 
   console.log("sqlsync: received message", msg);
-
-  if (!booted) {
-    if (msg.tag === "boot") {
-      await handle_boot(msg.wasmUrl);
-      response = { tag: "booted" };
+  try {
+    if (!booted) {
+      if (msg.tag === "boot") {
+        await handle_boot(msg.wasmUrl);
+        response = { tag: "booted" };
+      } else {
+        response = {
+          tag: "error",
+          error: new Error(`received unexpected message`),
+        };
+      }
     } else {
-      response = { tag: "error", error: new Error(`received unknown message`) };
+      if (msg.tag === "boot") {
+        response = { tag: "booted" };
+      } else if (msg.tag === "open") {
+        response = await handle_open(msg);
+      } else if (msg.tag === "query") {
+        response = handle_query(msg);
+      } else if (msg.tag === "mutate") {
+        response = handle_mutate(msg);
+      } else {
+        response = {
+          tag: "error",
+          error: new Error(`received unknown message`),
+        };
+      }
     }
-  } else {
-    if (msg.tag === "boot") {
-      response = { tag: "booted" };
-    } else if (msg.tag === "open") {
-      response = await handle_open(msg);
-    } else if (msg.tag === "query") {
-      response = handle_query(msg);
-    } else if (msg.tag === "mutate") {
-      response = handle_mutate(msg);
-    } else {
-      response = { tag: "error", error: new Error(`received unknown message`) };
-    }
+  } catch (e) {
+    let error = e instanceof Error ? e : new Error(`error: ${e}`);
+    response = { tag: "error", error };
   }
 
   port.postMessage({ id: msg.id, ...response });

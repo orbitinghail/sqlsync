@@ -43,6 +43,10 @@ impl<J: Journal> LocalDocument<J> {
         })
     }
 
+    pub fn doc_id(&self) -> JournalId {
+        self.storage.source_id()
+    }
+
     pub fn mutate(&mut self, m: &[u8]) -> Result<()> {
         run_in_tx(&mut self.sqlite, |tx| self.reducer.apply(tx, &m))?;
         self.timeline.append(m)?;

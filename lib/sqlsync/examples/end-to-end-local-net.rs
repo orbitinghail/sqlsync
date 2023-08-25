@@ -19,8 +19,6 @@ use sqlsync::{Journal, JournalId, LsnRange};
 use serde::{Deserialize, Serialize};
 use sqlsync::{coordinator::CoordinatorDocument, positioned_io::PositionedReader, MemoryJournal};
 
-const DOC_ID: JournalId = 1;
-
 // TODO: this should be smarter, syncing 5 journal frames is not optimal in many cases
 const DEFAULT_REQUEST_LEN: usize = 5;
 
@@ -92,14 +90,14 @@ fn receive_bincode(socket: &mut TcpStream) -> io::Result<NetMsg> {
 
 fn protocol_hello_send(
     socket: &mut TcpStream,
-    doc: &mut impl Syncable,
+    doc: &mut LocalDocument<MemoryJournal>,
 ) -> anyhow::Result<RequestedLsnRange> {
     // send hello request
     send_bincode(
         socket,
         &NetMsg::HelloRequest {
             timeline_id: doc.source_id(),
-            storage_range: doc.sync_request(DOC_ID)?,
+            storage_range: doc.sync_request(doc.doc_id())?,
         },
     )?;
 
@@ -272,26 +270,42 @@ fn protocol_sync_receive<'a>(
     }
 }
 
-fn start_server(listener: TcpListener) -> anyhow::Result<()> {
+fn start_server<'a>(
+    listener: TcpListener,
+    doc_id: JournalId,
+    expected_clients: usize,
+    thread_scope: &'a thread::Scope<'a, '_>,
+) -> anyhow::Result<()> {
     let wasm_bytes = include_bytes!(
         "../../../target/wasm32-unknown-unknown/debug/examples/counter_reducer.wasm"
     );
 
     // build a ServerDocument and protect it with a mutex since multiple threads will be accessing it
-    let storage_journal = MemoryJournal::open(DOC_ID)?;
+    let storage_journal = MemoryJournal::open(doc_id)?;
     let coordinator = CoordinatorDocument::open(storage_journal, &wasm_bytes[..])?;
     let coordinator = Arc::new(Mutex::new(coordinator));
 
-    loop {
+    for _ in 0..expected_clients {
         let (socket, _) = listener.accept()?;
         let doc = coordinator.clone();
-        thread::spawn(move || match handle_client(doc, socket) {
+        thread_scope.spawn(move || match handle_client(doc, socket) {
             Ok(()) => {}
             Err(e) => {
+                // handle eof
+                match e.root_cause().downcast_ref::<io::Error>() {
+                    Some(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                        log::info!("handle_client: client disconnected");
+                        return;
+                    }
+                    _ => {}
+                }
+
                 log::error!("handle_client failed: {:?}", e);
             }
         });
     }
+
+    Ok(())
 }
 
 fn handle_client(
@@ -354,7 +368,7 @@ fn handle_client(
     }
 }
 
-fn start_client(addr: impl ToSocketAddrs) -> anyhow::Result<()> {
+fn start_client(addr: impl ToSocketAddrs, doc_id: JournalId) -> anyhow::Result<()> {
     let mut socket = TcpStream::connect(addr)?;
 
     let wasm_bytes = include_bytes!(
@@ -362,9 +376,9 @@ fn start_client(addr: impl ToSocketAddrs) -> anyhow::Result<()> {
     );
 
     // generate random timeline id and open doc
-    let timeline_id: JournalId = thread_rng().gen::<u8>().into();
+    let timeline_id = JournalId::new();
     let timeline_journal = MemoryJournal::open(timeline_id)?;
-    let storage_journal = MemoryJournal::open(DOC_ID)?;
+    let storage_journal = MemoryJournal::open(doc_id)?;
     let mut doc = LocalDocument::open(storage_journal, timeline_journal, &wasm_bytes[..])?;
 
     // initialize schema
@@ -377,7 +391,7 @@ fn start_client(addr: impl ToSocketAddrs) -> anyhow::Result<()> {
     // our demo client is very simple
     // every time we loop, first we check to see if we have any pending mutations to send the server
     // then after syncing to the server we block until we receive a sync request back
-    loop {
+    for _ in 0..3 {
         // check to see if we have pending mutations, and if so, send them
         log::info!("client({}): checking for pending mutations", timeline_id);
         if let Some(partial) = doc.sync_prepare(server_timeline_req)? {
@@ -445,6 +459,8 @@ fn start_client(addr: impl ToSocketAddrs) -> anyhow::Result<()> {
         // sleep a bit
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
+
+    Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -455,10 +471,13 @@ fn main() -> anyhow::Result<()> {
 
     let addr = "127.0.0.1:8080";
     let listener = TcpListener::bind(addr)?;
+    let doc_id = JournalId::new();
 
     thread::scope(|s| {
-        s.spawn(move || start_server(listener).expect("server failed"));
-        s.spawn(move || start_client(addr).expect("client failed"));
+        let server_scope = s.clone();
+        s.spawn(move || start_server(listener, doc_id, 2, server_scope).expect("server failed"));
+        s.spawn(move || start_client(addr, doc_id).expect("client failed"));
+        s.spawn(move || start_client(addr, doc_id).expect("client failed"));
     });
 
     Ok(())

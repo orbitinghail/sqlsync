@@ -8,7 +8,7 @@ use sqlsync::{
         types::{FromSqlError, ToSqlOutput, Value, ValueRef},
         ToSql,
     },
-    JournalError,
+    JournalError, JournalIdParseError,
 };
 use thiserror::Error;
 use wasm_bindgen::JsValue;
@@ -58,6 +58,9 @@ pub enum WasmError {
     #[error(transparent)]
     FromSqlError(#[from] FromSqlError),
 
+    #[error(transparent)]
+    IdParseError(#[from] JournalIdParseError),
+
     #[error("JsValue error: {0:?}")]
     JsError(JsValue),
 }
@@ -69,6 +72,7 @@ impl WasmError {
             Self::JournalError(e) => e.into(),
             Self::SqliteError(e) => e.into(),
             Self::FromSqlError(e) => e.into(),
+            Self::IdParseError(e) => e.into(),
             Self::JsError(e) => anyhow::anyhow!("{:?}", e),
         }
     }
@@ -87,6 +91,7 @@ impl From<WasmError> for JsValue {
             WasmError::JournalError(e) => JsValue::from_str(&format!("{:?}", e)),
             WasmError::SqliteError(e) => JsValue::from_str(&format!("{:?}", e)),
             WasmError::FromSqlError(e) => JsValue::from_str(&format!("{:?}", e)),
+            WasmError::IdParseError(e) => JsValue::from_str(&format!("{:?}", e)),
             WasmError::JsError(e) => e,
         }
     }
@@ -99,6 +104,7 @@ impl From<WasmError> for io::Error {
             WasmError::JournalError(e) => io::Error::new(io::ErrorKind::Other, e),
             WasmError::SqliteError(e) => io::Error::new(io::ErrorKind::Other, e),
             WasmError::FromSqlError(e) => io::Error::new(io::ErrorKind::Other, e),
+            WasmError::IdParseError(e) => io::Error::new(io::ErrorKind::Other, e),
             WasmError::JsError(e) => io::Error::new(io::ErrorKind::Other, format!("{:?}", e)),
         }
     }

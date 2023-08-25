@@ -7,6 +7,8 @@ const DEMO_REDUCER_URL = new URL(
   "../../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm",
   import.meta.url
 );
+const DOC_ID = crypto.randomUUID();
+const TIMELINE_ID = crypto.randomUUID();
 
 import init from "sqlsync-worker";
 import wasmUrl from "sqlsync-worker/sqlsync.wasm?url";
@@ -14,9 +16,11 @@ import workerUrl from "sqlsync-worker/worker.js?url";
 
 const sqlsync = await init(workerUrl, wasmUrl);
 
-await sqlsync.open(1, 1, DEMO_REDUCER_URL);
+await sqlsync.open(DOC_ID, TIMELINE_ID, DEMO_REDUCER_URL);
 
-console.log(await sqlsync.query(1, "SELECT 'bye'", []));
+console.log(await sqlsync.query(DOC_ID, "SELECT 'bye'", []));
+
+// TODO: Figure out how to make sure errors are propagated out of the worker
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

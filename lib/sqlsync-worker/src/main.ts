@@ -54,8 +54,8 @@ export class SqlSync {
   }
 
   async open(
-    docId: number,
-    timelineId: number,
+    docId: string,
+    timelineId: string,
     reducerUrl: string | URL
   ): Promise<void> {
     await this.send({
@@ -66,12 +66,12 @@ export class SqlSync {
     });
   }
 
-  async query(docId: number, sql: string, params: SqlValue[]): Promise<Row[]> {
+  async query(docId: string, sql: string, params: SqlValue[]): Promise<Row[]> {
     let { rows } = await this.send({ tag: "query", docId, sql, params });
     return rows;
   }
 
-  async mutate(docId: number, mutation: Uint8Array): Promise<void> {
+  async mutate(docId: string, mutation: Uint8Array): Promise<void> {
     await this.send({ tag: "mutate", docId, mutation });
   }
 }

@@ -21,17 +21,17 @@ export type BootResponse = { tag: "booted" };
 
 export type Open = Req<
   "open",
-  { docId: number; timelineId: number; reducerUrl: string }
+  { docId: string; timelineId: string; reducerUrl: string }
 >;
 export type OpenResponse = Res<"open", {}>;
 
 export type Query = Req<
   "query",
-  { docId: number; sql: string; params: SqlValue[] }
+  { docId: string; sql: string; params: SqlValue[] }
 >;
 export type QueryResponse = Res<"query", { rows: Row[] }>;
 
-export type Mutate = Req<"mutate", { docId: number; mutation: Uint8Array }>;
+export type Mutate = Req<"mutate", { docId: string; mutation: Uint8Array }>;
 export type MutateResponse = Res<"mutate", {}>;
 
 export type ErrorResponse = Res<"error", { error: Error }>;
