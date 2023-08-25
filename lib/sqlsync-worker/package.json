@@ -22,7 +22,7 @@
     "build-release": "pnpm run build-wasm-release && tsc && vite build"
   },
   "devDependencies": {
-    "@types/node": "^20.5.4",
+    "@types/node": "^20.5.6",
     "@types/sharedworker": "^0.0.102",
     "typescript": "^5.2.2",
     "vite": "^4.4.9",
