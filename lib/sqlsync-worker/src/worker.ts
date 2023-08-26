@@ -14,6 +14,18 @@ import {
 let booted = false;
 const docs = new Map<string, SqlSyncDocument>();
 
+// const websocket = new WebSocket("ws://localhost:8787/doc/1234");
+const websocket = new WebSocket(
+  "wss://sqlsync.orbitinghail.workers.dev/doc/1234"
+);
+websocket.binaryType = "arraybuffer";
+
+websocket.onopen = () => {
+  console.log("sqlsync: websocket opened");
+  let data = Uint8Array.from([1, 2, 3, 4]);
+  websocket.send(data);
+};
+
 addEventListener("connect", (e: Event) => {
   let evt = e as MessageEvent;
   let port = evt.ports[0];

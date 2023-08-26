@@ -9,7 +9,7 @@ mod vfs;
 
 pub mod coordinator;
 pub mod local;
-
+pub mod replication;
 pub mod positioned_io;
 pub mod timeline;
 pub mod unixtime;

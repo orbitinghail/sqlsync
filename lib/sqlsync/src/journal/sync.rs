@@ -36,7 +36,7 @@ pub enum SyncError {
 pub type SyncResult<T> = Result<T, SyncError>;
 
 pub trait Syncable {
-    type Cursor<'a>: Cursor
+    type Cursor<'a>: Cursor + PositionedReader
     where
         Self: 'a;
 

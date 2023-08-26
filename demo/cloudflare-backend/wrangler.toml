@@ -1,6 +1,13 @@
-name = "sqlsync-cloudflare-backend"
+name = "sqlsync"
 main = "build/worker/shim.mjs"
 compatibility_date = "2023-03-22"
 
 [build]
 command = "cargo install -q worker-build && worker-build --release"
+
+[durable_objects]
+bindings = [{ name = "COORDINATOR", class_name = "DocumentCoordinator" }]
+
+[[migrations]]
+tag = "2023-08-25"
+new_classes = ["DocumentCoordinator"]

@@ -7,4 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
+futures.workspace = true
 worker.workspace = true
+console_error_panic_hook.workspace = true
+sqlsync = { path = "../../lib/sqlsync" }
