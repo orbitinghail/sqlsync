@@ -2,25 +2,17 @@ use std::io;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::net::ToSocketAddrs;
-use std::sync::MutexGuard;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use bincode::ErrorKind;
-use rand::thread_rng;
-use rand::Rng;
 use sqlsync::local::LocalDocument;
-use sqlsync::Cursor;
-use sqlsync::JournalPartial;
-use sqlsync::RequestedLsnRange;
-use sqlsync::Syncable;
-use sqlsync::{Journal, JournalId, LsnRange};
+use sqlsync::replication::ReplicationMsg;
+use sqlsync::replication::ReplicationProtocol;
+use sqlsync::{Journal, JournalId};
 
 use serde::{Deserialize, Serialize};
-use sqlsync::{coordinator::CoordinatorDocument, positioned_io::PositionedReader, MemoryJournal};
-
-// TODO: this should be smarter, syncing 5 journal frames is not optimal in many cases
-const DEFAULT_REQUEST_LEN: usize = 5;
+use sqlsync::{coordinator::CoordinatorDocument, MemoryJournal};
 
 fn serialize_into<W, T: ?Sized>(writer: W, value: &T) -> io::Result<()>
 where
@@ -50,224 +42,19 @@ where
     }
 }
 
+fn send_msg(socket: &mut TcpStream, msg: &ReplicationMsg) -> io::Result<()> {
+    serialize_into(socket, msg)
+}
+
+fn receive_msg(socket: &mut TcpStream) -> io::Result<ReplicationMsg> {
+    deserialize_from(socket)
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 enum Mutation {
     InitSchema,
     Incr,
     Decr,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-enum NetMsg {
-    HelloRequest {
-        timeline_id: JournalId,
-        storage_range: RequestedLsnRange,
-    },
-    HelloResponse {
-        timeline_range: RequestedLsnRange,
-    },
-    SyncStart {
-        journal_id: JournalId,
-        range: LsnRange,
-        frames: usize,
-    },
-    SyncStartAck,
-    SyncFrame {
-        len: usize,
-    },
-    SyncAck {
-        range: LsnRange,
-    },
-}
-
-fn send_bincode(socket: &mut TcpStream, msg: &NetMsg) -> io::Result<()> {
-    serialize_into(socket, msg)
-}
-
-fn receive_bincode(socket: &mut TcpStream) -> io::Result<NetMsg> {
-    deserialize_from(socket)
-}
-
-fn protocol_hello_send(
-    socket: &mut TcpStream,
-    doc: &mut LocalDocument<MemoryJournal>,
-) -> anyhow::Result<RequestedLsnRange> {
-    // send hello request
-    send_bincode(
-        socket,
-        &NetMsg::HelloRequest {
-            timeline_id: doc.source_id(),
-            storage_range: doc.sync_request(doc.doc_id())?,
-        },
-    )?;
-
-    // wait for hello response
-    let msg = receive_bincode(socket)?;
-    match msg {
-        NetMsg::HelloResponse { timeline_range } => Ok(timeline_range),
-        _ => anyhow::bail!("expected HelloResponse, got {:?}", msg),
-    }
-}
-
-fn protocol_hello_receive(
-    socket: &mut TcpStream,
-    doc: &mut MutexGuard<'_, impl Syncable>,
-) -> anyhow::Result<RequestedLsnRange> {
-    // wait for hello request
-    let msg = receive_bincode(socket)?;
-    match msg {
-        NetMsg::HelloRequest {
-            timeline_id,
-            storage_range,
-        } => {
-            // send hello response
-            send_bincode(
-                socket,
-                &NetMsg::HelloResponse {
-                    timeline_range: doc.sync_request(timeline_id)?,
-                },
-            )?;
-
-            Ok(storage_range)
-        }
-        _ => anyhow::bail!("expected HelloRequest, got {:?}", msg),
-    }
-}
-
-fn protocol_sync_send(
-    socket: &mut TcpStream,
-    partial: JournalPartial<impl Cursor + PositionedReader>,
-) -> anyhow::Result<LsnRange> {
-    // announce that we are starting a Sync
-    send_bincode(
-        socket,
-        &NetMsg::SyncStart {
-            journal_id: partial.id(),
-            range: partial.range(),
-            frames: partial.len(),
-        },
-    )?;
-
-    // XXX: it's possible that the other side concurrently sends a SyncStart, for now we just panic
-    assert!(
-        matches!(receive_bincode(socket)?, NetMsg::SyncStartAck),
-        "detected concurrent send"
-    );
-
-    // send each frame
-    let mut cursor = partial.into_read_partial().into_cursor();
-    while cursor.advance()? {
-        let len = cursor.size()?;
-        send_bincode(socket, &NetMsg::SyncFrame { len })?;
-
-        io::copy(&mut cursor, socket)?;
-    }
-
-    // wait for the other side to acknowledge the sync
-    let msg = receive_bincode(socket)?;
-    match msg {
-        NetMsg::SyncAck { range } => Ok(range),
-        _ => anyhow::bail!("expected SyncAck, got {:?}", msg),
-    }
-}
-
-struct SyncReceiveCursor<'a> {
-    socket: &'a mut TcpStream,
-    frames: usize,
-
-    // current frame info
-    pos: usize,
-    len: usize,
-}
-
-impl<'a> SyncReceiveCursor<'a> {
-    fn new(socket: &'a mut TcpStream, frames: usize) -> Self {
-        Self {
-            socket,
-            frames,
-            pos: 0,
-            len: 0,
-        }
-    }
-}
-
-impl<'a> Cursor for SyncReceiveCursor<'a> {
-    fn advance(&mut self) -> io::Result<bool> {
-        if self.frames == 0 {
-            return Ok(false);
-        }
-
-        // error if the previous frame wasn't fully consumed
-        if self.pos != self.len {
-            return Err(
-                io::Error::new(io::ErrorKind::Other, "previous frame was not consumed").into(),
-            );
-        }
-
-        let msg = receive_bincode(self.socket)?;
-        match msg {
-            NetMsg::SyncFrame { len } => {
-                self.frames -= 1;
-                self.pos = 0;
-                self.len = len;
-                Ok(true)
-            }
-            _ => Err(io::Error::new(io::ErrorKind::Other, "expected SyncFrame, got {:?}").into()),
-        }
-    }
-
-    fn remaining(&self) -> usize {
-        self.frames
-    }
-}
-
-impl<'a> io::Read for SyncReceiveCursor<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let limit = self.len - self.pos;
-        if limit == 0 {
-            return Ok(0);
-        }
-
-        let max = limit.min(buf.len());
-        let n = self.socket.read(&mut buf[..max])?;
-        assert!(n <= limit, "read more than expected");
-
-        // update frame_remaining
-        self.pos += n;
-
-        Ok(n)
-    }
-}
-
-fn protocol_sync_receive<'a>(
-    socket: &'a mut TcpStream,
-    sync_start: NetMsg,
-) -> anyhow::Result<JournalPartial<SyncReceiveCursor<'a>>> {
-    if let NetMsg::SyncStart {
-        journal_id,
-        range,
-        frames,
-    } = sync_start
-    {
-        log::info!(
-            "sync_receive: journal {} with {} frames and {:?} range",
-            journal_id,
-            frames,
-            range
-        );
-
-        // send a SyncStartAck
-        send_bincode(socket, &NetMsg::SyncStartAck)?;
-
-        // return iterator over frames
-        Ok(JournalPartial::new(
-            journal_id,
-            range,
-            SyncReceiveCursor::new(socket, frames),
-        ))
-    } else {
-        anyhow::bail!("expected SyncStart, got {:?}", sync_start)
-    }
 }
 
 fn start_server<'a>(
@@ -286,6 +73,7 @@ fn start_server<'a>(
     let coordinator = Arc::new(Mutex::new(coordinator));
 
     for _ in 0..expected_clients {
+        log::info!("server: waiting for client connection");
         let (socket, _) = listener.accept()?;
         let doc = coordinator.clone();
         thread_scope.spawn(move || match handle_client(doc, socket) {
@@ -293,7 +81,10 @@ fn start_server<'a>(
             Err(e) => {
                 // handle eof
                 match e.root_cause().downcast_ref::<io::Error>() {
-                    Some(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                    Some(err)
+                        if err.kind() == io::ErrorKind::UnexpectedEof
+                            || err.kind() == io::ErrorKind::ConnectionReset =>
+                    {
                         log::info!("handle_client: client disconnected");
                         return;
                     }
@@ -313,62 +104,68 @@ fn handle_client(
     mut socket: TcpStream,
 ) -> anyhow::Result<()> {
     log::info!("server: received client connection");
-    let mut client_storage_req = {
-        let mut doc = doc.lock().expect("poisoned lock");
-        protocol_hello_receive(&mut socket, &mut doc)?
-    };
-    log::info!(
-        "server: completed hello, client requests storage range: {:?}",
-        client_storage_req
-    );
+    let mut protocol = ReplicationProtocol::new();
 
-    // our demo server is very simple
-    // every time we loop, first we block on the next sync request from the client
-    // then after we receive that, we check to see if we have anything to send
+    macro_rules! unlock {
+        (|$doc:ident| $block:block) => {{
+            let mut guard = $doc.lock().expect("poisoned lock");
+            let $doc = &mut *guard;
+            $block
+        }};
+
+        (|$doc:ident| $expr:expr) => {{
+            unlock!(|$doc| { $expr })
+        }};
+    }
+
+    // send start message
+    send_msg(&mut socket, unlock!(|doc| &protocol.start(doc)))?;
+
+    // handle start from client
+    while !protocol.initialized() {
+        let msg = receive_msg(&mut socket)?;
+        log::info!("server: received {:?}", msg);
+        if let Some(resp) = unlock!(|doc| protocol.handle(doc, msg, &mut socket)?) {
+            log::info!("server: sending {:?}", resp);
+            send_msg(&mut socket, &resp)?;
+        }
+    }
+
+    log::info!("server: initialized connection to client");
+
+    let mut num_steps = 0;
+
     loop {
-        log::info!("server: waiting for sync request from client");
-        let msg = receive_bincode(&mut socket)?;
-        match msg {
-            msg @ NetMsg::SyncStart { .. } => {
-                let mut doc = doc.lock().expect("poisoned lock");
-                let partial = protocol_sync_receive(&mut socket, msg)?;
-                let timeline_id = partial.id();
-                let range = doc.sync_receive(partial)?;
-                send_bincode(&mut socket, &NetMsg::SyncAck { range })?;
-                log::info!(
-                    "server: received sync from client {}, new range: {:?}",
-                    timeline_id,
-                    range
-                );
+        let msg = receive_msg(&mut socket)?;
+        log::info!("server: received {:?}", msg);
+
+        if let Some(resp) = unlock!(|doc| protocol.handle(doc, msg, &mut socket)?) {
+            log::info!("server: sending {:?}", resp);
+            send_msg(&mut socket, &resp)?;
+        }
+
+        // step after every message
+        num_steps += 1;
+        log::info!("server: stepping doc (steps: {})", num_steps);
+        unlock!(|doc| doc.step()?);
+
+        // sync back to the client if needed
+        unlock!(|doc| {
+            if let Some((msg, mut reader)) = protocol.sync(doc)? {
+                log::info!("server: syncing to client: {:?}", msg);
+                send_msg(&mut socket, &msg)?;
+                // write the frame
+                io::copy(&mut reader, &mut socket)?;
             }
-            msg => todo!("handle {:?}", msg),
-        }
-
-        // step the server
-        {
-            let mut doc = doc.lock().expect("poisoned lock");
-            log::info!("server: stepping doc");
-            doc.step()?
-        }
-
-        // check to see if we have pending changes, and if so, send them
-        log::info!("server: checking for pending changes");
-        {
-            let mut doc = doc.lock().expect("poisoned lock");
-            if let Some(partial) = doc.sync_prepare(client_storage_req)? {
-                log::info!("server: syncing storage {:?} to client", partial.range());
-                let range = protocol_sync_send(&mut socket, partial)?;
-                client_storage_req = range.request_next(DEFAULT_REQUEST_LEN);
-                log::info!("server: received sync response {:?}", range);
-            }
-        }
-
-        // sleep a bit
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        });
     }
 }
 
-fn start_client(addr: impl ToSocketAddrs, doc_id: JournalId) -> anyhow::Result<()> {
+fn start_client(
+    addr: impl ToSocketAddrs,
+    num_clients: usize,
+    doc_id: JournalId,
+) -> anyhow::Result<()> {
     let mut socket = TcpStream::connect(addr)?;
 
     let wasm_bytes = include_bytes!(
@@ -384,81 +181,117 @@ fn start_client(addr: impl ToSocketAddrs, doc_id: JournalId) -> anyhow::Result<(
     // initialize schema
     doc.mutate(&bincode::serialize(&Mutation::InitSchema)?)?;
 
-    // begin hello protocol
-    log::info!("client({}): starting hello protocol", timeline_id);
-    let mut server_timeline_req = protocol_hello_send(&mut socket, &mut doc)?;
+    let mut protocol = ReplicationProtocol::new();
 
-    // our demo client is very simple
-    // every time we loop, first we check to see if we have any pending mutations to send the server
-    // then after syncing to the server we block until we receive a sync request back
-    for _ in 0..3 {
-        // check to see if we have pending mutations, and if so, send them
-        log::info!("client({}): checking for pending mutations", timeline_id);
-        if let Some(partial) = doc.sync_prepare(server_timeline_req)? {
-            log::info!(
-                "client({}): syncing timeline {:?} to server",
-                timeline_id,
-                partial.range()
-            );
-            let range = protocol_sync_send(&mut socket, partial)?;
-            server_timeline_req = range.request_next(DEFAULT_REQUEST_LEN);
-            log::info!(
-                "client({}): received sync response {:?}",
-                timeline_id,
-                range
-            );
+    // send start message
+    send_msg(&mut socket, &protocol.start(&mut doc))?;
+
+    // handle start from server
+    let msg = receive_msg(&mut socket)?;
+    log::info!("client({}): received {:?}", timeline_id, msg);
+
+    if let Some(resp) = protocol.handle(&mut doc, msg, &mut socket)? {
+        log::info!("client({}): sending {:?}", timeline_id, resp);
+        send_msg(&mut socket, &resp)?;
+    }
+
+    log::info!("client({}): initialized connection to server", timeline_id);
+
+    // the amount of mutations we will send the server
+    let total_mutations = 10 as usize;
+    let mut remaining_mutations = total_mutations;
+
+    // switch to nonblocking mode for the core client loop
+    socket.set_nonblocking(true)?;
+
+    loop {
+        loop {
+            let msg = match receive_msg(&mut socket) {
+                Ok(msg) => msg,
+                Err(err) => {
+                    match err.kind() {
+                        io::ErrorKind::WouldBlock => {
+                            // no more messages
+                            break;
+                        }
+                        _ => return Err(err.into()),
+                    }
+                }
+            };
+            log::info!("client({}): received {:?}", timeline_id, msg);
+
+            if let Some(resp) = protocol.handle(&mut doc, msg, &mut socket)? {
+                log::info!("client({}): sending {:?}", timeline_id, resp);
+                send_msg(&mut socket, &resp)?;
+            }
         }
 
-        // randomly run a mutation
-        {
-            // randomly pick between Mutation::Incr and Mutation::Decr
-            let mutation = if thread_rng().gen_bool(0.5) {
-                Mutation::Incr
-            } else {
-                Mutation::Decr
-            };
-            log::info!("client({}): running mutation {:?}", timeline_id, mutation);
-            doc.query(|tx| {
-                let mut stmt = tx.prepare("select value from counter")?;
-                let rows: Result<Vec<_>, _> = stmt
-                    .query_map([], |row| Ok(row.get::<_, Option<i64>>(0)?))?
-                    .collect();
+        // trigger a rebase if needed
+        doc.rebase()?;
 
-                log::info!("client({}): counter values: {:?}", timeline_id, rows?);
+        if remaining_mutations > 0 {
+            log::info!("client({}): running incr", timeline_id);
+            doc.mutate(&bincode::serialize(&Mutation::Incr)?)?;
+            remaining_mutations -= 1;
+        }
+
+        // sync pending mutations to the server
+        if protocol.initialized() {
+            if let Some((msg, mut reader)) = protocol.sync(&mut doc)? {
+                log::info!("client({}): syncing to server", timeline_id);
+                send_msg(&mut socket, &msg)?;
+                // write the frame
+                io::copy(&mut reader, &mut socket)?;
+            }
+        }
+
+        let mut all_mutations_applied = false;
+        log::info!("client({}): QUERYING STATE", timeline_id);
+        doc.query(|tx| {
+            tx.query_row("select value from counter", [], |row| {
+                let value: Option<i32> = row.get(0)?;
+                log::info!("client({}): counter value: {:?}", timeline_id, value);
                 Ok(())
             })?;
-            doc.mutate(&bincode::serialize(&mutation)?)?;
-        }
 
-        // wait for the server to send us a sync request
-        log::info!(
-            "client({}): waiting for sync request from server",
-            timeline_id
-        );
-        match receive_bincode(&mut socket)? {
-            msg @ NetMsg::SyncStart { .. } => {
-                log::info!("client({}): received sync request {:?}", timeline_id, msg);
-                let partial = protocol_sync_receive(&mut socket, msg)?;
-                let range = doc.sync_receive(partial)?;
-                send_bincode(&mut socket, &NetMsg::SyncAck { range })?;
-            }
-            msg => todo!("handle {:?}", msg),
-        }
-
-        {
-            log::info!("client({}): QUERYING STATE", timeline_id);
-            doc.query(|tx| {
-                Ok(tx.query_row("select value from counter", [], |row| {
-                    let value: Option<i32> = row.get(0)?;
-                    log::info!("client({}): counter value: {:?}", timeline_id, value);
-                    Ok(())
-                })?)
+            let mut stmt = tx.prepare("select lsn from __sqlsync_timelines")?;
+            let mut num_rows = 0;
+            let mut iter = stmt.query_map([], |r| {
+                num_rows += 1;
+                Ok(r.get::<_, usize>(0)?)
             })?;
+            all_mutations_applied = iter.all(|x| x == Ok(total_mutations)) && num_rows > 0;
+
+            Ok(())
+        })?;
+
+        if all_mutations_applied {
+            break;
         }
 
         // sleep a bit
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
+
+    // final query, value should be total_mutations * num_clients
+    doc.query(|tx| {
+        tx.query_row_and_then("select value from counter", [], |row| {
+            let value: Option<usize> = row.get(0)?;
+            log::info!("client({}): counter value: {:?}", timeline_id, value);
+            if value != Some(total_mutations * num_clients) {
+                return Err(anyhow::anyhow!(
+                    "client({}): counter value is incorrect: {:?}, expected {}",
+                    timeline_id,
+                    value,
+                    total_mutations * num_clients
+                ));
+            }
+            Ok(())
+        })?;
+        Ok(())
+    })?;
+
+    log::info!("client({}): closing connection", timeline_id);
 
     Ok(())
 }
@@ -475,9 +308,15 @@ fn main() -> anyhow::Result<()> {
 
     thread::scope(|s| {
         let server_scope = s.clone();
-        s.spawn(move || start_server(listener, doc_id, 2, server_scope).expect("server failed"));
-        s.spawn(move || start_client(addr, doc_id).expect("client failed"));
-        s.spawn(move || start_client(addr, doc_id).expect("client failed"));
+        let num_clients = 2;
+
+        s.spawn(move || {
+            start_server(listener, doc_id, num_clients, server_scope).expect("server failed")
+        });
+
+        for _ in 0..num_clients {
+            s.spawn(move || start_client(addr, num_clients, doc_id).expect("client failed"));
+        }
     });
 
     Ok(())

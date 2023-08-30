@@ -1,17 +1,12 @@
 use std::fmt::{Debug, Formatter};
 use std::io;
 
-use crate::lsn::{Lsn, LsnRange, RequestedLsnRange, SatisfyError};
+use crate::lsn::{Lsn, LsnRange};
 use crate::positioned_io::PositionedReader;
 use crate::{JournalError, Serializable};
 
-use super::sync::JournalPartial;
-use super::{
-    Cursor, Journal, JournalId, JournalResult, Scannable, SyncError, SyncResult, Syncable,
-};
-
-// TODO: this should be smarter, syncing 5 journal frames is not optimal in many cases
-const DEFAULT_REQUEST_LEN: usize = 5;
+use super::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
+use super::{Cursor, Journal, JournalId, JournalResult, Scannable};
 
 pub enum MemoryJournal {
     Empty {
@@ -51,6 +46,13 @@ impl Journal for MemoryJournal {
         match self {
             Self::Empty { id, .. } => *id,
             Self::NonEmpty { id, .. } => *id,
+        }
+    }
+
+    fn range(&self) -> Option<LsnRange> {
+        match self {
+            MemoryJournal::Empty { .. } => None,
+            MemoryJournal::NonEmpty { range, .. } => Some(*range),
         }
     }
 
@@ -157,6 +159,10 @@ impl<'a> Cursor for MemoryScanCursor<'a> {
     fn remaining(&self) -> usize {
         self.slice.len()
     }
+
+    fn into_rev(self) -> Self {
+        self.reverse()
+    }
 }
 
 impl<'a> PositionedReader for MemoryScanCursor<'a> {
@@ -187,13 +193,6 @@ impl Scannable for MemoryJournal {
         }
     }
 
-    fn scan_rev<'a>(&'a self) -> Self::Cursor<'a> {
-        match self {
-            Self::Empty { .. } => MemoryScanCursor::empty(),
-            Self::NonEmpty { data, .. } => MemoryScanCursor::new(data).reverse(),
-        }
-    }
-
     fn scan_range<'a>(&'a self, range: LsnRange) -> Self::Cursor<'a> {
         match self {
             Self::Empty { .. } => MemoryScanCursor::empty(),
@@ -212,8 +211,8 @@ impl Scannable for MemoryJournal {
     }
 }
 
-impl Syncable for MemoryJournal {
-    type Cursor<'a> = MemoryScanCursor<'a>
+impl ReplicationSource for MemoryJournal {
+    type Reader<'a> = &'a [u8]
     where
         Self: 'a;
 
@@ -221,104 +220,82 @@ impl Syncable for MemoryJournal {
         self.id()
     }
 
-    fn sync_prepare<'a>(
-        &'a mut self,
-        req: RequestedLsnRange,
-    ) -> SyncResult<Option<JournalPartial<Self::Cursor<'a>>>> {
+    fn read_lsn<'a>(&'a self, lsn: Lsn) -> io::Result<Option<Self::Reader<'a>>> {
         match self {
             MemoryJournal::Empty { .. } => Ok(None),
-            MemoryJournal::NonEmpty {
-                id, range, data, ..
-            } => range.satisfy(req).map_or_else(
-                |err| match err {
-                    SatisfyError::Pending => Ok(None),
-                    SatisfyError::Impossible { .. } => Err(SyncError::FailedToPrepareRequest(err)),
-                },
-                |intersection_range| {
-                    let offsets = range.intersection_offsets(&intersection_range);
-                    Ok(Some(JournalPartial::new(
-                        *id,
-                        intersection_range,
-                        MemoryScanCursor::new(&data[offsets]),
-                    )))
-                },
-            ),
+            MemoryJournal::NonEmpty { range, data, .. } => match range.offset(lsn) {
+                None => Ok(None),
+                Some(offset) => Ok(Some(&data[offset][..])),
+            },
         }
     }
+}
 
-    fn sync_request(&mut self, id: JournalId) -> SyncResult<RequestedLsnRange> {
+impl ReplicationDestination for MemoryJournal {
+    fn range(&mut self, id: JournalId) -> Result<Option<LsnRange>, ReplicationError> {
         if id != self.id() {
-            return Err(SyncError::WrongJournal {
-                from_id: id,
-                self_id: self.id(),
-            });
+            return Err(ReplicationError::UnknownJournal(id));
         }
-
         match self {
-            MemoryJournal::Empty { .. } => Ok(RequestedLsnRange::new(0, DEFAULT_REQUEST_LEN)),
-            MemoryJournal::NonEmpty { range, .. } => Ok(range.request_next(DEFAULT_REQUEST_LEN)),
+            MemoryJournal::Empty { .. } => Ok(None),
+            MemoryJournal::NonEmpty { range, .. } => Ok(Some(*range)),
         }
     }
 
-    fn sync_receive<S>(&mut self, partial: JournalPartial<S>) -> SyncResult<LsnRange>
+    fn write_lsn<R>(
+        &mut self,
+        id: JournalId,
+        lsn: Lsn,
+        reader: &mut R,
+    ) -> Result<(), ReplicationError>
     where
-        S: Cursor + io::Read,
+        R: io::Read,
     {
-        if partial.id() != self.id() {
-            return Err(SyncError::WrongJournal {
-                from_id: partial.id(),
-                self_id: self.id(),
-            });
+        if id != self.id() {
+            return Err(ReplicationError::UnknownJournal(id));
         }
 
-        let partial_range = partial.range();
-        let mut partial_data = Vec::with_capacity(partial.len());
-        let mut cursor = partial.into_cursor();
-        while cursor.advance()? {
-            let mut buf = vec![];
-            cursor.read_to_end(&mut buf)?;
-            partial_data.push(buf);
-        }
+        let mut frame_data = Vec::new();
+        reader.read_to_end(&mut frame_data)?;
 
         match self {
             MemoryJournal::Empty { id, nextlsn } => {
-                // ensure that nextlsn is contained by partial.range()
-                if !partial_range.contains(*nextlsn) {
-                    return Err(SyncError::RangesMustBeContiguous {
-                        journal_debug: format!("{:?}", self),
-                        partial_range,
+                if lsn != *nextlsn {
+                    return Err(ReplicationError::NonContiguousLsn {
+                        received: lsn,
+                        range: LsnRange::new(*nextlsn, *nextlsn),
                     });
                 }
-
                 *self = MemoryJournal::NonEmpty {
                     id: *id,
-                    range: partial_range,
-                    data: partial_data,
+                    range: LsnRange::new(lsn, lsn),
+                    data: vec![frame_data],
                 };
-                Ok(partial_range)
+                Ok(())
             }
             MemoryJournal::NonEmpty { range, data, .. } => {
-                if !(range.intersects(&partial_range) || range.immediately_preceeds(&partial_range))
-                {
-                    return Err(SyncError::RangesMustBeContiguous {
-                        journal_debug: format!("{:?}", self),
-                        partial_range,
+                // accept any lsn in our current range or immediately following
+                let accepted_range = range.extend_by(1);
+                if !accepted_range.contains(lsn) {
+                    return Err(ReplicationError::NonContiguousLsn {
+                        received: lsn,
+                        range: accepted_range,
                     });
                 }
-
-                // insert partial.data into the journal at the correct position
-                let offsets = range.intersection_offsets(&partial_range);
-                if !offsets.is_empty() {
-                    // intersection, so we need to replace the intersecting portion of the journal
-                    *data = data[..offsets.start].to_vec();
+                match range.offset(lsn) {
+                    Some(offset) => {
+                        // intersection, replace specified lsn
+                        data[offset] = frame_data;
+                        // no need to update range
+                    }
+                    None => {
+                        // no intersection, append to the end
+                        data.push(frame_data);
+                        // update our range to include the new lsn
+                        *range = accepted_range;
+                    }
                 }
-                data.extend(partial_data);
-
-                // update the range
-                *range = range.union(&partial_range);
-
-                // return our new range
-                Ok(*range)
+                Ok(())
             }
         }
     }

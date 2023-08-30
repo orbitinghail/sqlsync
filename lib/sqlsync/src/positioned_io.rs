@@ -169,6 +169,13 @@ impl<C: Cursor> Cursor for PositionedCursor<C> {
     fn remaining(&self) -> usize {
         self.inner.remaining()
     }
+
+    fn into_rev(self) -> Self {
+        Self {
+            inner: self.inner.into_rev(),
+            pos: 0,
+        }
+    }
 }
 
 impl<I: PositionedReader> Read for PositionedCursor<I> {

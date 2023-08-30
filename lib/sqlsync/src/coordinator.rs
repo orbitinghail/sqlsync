@@ -1,53 +1,32 @@
 use anyhow::Result;
 use std::collections::hash_map::Entry;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
-use std::io;
+use std::{io, result};
 
 use rusqlite::Connection;
 
 use crate::db::open_with_vfs;
-use crate::journal::{Cursor, JournalPartial, SyncResult, Syncable};
 use crate::reducer::Reducer;
+use crate::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 use crate::timeline::{apply_timeline_range, run_timeline_migration};
-use crate::unixtime::unix_timestamp_milliseconds;
-use crate::RequestedLsnRange;
 use crate::{
     journal::{Journal, JournalId},
     lsn::LsnRange,
     storage::Storage,
 };
 
-#[derive(Debug, PartialEq, Eq)]
 struct ReceiveQueueEntry {
     id: JournalId,
     range: LsnRange,
-    timestamp: i64,
 }
 
-// ProcessQueueEntries are naturally ordered from latest to earliest
-impl PartialOrd for ReceiveQueueEntry {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for ReceiveQueueEntry {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.timestamp.cmp(&other.timestamp).reverse() {
-            core::cmp::Ordering::Equal => {}
-            ord => return ord,
-        }
-        self.id.cmp(&other.id)
-    }
-}
-
-pub struct CoordinatorDocument<J: Journal> {
+pub struct CoordinatorDocument<J> {
     reducer: Reducer,
     storage: Box<Storage<J>>,
     sqlite: Connection,
     timelines: HashMap<JournalId, J>,
-    timeline_receive_queue: BinaryHeap<ReceiveQueueEntry>,
+    timeline_receive_queue: VecDeque<ReceiveQueueEntry>,
 }
 
 impl<J: Journal> Debug for CoordinatorDocument<J> {
@@ -71,7 +50,7 @@ impl<J: Journal> CoordinatorDocument<J> {
             storage,
             sqlite,
             timelines: HashMap::new(),
-            timeline_receive_queue: BinaryHeap::new(),
+            timeline_receive_queue: VecDeque::new(),
         })
     }
 
@@ -86,17 +65,29 @@ impl<J: Journal> CoordinatorDocument<J> {
         !self.timeline_receive_queue.is_empty()
     }
 
+    fn mark_received(&mut self, id: JournalId, range: LsnRange) {
+        match self.timeline_receive_queue.back_mut() {
+            // coalesce this update if the queue already ends with an entry for this journal
+            Some(entry) if entry.id == id => entry.range = entry.range.union(&range),
+            // otherwise, just push a new entry
+            _ => self
+                .timeline_receive_queue
+                .push_back(ReceiveQueueEntry { id, range }),
+        }
+    }
+
     pub fn step(&mut self) -> anyhow::Result<()> {
         // check to see if we have anything in the receive queue
-        let entry = self.timeline_receive_queue.pop();
+        let entry = self.timeline_receive_queue.pop_front();
 
         if let Some(entry) = entry {
-            log::debug!("applying {:?} on timeline {}", entry.range, entry.id);
+            log::debug!("applying range {} to timeline {}", entry.range, entry.id);
 
             // get the timeline
-            let timeline = self.timelines.get(&entry.id).ok_or_else(|| {
-                anyhow::anyhow!("timeline missing in timelines but present in the receive queue")
-            })?;
+            let timeline = self
+                .timelines
+                .get(&entry.id)
+                .expect("timeline missing in timelines but present in the receive queue");
 
             // apply part of the timeline (per the receive queue entry) to the db
             apply_timeline_range(timeline, &mut self.sqlite, &mut self.reducer, entry.range)?;
@@ -111,43 +102,40 @@ impl<J: Journal> CoordinatorDocument<J> {
     }
 }
 
-impl<J: Journal> Syncable for CoordinatorDocument<J> {
-    type Cursor<'a> = <J as Syncable>::Cursor<'a> where Self: 'a;
+/// CoordinatorDocument knows how to replicate it's storage journal
+impl<J: ReplicationSource> ReplicationSource for CoordinatorDocument<J> {
+    type Reader<'a> = <J as ReplicationSource>::Reader<'a>
+    where
+        Self: 'a;
 
     fn source_id(&self) -> JournalId {
         self.storage.source_id()
     }
 
-    fn sync_prepare<'a>(
-        &'a mut self,
-        req: RequestedLsnRange,
-    ) -> SyncResult<Option<JournalPartial<Self::Cursor<'a>>>> {
-        self.storage.sync_prepare(req)
+    fn read_lsn<'a>(&'a self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'a>>> {
+        self.storage.read_lsn(lsn)
     }
+}
 
-    fn sync_request(&mut self, id: JournalId) -> SyncResult<RequestedLsnRange> {
+/// CoordinatorDocument knows how to receive timeline journals from elsewhere
+impl<J: Journal + ReplicationDestination> ReplicationDestination for CoordinatorDocument<J> {
+    fn range(&mut self, id: JournalId) -> result::Result<Option<LsnRange>, ReplicationError> {
         let timeline = self.get_or_create_timeline_mut(id)?;
-        timeline.sync_request(id)
+        ReplicationDestination::range(timeline, id)
     }
 
-    fn sync_receive<C>(&mut self, partial: JournalPartial<C>) -> SyncResult<LsnRange>
+    fn write_lsn<R>(
+        &mut self,
+        id: JournalId,
+        lsn: crate::Lsn,
+        reader: &mut R,
+    ) -> result::Result<(), ReplicationError>
     where
-        C: Cursor + io::Read,
+        R: io::Read,
     {
-        let id = partial.id();
         let timeline = self.get_or_create_timeline_mut(id)?;
-        let range = timeline.sync_receive(partial)?;
-
-        // TODO: this can sometimes queue more work than needed - specifically
-        // if we have already received the partial, the associated range will
-        // have also already been applied. This is fine since applying the same
-        // range multiple times is idempotent, but may be worth fixing at some
-        // point
-        self.timeline_receive_queue.push(ReceiveQueueEntry {
-            id,
-            range,
-            timestamp: unix_timestamp_milliseconds(),
-        });
-        Ok(range)
+        timeline.write_lsn(id, lsn, reader)?;
+        self.mark_received(id, LsnRange::new(lsn, lsn));
+        Ok(())
     }
 }

@@ -1,21 +1,11 @@
-use std::{fmt::Debug, ops::Range};
+use std::{
+    fmt::{Debug, Display},
+    ops::Range,
+};
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 pub type Lsn = u64;
-
-#[derive(Error, Debug)]
-pub enum SatisfyError {
-    #[error("lsn range {range:?} no longer contains requested lsns {req:?}")]
-    Impossible {
-        range: LsnRange,
-        req: RequestedLsnRange,
-    },
-
-    #[error("lsn range does not yet contain requested lsns")]
-    Pending,
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LsnRange {
@@ -23,14 +13,6 @@ pub struct LsnRange {
     first: Lsn,
     /// last marks the end of the range, inclusive.
     last: Lsn,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RequestedLsnRange {
-    /// first marks the beginning of the range, inclusive.
-    first: Lsn,
-    /// max_length is the maximum number of lsns being requested, inclusive.
-    max_length: usize,
 }
 
 impl LsnRange {
@@ -47,21 +29,6 @@ impl LsnRange {
         (self.last - self.first + 1) as usize
     }
 
-    pub fn satisfy(&self, req: RequestedLsnRange) -> Result<LsnRange, SatisfyError> {
-        if req.first < self.first {
-            return Err(SatisfyError::Impossible { range: *self, req });
-        }
-        if self.first <= req.first && req.first <= self.last {
-            let lastlsn = std::cmp::min(
-                self.last,
-                req.first.saturating_add(req.max_length as u64) - 1,
-            );
-            Ok(LsnRange::new(req.first, lastlsn))
-        } else {
-            Err(SatisfyError::Pending)
-        }
-    }
-
     pub fn contains(&self, lsn: Lsn) -> bool {
         self.first <= lsn && lsn <= self.last
     }
@@ -76,6 +43,14 @@ impl LsnRange {
 
     pub fn immediately_follows(&self, other: &Self) -> bool {
         other.immediately_preceeds(self)
+    }
+
+    pub fn offset(&self, lsn: Lsn) -> Option<usize> {
+        if self.contains(lsn) {
+            Some((lsn - self.first) as usize)
+        } else {
+            None
+        }
     }
 
     pub fn intersection_offsets(&self, other: &Self) -> Range<usize> {
@@ -98,17 +73,6 @@ impl LsnRange {
             return Some(*self);
         }
         Some(LsnRange::new(up_to + 1, self.last))
-    }
-
-    pub fn remove_first(&self) -> Option<LsnRange> {
-        self.trim_prefix(self.first)
-    }
-
-    pub fn remove_last(&self) -> Option<LsnRange> {
-        if self.first >= self.last {
-            return None;
-        }
-        Some(LsnRange::new(self.first, self.last - 1))
     }
 
     pub fn extend_by(&self, len: u64) -> LsnRange {
@@ -146,10 +110,6 @@ impl LsnRange {
             std::cmp::max(self.last, other.last),
         )
     }
-
-    pub fn request_next(&self, max_length: usize) -> RequestedLsnRange {
-        RequestedLsnRange::new(self.last + 1, max_length)
-    }
 }
 
 impl Debug for LsnRange {
@@ -161,35 +121,18 @@ impl Debug for LsnRange {
     }
 }
 
-impl RequestedLsnRange {
-    pub fn new(first: Lsn, max_length: usize) -> Self {
-        assert!(max_length > 0, "max_length must be > 0");
-        RequestedLsnRange { first, max_length }
-    }
-
-    pub fn next(range: Option<LsnRange>, max_length: usize) -> Self {
-        let first = range.map(|r| r.last + 1).unwrap_or(0);
-        RequestedLsnRange::new(first, max_length)
-    }
-}
-
-impl Debug for RequestedLsnRange {
+impl Display for LsnRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("RequestedLsnRange")
-            .field(&self.first)
-            .field(&self.max_length)
-            .finish()
+        write!(f, "[{}, {}]", self.first, self.last)
     }
 }
 
-// write some tests for LsnRange and RequestedLsnRange
+// write some tests for LsnRange
 #[cfg(test)]
 mod tests {
-    use testutil::{assert_matches, assert_panic};
+    use testutil::assert_panic;
 
-    use crate::lsn::SatisfyError;
-
-    use super::{LsnRange, RequestedLsnRange};
+    use super::LsnRange;
 
     #[test]
     #[should_panic(expected = "first must be <= last")]
@@ -198,62 +141,10 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "max_length must be > 0")]
-    fn requestedlsnrange_invariant() {
-        RequestedLsnRange::new(5, 0);
-    }
-
-    #[test]
     fn lsnrange_len() {
         assert_eq!(LsnRange::new(0, 0).len(), 1);
         assert_eq!(LsnRange::new(0, 1).len(), 2);
         assert_eq!(LsnRange::new(5, 10).len(), 6);
-    }
-
-    #[test]
-    fn lsnrange_satisfy() {
-        let range = LsnRange::new(5, 10);
-
-        macro_rules! req {
-            ($first:expr, $len:expr) => {
-                RequestedLsnRange::new($first, $len)
-            };
-        }
-
-        assert_matches!(
-            range.satisfy(req!(0, 1)),
-            Err(SatisfyError::Impossible { .. })
-        );
-        assert_matches!(
-            range.satisfy(req!(0, 6)),
-            Err(SatisfyError::Impossible { .. })
-        );
-        assert_matches!(
-            range.satisfy(req!(5, 1)),
-            Ok(LsnRange { first: 5, last: 5 })
-        );
-        assert_matches!(
-            range.satisfy(req!(5, 2)),
-            Ok(LsnRange { first: 5, last: 6 })
-        );
-        assert_matches!(
-            range.satisfy(req!(5, 100)),
-            Ok(LsnRange { first: 5, last: 10 })
-        );
-        assert_matches!(
-            range.satisfy(req!(7, usize::MAX)),
-            Ok(LsnRange { first: 7, last: 10 })
-        );
-        assert_matches!(
-            range.satisfy(req!(10, usize::MAX)),
-            Ok(LsnRange {
-                first: 10,
-                last: 10
-            })
-        );
-        assert_matches!(range.satisfy(req!(11, 1)), Err(SatisfyError::Pending));
-        assert_matches!(range.satisfy(req!(11, 10)), Err(SatisfyError::Pending));
-        assert_matches!(range.satisfy(req!(15, 10)), Err(SatisfyError::Pending));
     }
 
     #[test]
@@ -294,6 +185,20 @@ mod tests {
                     range,
                     $other
                 );
+                match $intersection {
+                    Some(intersection) => {
+                        let first = intersection.first;
+                        for i in 0..(intersection.len() as u64) {
+                            assert_eq!(
+                                range.offset(first + i),
+                                Some(($offsets.start + i) as usize)
+                            );
+                        }
+                    }
+                    None => {
+                        assert_eq!(range.offset($other.first), None);
+                    }
+                }
             };
         }
 
@@ -303,7 +208,7 @@ mod tests {
             };
         }
 
-        t!(r!(0, 4), None, 0..0);
+        t!(r!(0, 4), None::<LsnRange>, 0..0);
         t!(r!(0, 5), Some(r!(5, 5)), 0..1);
         t!(r!(0, 6), Some(r!(5, 6)), 0..2);
         t!(r!(0, 10), Some(r!(5, 10)), 0..6);
@@ -315,8 +220,8 @@ mod tests {
         t!(r!(9, 10), Some(r!(9, 10)), 4..6);
         t!(r!(10, 10), Some(r!(10, 10)), 5..6);
         t!(r!(10, 11), Some(r!(10, 10)), 5..6);
-        t!(r!(11, 11), None, 0..0);
-        t!(r!(20, 30), None, 0..0);
+        t!(r!(11, 11), None::<LsnRange>, 0..0);
+        t!(r!(20, 30), None::<LsnRange>, 0..0);
     }
 
     #[test]
@@ -408,16 +313,5 @@ mod tests {
         assert_eq!(range.union(&LsnRange::new(11, 15)), LsnRange::new(5, 15));
         assert_eq!(range.union(&LsnRange::new(4, 11)), LsnRange::new(4, 11));
         assert_eq!(range.union(&LsnRange::new(0, 100)), LsnRange::new(0, 100));
-    }
-
-    #[test]
-    fn lsnrange_remove_first_last() {
-        let range = LsnRange::new(5, 10);
-        assert_eq!(range.remove_first(), Some(LsnRange::new(6, 10)));
-        assert_eq!(range.remove_last(), Some(LsnRange::new(5, 9)));
-
-        let range = LsnRange::new(5, 5);
-        assert_eq!(range.remove_first(), None);
-        assert_eq!(range.remove_last(), None);
     }
 }

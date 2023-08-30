@@ -1,18 +1,18 @@
-use std::{fmt::Debug, io};
+use std::{fmt::Debug, io, result::Result};
 
-use anyhow::Result;
 use rusqlite::{Connection, Transaction};
 
 use crate::{
     db::{open_with_vfs, readonly_query, run_in_tx},
-    journal::{Cursor, Journal, JournalId, JournalPartial, SyncResult, Syncable},
-    lsn::{LsnRange, RequestedLsnRange},
+    journal::{Journal, JournalId},
+    lsn::LsnRange,
     reducer::Reducer,
+    replication::{ReplicationDestination, ReplicationError, ReplicationSource},
     storage::Storage,
     timeline::{rebase_timeline, run_timeline_migration},
 };
 
-pub struct LocalDocument<J: Journal> {
+pub struct LocalDocument<J> {
     reducer: Reducer,
     timeline: J,
     storage: Box<Storage<J>>,
@@ -28,8 +28,8 @@ impl<J: Journal> Debug for LocalDocument<J> {
     }
 }
 
-impl<J: Journal> LocalDocument<J> {
-    pub fn open(storage: J, timeline: J, reducer_wasm_bytes: &[u8]) -> Result<Self> {
+impl<J: Journal + ReplicationSource> LocalDocument<J> {
+    pub fn open(storage: J, timeline: J, reducer_wasm_bytes: &[u8]) -> anyhow::Result<Self> {
         let (mut sqlite, storage) = open_with_vfs(storage)?;
 
         // TODO: this feels awkward here
@@ -47,45 +47,58 @@ impl<J: Journal> LocalDocument<J> {
         self.storage.source_id()
     }
 
-    pub fn mutate(&mut self, m: &[u8]) -> Result<()> {
+    pub fn mutate(&mut self, m: &[u8]) -> anyhow::Result<()> {
         run_in_tx(&mut self.sqlite, |tx| self.reducer.apply(tx, &m))?;
         self.timeline.append(m)?;
         Ok(())
     }
 
-    pub fn query<F, O>(&mut self, f: F) -> Result<O>
+    pub fn query<F, O>(&mut self, f: F) -> anyhow::Result<O>
     where
-        F: FnOnce(Transaction) -> Result<O>,
+        F: FnOnce(Transaction) -> anyhow::Result<O>,
     {
         readonly_query(&mut self.sqlite, f)
     }
+
+    pub fn rebase(&mut self) -> anyhow::Result<()> {
+        if self.storage.has_committed_pages() {
+            self.storage.revert();
+            rebase_timeline(&mut self.timeline, &mut self.sqlite, &mut self.reducer)?;
+        }
+        Ok(())
+    }
 }
 
-impl<J: Journal> Syncable for LocalDocument<J> {
-    type Cursor<'a> = <J as Syncable>::Cursor<'a> where Self: 'a;
+/// LocalDocument knows how to send it's timeline journal elsewhere
+impl<J: ReplicationSource> ReplicationSource for LocalDocument<J> {
+    type Reader<'a> = <J as ReplicationSource>::Reader<'a>
+    where
+        Self: 'a;
 
     fn source_id(&self) -> JournalId {
-        self.timeline.id()
+        self.timeline.source_id()
     }
 
-    fn sync_prepare<'a>(
-        &'a mut self,
-        req: RequestedLsnRange,
-    ) -> SyncResult<Option<JournalPartial<Self::Cursor<'a>>>> {
-        self.timeline.sync_prepare(req)
+    fn read_lsn<'a>(&'a self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'a>>> {
+        self.timeline.read_lsn(lsn)
+    }
+}
+
+/// LocalDocument knows how to receive a storage journal from elsewhere
+impl<J: ReplicationDestination> ReplicationDestination for LocalDocument<J> {
+    fn range(&mut self, id: JournalId) -> Result<Option<LsnRange>, ReplicationError> {
+        self.storage.range(id)
     }
 
-    fn sync_request(&mut self, id: JournalId) -> SyncResult<RequestedLsnRange> {
-        self.storage.sync_request(id)
-    }
-
-    fn sync_receive<C>(&mut self, partial: JournalPartial<C>) -> SyncResult<LsnRange>
+    fn write_lsn<R>(
+        &mut self,
+        id: JournalId,
+        lsn: crate::Lsn,
+        reader: &mut R,
+    ) -> Result<(), ReplicationError>
     where
-        C: Cursor + io::Read,
+        R: io::Read,
     {
-        self.storage.revert();
-        let out = self.storage.sync_receive(partial)?;
-        rebase_timeline(&mut self.timeline, &mut self.sqlite, &mut self.reducer)?;
-        Ok(out)
+        self.storage.write_lsn(id, lsn, reader)
     }
 }

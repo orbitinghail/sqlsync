@@ -2,12 +2,12 @@
 ///! and a server. There is no networking in this example so it's easy to follow
 ///! the sync & rebase logic between the different nodes.
 ///
-use std::collections::HashMap;
+use std::{collections::BTreeMap, format, io};
 
 use serde::{Deserialize, Serialize};
 use sqlsync::{
-    coordinator::CoordinatorDocument, local::LocalDocument, sqlite::Transaction, Journal,
-    JournalId, LsnRange, MemoryJournal, RequestedLsnRange, Syncable,
+    coordinator::CoordinatorDocument, local::LocalDocument, replication::ReplicationProtocol,
+    sqlite::Transaction, Journal, JournalId, MemoryJournal,
 };
 
 #[derive(Debug)]
@@ -89,20 +89,35 @@ fn main() -> anyhow::Result<()> {
     )?;
     let mut remote = CoordinatorDocument::open(MemoryJournal::open(doc_id)?, &wasm_bytes[..])?;
 
-    // temp hack to track the lsn ranges we get back from sync_receive
-    // key is a concatenation of the sync direction, like: `local->remote`
-    let mut hack_lsn_range_cache: HashMap<String, LsnRange> = HashMap::new();
+    let mut protocols = BTreeMap::new();
+    protocols.insert("local->remote", ReplicationProtocol::new());
+    protocols.insert("remote->local", ReplicationProtocol::new());
+    protocols.insert("local2->remote", ReplicationProtocol::new());
+    protocols.insert("remote->local2", ReplicationProtocol::new());
+
+    macro_rules! protocol {
+        ($from:ident -> $to:ident) => {{
+            let key = format!("{}->{}", stringify!($from), stringify!($to));
+            protocols.get_mut(key.as_str()).unwrap()
+        }};
+    }
+
+    let mut empty_reader = io::empty();
 
     macro_rules! debug_state {
         (start $($log_args:tt)+) => {
             log::info!("===============================");
-            debug_state!(finish);
+            debug_state!(inner);
             log::info!($($log_args)+);
         };
-        (finish) => {
+        (inner) => {
             log::info!("LOCAL1: {:?}", local);
             log::info!("LOCAL2: {:?}", local2);
             log::info!("{:?}", remote);
+        };
+        (finish) => {
+            debug_state!(inner);
+            log::info!("===============================");
         };
     }
 
@@ -182,29 +197,73 @@ fn main() -> anyhow::Result<()> {
         };
     }
 
+    macro_rules! send {
+        ($from:ident -> $to:ident, $msg:expr, $reader:expr) => {
+            log::info!(
+                "sending: {:?} from {} to {}",
+                $msg,
+                stringify!($from),
+                stringify!($to)
+            );
+
+            if let Some(resp) = protocol!($to -> $from).handle(&mut $to, $msg, $reader)? {
+                log::info!("received: {:?}", resp);
+
+                if let Some(resp) = protocol!($from -> $to).handle(&mut $from, resp, &mut empty_reader)? {
+                    panic!(
+                        "unexpected response, send! can only handle one round trip: {:?}",
+                        resp
+                    );
+                }
+            }
+        };
+    }
+
+    macro_rules! connect {
+        ($from:ident, $to:ident) => {
+            let msg = protocol!($from -> $to).start(&mut $from);
+            send!($from -> $to, msg, &mut empty_reader);
+
+            let msg = protocol!($to -> $from).start(&mut $to);
+            send!($to -> $from, msg, &mut empty_reader);
+        }
+    }
+
     macro_rules! sync {
         ($from:ident -> $to:ident) => {
-            // compute request (TODO: replace once we have a LinkManager)
-            let key = format!("{}->{}", stringify!($from), stringify!($to));
-            let req = match hack_lsn_range_cache.get(&key) {
-                Some(range) => RequestedLsnRange::new(range.last()+1, 10),
-                None => RequestedLsnRange::new(0, 10),
-            };
+            debug_state!(start "syncing: {} -> {}", stringify!($from), stringify!($to));
 
-            debug_state!(start "syncing: {} -> {} ({:?})", stringify!($from), stringify!($to), req);
+            let mut num_sent = 0;
 
-            let partial = $from.sync_prepare(req)?;
-            if let Some(partial) = partial {
-                // let partial = partial.map(|e| Ok(PositionedCursor::new(e)));
-                let range = $to.sync_receive(partial.into_read_partial())?;
-                hack_lsn_range_cache.insert(key, range);
-            } else {
+            while let Some((msg, reader)) = protocol!($from -> $to).sync(&$from)? {
+                // we copy here in order to release the mut borrow on protocols
+                // this is just for local testing without the network
+                let mut reader = &reader.to_owned()[..];
+                send!($from -> $to, msg, &mut reader);
+                num_sent += 1;
+            }
+
+            if num_sent > 0 {
+                log::info!("{}: synced {} frames", stringify!($from), num_sent);
+            }else {
                 log::info!("{}: nothing to sync", stringify!($from));
             }
             debug_state!(finish);
         };
     }
 
+    macro_rules! rebase {
+        ($client:ident) => {
+            log::info!("rebasing: {}", stringify!($client));
+            $client.rebase()?;
+        };
+    }
+
+    // initialize replication protocols
+    connect!(local, remote);
+    connect!(local2, remote);
+
+    // start the workload
     mutate!(local, InitSchema);
 
     // init should be idempotent
@@ -217,9 +276,11 @@ fn main() -> anyhow::Result<()> {
     step_remote!();
 
     sync!(remote -> local);
+    rebase!(local);
     print_tasks!(local)?;
 
     sync!(remote -> local2);
+    rebase!(local2);
     print_tasks!(local2)?;
 
     // at this point, remote has incorporated changes from local, but not local2
@@ -242,7 +303,9 @@ fn main() -> anyhow::Result<()> {
 
     // sync down changes
     sync!(remote -> local);
+    rebase!(local);
     sync!(remote -> local2);
+    rebase!(local2);
 
     print_tasks!(local)?;
     print_tasks!(local2)?;

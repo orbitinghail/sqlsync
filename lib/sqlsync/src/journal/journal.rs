@@ -5,9 +5,12 @@ use std::result::Result;
 use thiserror::Error;
 
 use crate::Serializable;
-use crate::{lsn::Lsn, JournalId};
+use crate::{
+    lsn::{Lsn, LsnRange},
+    JournalId,
+};
 
-use super::{Scannable, Syncable};
+use super::Scannable;
 
 #[derive(Error, Debug)]
 pub enum JournalError {
@@ -23,11 +26,14 @@ pub enum JournalError {
 
 pub type JournalResult<T> = Result<T, JournalError>;
 
-pub trait Journal: Syncable + Scannable + Debug + Sized {
+pub trait Journal: Scannable + Debug + Sized {
     fn open(id: JournalId) -> JournalResult<Self>;
 
     /// this journal's id
     fn id(&self) -> JournalId;
+
+    /// this journal's range
+    fn range(&self) -> Option<LsnRange>;
 
     /// append a new journal entry, and then write to it
     fn append(&mut self, obj: impl Serializable) -> JournalResult<()>;

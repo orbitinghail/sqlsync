@@ -1,6 +1,6 @@
 # TASKS (start here)
-- id
-  - figure out which id abstraction to use, use it
+- replication engine
+  - defer local rebase rather than running it on sync
 - opfs journal
 - s3 or durable functions journal
 - log compaction

@@ -9,7 +9,6 @@ mod vfs;
 
 pub mod coordinator;
 pub mod local;
-pub mod replication;
 pub mod positioned_io;
 pub mod timeline;
 pub mod unixtime;
@@ -17,7 +16,7 @@ pub mod unixtime;
 pub use journal::*;
 pub use serialization::{Deserializable, Serializable};
 
-pub use lsn::{Lsn, LsnRange, RequestedLsnRange};
+pub use lsn::Lsn;
 
 pub mod sqlite {
     pub use rusqlite::*;

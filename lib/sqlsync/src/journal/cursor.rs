@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::{positioned_io::PositionedReader, LsnRange};
+use crate::{lsn::LsnRange, positioned_io::PositionedReader};
 
 pub trait Cursor {
     /// advance the cursor
@@ -16,6 +16,9 @@ pub trait Cursor {
 
     /// return the number of advances remaining in the scan
     fn remaining(&self) -> usize;
+
+    /// reverse this cursor
+    fn into_rev(self) -> Self;
 }
 
 pub trait Scannable {
@@ -24,6 +27,5 @@ pub trait Scannable {
         Self: 'a;
 
     fn scan<'a>(&'a self) -> Self::Cursor<'a>;
-    fn scan_rev<'a>(&'a self) -> Self::Cursor<'a>;
     fn scan_range<'a>(&'a self, range: LsnRange) -> Self::Cursor<'a>;
 }
