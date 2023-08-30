@@ -8,37 +8,100 @@ use serde::{Deserialize, Serialize};
 pub type Lsn = u64;
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LsnRange {
-    /// first marks the beginning of the range, inclusive.
-    first: Lsn,
-    /// last marks the end of the range, inclusive.
-    last: Lsn,
+#[must_use]
+pub enum LsnRange {
+    Empty {
+        /// nextlsn is the next lsn in the range
+        nextlsn: Lsn,
+    },
+    NonEmpty {
+        /// first marks the beginning of the range, inclusive.
+        first: Lsn,
+        /// last marks the end of the range, inclusive.
+        last: Lsn,
+    },
 }
 
 impl LsnRange {
     pub fn new(first: Lsn, last: Lsn) -> Self {
         assert!(first <= last, "first must be <= last");
-        LsnRange { first, last }
+        LsnRange::NonEmpty { first, last }
     }
 
-    pub fn last(&self) -> Lsn {
-        self.last
+    pub fn empty() -> Self {
+        LsnRange::Empty { nextlsn: 0 }
+    }
+
+    pub fn empty_following(range: &LsnRange) -> Self {
+        LsnRange::Empty {
+            nextlsn: range.next(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            LsnRange::Empty { .. } => true,
+            LsnRange::NonEmpty { .. } => false,
+        }
+    }
+
+    pub fn is_non_empty(&self) -> bool {
+        !self.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        (self.last - self.first + 1) as usize
+        match self {
+            LsnRange::Empty { .. } => 0,
+            LsnRange::NonEmpty { first, last } => (last - first + 1) as usize,
+        }
+    }
+
+    pub fn last(&self) -> Option<Lsn> {
+        match self {
+            LsnRange::Empty { .. } => None,
+            LsnRange::NonEmpty { last, .. } => Some(*last),
+        }
+    }
+
+    pub fn next(&self) -> Lsn {
+        match self {
+            LsnRange::Empty { nextlsn } => *nextlsn,
+            LsnRange::NonEmpty { last, .. } => last + 1,
+        }
     }
 
     pub fn contains(&self, lsn: Lsn) -> bool {
-        self.first <= lsn && lsn <= self.last
+        match self {
+            LsnRange::Empty { .. } => false,
+            LsnRange::NonEmpty { first, last } => *first <= lsn && lsn <= *last,
+        }
     }
 
     pub fn intersects(&self, other: &Self) -> bool {
-        self.last >= other.first && self.first <= other.last
+        match (self, other) {
+            (LsnRange::Empty { .. }, _) => false,
+            (_, LsnRange::Empty { .. }) => false,
+            (
+                LsnRange::NonEmpty {
+                    first: self_first,
+                    last: self_last,
+                },
+                LsnRange::NonEmpty {
+                    first: other_first,
+                    last: other_last,
+                },
+            ) => self_last >= other_first && self_first <= other_last,
+        }
     }
 
     pub fn immediately_preceeds(&self, other: &Self) -> bool {
-        self.last + 1 == other.first
+        match (self, other) {
+            (_, LsnRange::Empty { .. }) => false,
+            (LsnRange::Empty { nextlsn }, LsnRange::NonEmpty { first, .. }) => *nextlsn == *first,
+            (LsnRange::NonEmpty { last, .. }, LsnRange::NonEmpty { first, .. }) => {
+                last + 1 == *first
+            }
+        }
     }
 
     pub fn immediately_follows(&self, other: &Self) -> bool {
@@ -47,7 +110,10 @@ impl LsnRange {
 
     pub fn offset(&self, lsn: Lsn) -> Option<usize> {
         if self.contains(lsn) {
-            Some((lsn - self.first) as usize)
+            match self {
+                LsnRange::Empty { .. } => None,
+                LsnRange::NonEmpty { first, .. } => Some(lsn.saturating_sub(*first) as usize),
+            }
         } else {
             None
         }
@@ -55,89 +121,124 @@ impl LsnRange {
 
     pub fn intersection_offsets(&self, other: &Self) -> Range<usize> {
         if self.intersects(other) {
-            let start = std::cmp::max(self.first, other.first) - self.first;
-            let end = std::cmp::min(self.last, other.last) - self.first + 1;
-            start as usize..end as usize
+            match (self, other) {
+                (
+                    LsnRange::NonEmpty {
+                        first: self_first,
+                        last: self_last,
+                    },
+                    LsnRange::NonEmpty {
+                        first: other_first,
+                        last: other_last,
+                    },
+                ) => {
+                    let start = std::cmp::max(*self_first, *other_first) - self_first;
+                    let end = std::cmp::min(*self_last, *other_last) - self_first + 1;
+                    start as usize..end as usize
+                }
+                (_, _) => 0..0,
+            }
         } else {
             0..0
         }
     }
 
     // returns a new LsnRange with all lsns <= up_to removed
-    // returns None if the resulting range is empty
-    pub fn trim_prefix(&self, up_to: Lsn) -> Option<LsnRange> {
-        if up_to >= self.last {
-            return None;
+    pub fn trim_prefix(&self, up_to: Lsn) -> LsnRange {
+        match self {
+            LsnRange::Empty { nextlsn } => {
+                let min_val = nextlsn.saturating_sub(1);
+                assert!(up_to >= min_val, "up_to must be >= {}", min_val);
+                LsnRange::Empty { nextlsn: up_to + 1 }
+            }
+            LsnRange::NonEmpty { first, last } => {
+                if up_to >= *last {
+                    LsnRange::Empty { nextlsn: up_to + 1 }
+                } else if up_to < *first {
+                    *self
+                } else {
+                    LsnRange::new(up_to + 1, *last)
+                }
+            }
         }
-        if up_to < self.first {
-            return Some(*self);
-        }
-        Some(LsnRange::new(up_to + 1, self.last))
     }
 
     pub fn extend_by(&self, len: u64) -> LsnRange {
-        assert!(len > 0, "len must be >= 0");
-        LsnRange::new(self.first, self.last + len)
-    }
-
-    pub fn intersect(&self, other: &Self) -> Option<LsnRange> {
-        if self.intersects(other) {
-            Some(LsnRange::new(
-                std::cmp::max(self.first, other.first),
-                std::cmp::min(self.last, other.last),
-            ))
-        } else {
-            None
+        assert!(len > 0, "len must be > 0");
+        match self {
+            LsnRange::Empty { nextlsn } => LsnRange::new(*nextlsn, nextlsn + len - 1),
+            LsnRange::NonEmpty { first, last } => LsnRange::new(*first, last + len),
         }
     }
 
-    /// Unions this range with another.
-    /// Panics if the two ranges do not overlap.
-    pub fn union(&self, other: &Self) -> LsnRange {
-        // Check for overlap
-        assert!(
-            self.intersects(other)
-                || self.immediately_preceeds(other)
-                || self.immediately_follows(other),
-            "ranges do not intersect or meet. self: {:?}, other: {:?}",
-            self,
-            other
-        );
+    /// append the lsn to the range, panics if lsn is not the next lsn
+    pub fn append(&self, lsn: Lsn) -> LsnRange {
+        match self {
+            LsnRange::Empty { nextlsn } => {
+                assert_eq!(lsn, *nextlsn, "lsn must be the next lsn");
+                LsnRange::new(*nextlsn, *nextlsn)
+            }
+            LsnRange::NonEmpty { first, last } => {
+                assert_eq!(lsn, *last + 1, "lsn must be the next lsn");
+                LsnRange::new(*first, *last + 1)
+            }
+        }
+    }
 
-        // Union the two overlapping ranges
-        LsnRange::new(
-            std::cmp::min(self.first, other.first),
-            std::cmp::max(self.last, other.last),
-        )
+    /// intersect returns the intersection between two ranges
+    /// if the result is empty, nextlsn will be set to self.last + 1
+    pub fn intersect(&self, other: &Self) -> LsnRange {
+        match (self, other) {
+            (LsnRange::Empty { .. }, _) => *self,
+            (LsnRange::NonEmpty { last, .. }, LsnRange::Empty { .. }) => {
+                LsnRange::Empty { nextlsn: last + 1 }
+            }
+            (
+                LsnRange::NonEmpty { first, last },
+                LsnRange::NonEmpty {
+                    first: other_first,
+                    last: other_last,
+                },
+            ) => {
+                if self.intersects(other) {
+                    LsnRange::new(
+                        std::cmp::max(*first, *other_first),
+                        std::cmp::min(*last, *other_last),
+                    )
+                } else {
+                    LsnRange::Empty { nextlsn: last + 1 }
+                }
+            }
+        }
     }
 }
 
 impl Debug for LsnRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("LsnRange")
-            .field(&self.first)
-            .field(&self.last)
-            .finish()
+        match self {
+            LsnRange::Empty { nextlsn } => f.debug_tuple("LsnRange::E").field(nextlsn).finish(),
+            LsnRange::NonEmpty { first, last } => {
+                f.debug_tuple("LsnRange").field(first).field(last).finish()
+            }
+        }
     }
 }
 
 impl Display for LsnRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}, {}]", self.first, self.last)
+        Debug::fmt(self, f)
     }
 }
 
 // write some tests for LsnRange
 #[cfg(test)]
 mod tests {
-    use testutil::assert_panic;
-
     use super::LsnRange;
 
     #[test]
     #[should_panic(expected = "first must be <= last")]
     fn lsnrange_invariant() {
-        LsnRange::new(5, 0);
+        let _ = LsnRange::new(5, 0);
     }
 
     #[test]
@@ -185,20 +286,6 @@ mod tests {
                     range,
                     $other
                 );
-                match $intersection {
-                    Some(intersection) => {
-                        let first = intersection.first;
-                        for i in 0..(intersection.len() as u64) {
-                            assert_eq!(
-                                range.offset(first + i),
-                                Some(($offsets.start + i) as usize)
-                            );
-                        }
-                    }
-                    None => {
-                        assert_eq!(range.offset($other.first), None);
-                    }
-                }
             };
         }
 
@@ -206,22 +293,37 @@ mod tests {
             ($first:expr, $last:expr) => {
                 LsnRange::new($first, $last)
             };
+            (empty $nextlsn:expr) => {
+                LsnRange::Empty { nextlsn: $nextlsn }
+            };
         }
 
-        t!(r!(0, 4), None::<LsnRange>, 0..0);
-        t!(r!(0, 5), Some(r!(5, 5)), 0..1);
-        t!(r!(0, 6), Some(r!(5, 6)), 0..2);
-        t!(r!(0, 10), Some(r!(5, 10)), 0..6);
-        t!(r!(0, 11), Some(r!(5, 10)), 0..6);
-        t!(r!(5, 5), Some(r!(5, 5)), 0..1);
-        t!(r!(5, 6), Some(r!(5, 6)), 0..2);
-        t!(r!(5, 10), Some(r!(5, 10)), 0..6);
-        t!(r!(5, 11), Some(r!(5, 10)), 0..6);
-        t!(r!(9, 10), Some(r!(9, 10)), 4..6);
-        t!(r!(10, 10), Some(r!(10, 10)), 5..6);
-        t!(r!(10, 11), Some(r!(10, 10)), 5..6);
-        t!(r!(11, 11), None::<LsnRange>, 0..0);
-        t!(r!(20, 30), None::<LsnRange>, 0..0);
+        t!(r!(0, 4), r!(empty 11), 0..0);
+        t!(r!(0, 5), r!(5, 5), 0..1);
+        t!(r!(0, 6), r!(5, 6), 0..2);
+        t!(r!(0, 10), r!(5, 10), 0..6);
+        t!(r!(0, 11), r!(5, 10), 0..6);
+        t!(r!(5, 5), r!(5, 5), 0..1);
+        t!(r!(5, 6), r!(5, 6), 0..2);
+        t!(r!(5, 10), r!(5, 10), 0..6);
+        t!(r!(5, 11), r!(5, 10), 0..6);
+        t!(r!(9, 10), r!(9, 10), 4..6);
+        t!(r!(10, 10), r!(10, 10), 5..6);
+        t!(r!(10, 11), r!(10, 10), 5..6);
+        t!(r!(11, 11), r!(empty 11), 0..0);
+        t!(r!(20, 30), r!(empty 11), 0..0);
+    }
+
+    #[test]
+    fn lsnrange_offset() {
+        let range = LsnRange::new(5, 10);
+
+        assert_eq!(range.offset(0), None);
+        assert_eq!(range.offset(4), None);
+        assert_eq!(range.offset(5), Some(0));
+        assert_eq!(range.offset(6), Some(1));
+        assert_eq!(range.offset(10), Some(5));
+        assert_eq!(range.offset(11), None);
     }
 
     #[test]
@@ -250,21 +352,33 @@ mod tests {
     fn lsnrange_trim_prefix() {
         let range = LsnRange::new(5, 10);
 
-        assert_eq!(range.trim_prefix(0), Some(range));
-        assert_eq!(range.trim_prefix(4), Some(range));
-        assert_eq!(range.trim_prefix(5), Some(LsnRange::new(6, 10)));
-        assert_eq!(range.trim_prefix(6), Some(LsnRange::new(7, 10)));
-        assert_eq!(range.trim_prefix(7), Some(LsnRange::new(8, 10)));
-        assert_eq!(range.trim_prefix(8), Some(LsnRange::new(9, 10)));
-        assert_eq!(range.trim_prefix(9), Some(LsnRange::new(10, 10)));
-        assert_eq!(range.trim_prefix(10), None);
-        assert_eq!(range.trim_prefix(20), None);
+        assert_eq!(range.trim_prefix(0), range);
+        assert_eq!(range.trim_prefix(4), range);
+        assert_eq!(range.trim_prefix(5), LsnRange::new(6, 10));
+        assert_eq!(range.trim_prefix(6), LsnRange::new(7, 10));
+        assert_eq!(range.trim_prefix(7), LsnRange::new(8, 10));
+        assert_eq!(range.trim_prefix(8), LsnRange::new(9, 10));
+        assert_eq!(range.trim_prefix(9), LsnRange::new(10, 10));
+        assert_eq!(range.trim_prefix(10), LsnRange::Empty { nextlsn: 11 });
+        assert_eq!(range.trim_prefix(20), LsnRange::Empty { nextlsn: 21 });
     }
 
     #[test]
-    #[should_panic(expected = "len must be >= 0")]
+    #[should_panic(expected = "len must be > 0")]
     fn lsnrange_extend_invariant() {
-        LsnRange::new(5, 10).extend_by(0);
+        let _ = LsnRange::new(5, 10).extend_by(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "lsn must be the next lsn")]
+    fn lsnrange_append_invariant() {
+        let _ = LsnRange::empty().append(5);
+    }
+
+    #[test]
+    #[should_panic(expected = "lsn must be the next lsn")]
+    fn lsnrange_append_invariant_nonempty() {
+        let _ = LsnRange::new(5, 10).append(3);
     }
 
     #[test]
@@ -272,46 +386,23 @@ mod tests {
         let range = LsnRange::new(5, 10);
         assert_eq!(range.extend_by(1), LsnRange::new(5, 11));
         assert_eq!(range.extend_by(2), LsnRange::new(5, 12));
+
+        let range = LsnRange::empty();
+        assert_eq!(range.extend_by(1), LsnRange::new(0, 0));
+        assert_eq!(range.extend_by(2), LsnRange::new(0, 1));
+
+        let range = LsnRange::Empty { nextlsn: 5 };
+        assert_eq!(range.extend_by(1), LsnRange::new(5, 5));
+        assert_eq!(range.extend_by(2), LsnRange::new(5, 6));
     }
 
     #[test]
-    fn lsnrange_union_invariant() {
+    fn lsnrange_append() {
         let range = LsnRange::new(5, 10);
-        assert_panic!(
-            { range.union(&LsnRange::new(0, 0)); },
-            String,
-            starts with "ranges do not intersect or meet"
-        );
-        assert_panic!(
-            { range.union(&LsnRange::new(0, 3)); },
-            String,
-            starts with "ranges do not intersect or meet"
-        );
-        assert_panic!(
-            { range.union(&LsnRange::new(12, 12)); },
-            String,
-            starts with "ranges do not intersect or meet"
-        );
-        assert_panic!(
-            { range.union(&LsnRange::new(15, 20)); },
-            String,
-            starts with "ranges do not intersect or meet"
-        );
-    }
-
-    #[test]
-    fn lsnrange_union() {
-        let range = LsnRange::new(5, 10);
-        assert_eq!(range.union(&LsnRange::new(0, 4)), LsnRange::new(0, 10));
-        assert_eq!(range.union(&LsnRange::new(4, 4)), LsnRange::new(4, 10));
-        assert_eq!(range.union(&LsnRange::new(5, 5)), LsnRange::new(5, 10));
-        assert_eq!(range.union(&LsnRange::new(5, 10)), LsnRange::new(5, 10));
-        assert_eq!(range.union(&LsnRange::new(7, 10)), LsnRange::new(5, 10));
-        assert_eq!(range.union(&LsnRange::new(10, 10)), LsnRange::new(5, 10));
-        assert_eq!(range.union(&LsnRange::new(10, 11)), LsnRange::new(5, 11));
-        assert_eq!(range.union(&LsnRange::new(11, 11)), LsnRange::new(5, 11));
-        assert_eq!(range.union(&LsnRange::new(11, 15)), LsnRange::new(5, 15));
-        assert_eq!(range.union(&LsnRange::new(4, 11)), LsnRange::new(4, 11));
-        assert_eq!(range.union(&LsnRange::new(0, 100)), LsnRange::new(0, 100));
+        assert_eq!(range.append(11), LsnRange::new(5, 11));
+        let range = LsnRange::empty();
+        assert_eq!(range.append(0), LsnRange::new(0, 0));
+        let range = LsnRange::Empty { nextlsn: 3 };
+        assert_eq!(range.append(3), LsnRange::new(3, 3));
     }
 }

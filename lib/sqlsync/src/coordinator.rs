@@ -10,6 +10,7 @@ use crate::db::open_with_vfs;
 use crate::reducer::Reducer;
 use crate::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 use crate::timeline::{apply_timeline_range, run_timeline_migration};
+use crate::Lsn;
 use crate::{
     journal::{Journal, JournalId},
     lsn::LsnRange,
@@ -65,14 +66,19 @@ impl<J: Journal> CoordinatorDocument<J> {
         !self.timeline_receive_queue.is_empty()
     }
 
-    fn mark_received(&mut self, id: JournalId, range: LsnRange) {
+    fn mark_received(&mut self, id: JournalId, lsn: Lsn) {
         match self.timeline_receive_queue.back_mut() {
             // coalesce this update if the queue already ends with an entry for this journal
-            Some(entry) if entry.id == id => entry.range = entry.range.union(&range),
+            Some(entry) if entry.id == id => {
+                if !entry.range.contains(lsn) {
+                    entry.range = entry.range.append(lsn)
+                }
+            }
             // otherwise, just push a new entry
-            _ => self
-                .timeline_receive_queue
-                .push_back(ReceiveQueueEntry { id, range }),
+            _ => self.timeline_receive_queue.push_back(ReceiveQueueEntry {
+                id,
+                range: LsnRange::new(lsn, lsn),
+            }),
         }
     }
 
@@ -119,7 +125,7 @@ impl<J: ReplicationSource> ReplicationSource for CoordinatorDocument<J> {
 
 /// CoordinatorDocument knows how to receive timeline journals from elsewhere
 impl<J: Journal + ReplicationDestination> ReplicationDestination for CoordinatorDocument<J> {
-    fn range(&mut self, id: JournalId) -> result::Result<Option<LsnRange>, ReplicationError> {
+    fn range(&mut self, id: JournalId) -> result::Result<LsnRange, ReplicationError> {
         let timeline = self.get_or_create_timeline_mut(id)?;
         ReplicationDestination::range(timeline, id)
     }
@@ -135,7 +141,7 @@ impl<J: Journal + ReplicationDestination> ReplicationDestination for Coordinator
     {
         let timeline = self.get_or_create_timeline_mut(id)?;
         timeline.write_lsn(id, lsn, reader)?;
-        self.mark_received(id, LsnRange::new(lsn, lsn));
+        self.mark_received(id, lsn);
         Ok(())
     }
 }

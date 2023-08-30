@@ -13,7 +13,7 @@ pub enum ReplicationMsg {
     /// request the lsn range of the specified journal
     RangeRequest { id: JournalId },
     /// reply to a RangeRequest with the range of the specified journal
-    Range { range: Option<LsnRange> },
+    Range { range: LsnRange },
     /// send one LSN frame from the specified journal
     Frame { id: JournalId, lsn: Lsn, len: u64 },
 }
@@ -26,9 +26,8 @@ pub enum ReplicationError {
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 
-    #[error("replication protocol is uninitialized")]
-    Uninitialized,
-
+    // #[error("replication protocol is uninitialized")]
+    // Uninitialized,
     #[error("unknown journal id: {0}")]
     UnknownJournal(JournalId),
 
@@ -38,44 +37,24 @@ pub enum ReplicationError {
     NonContiguousLsn { received: Lsn, range: LsnRange },
 }
 
-// struct ReplicationState {
-//     sent: LsnRange,
-//     acknowledged: LsnRange,
-// }
-
-#[derive(Debug)]
-pub enum ReplicationState {
-    /// the replication protocol is waiting for the remote journal range
-    Uninitialized,
-    /// the replication protocol is fully initialized
-    Initialized {
-        /// the range of the destination journal
-        destination_range: Option<LsnRange>,
-        /// the range we have sent to the destination
-        /// this range may be larger than the destination range if the
-        /// destination is lagging on sending acknowledgements
-        sent_range: Option<LsnRange>,
-    },
-}
-
 #[derive(Debug)]
 pub struct ReplicationProtocol {
-    state: ReplicationState,
+    // outstanding lsn frames sent to the destination but awaiting acknowledgement
+    // this is an Option because we need the to initialize it from the initial RangeRequest
+    outstanding_range: Option<LsnRange>,
 }
 
 impl ReplicationProtocol {
     pub fn new() -> Self {
         Self {
-            state: ReplicationState::Uninitialized,
+            outstanding_range: None,
         }
-    }
-
-    pub fn initialized(&self) -> bool {
-        matches!(self.state, ReplicationState::Initialized { .. })
     }
 
     /// start replication, must be called on both sides of the connection
     pub fn start<D: ReplicationSource>(&self, doc: &D) -> ReplicationMsg {
+        // before we can start sending frames to the destination, we need to know
+        // what frames the destination already has
         ReplicationMsg::RangeRequest {
             id: doc.source_id(),
         }
@@ -88,44 +67,30 @@ impl ReplicationProtocol {
         &mut self,
         doc: &'a D,
     ) -> Result<Option<(ReplicationMsg, D::Reader<'a>)>, ReplicationError> {
-        let lsn = match self.state {
-            ReplicationState::Uninitialized => {
-                return Err(ReplicationError::Uninitialized);
+        if let Some(outstanding_range) = self.outstanding_range {
+            if outstanding_range.len() >= MAX_OUTSTANDING_FRAMES {
+                // we have too many outstanding frames, so we can't send any more
+                return Ok(None);
             }
-            ReplicationState::Initialized {
-                destination_range: Some(dest),
-                sent_range: Some(sent),
-            } => {
-                // we want to send the next lsn after sent_range, but only if the delta is less than MAX_OUTSTANDING_FRAMES
-                if sent.last() - dest.last() < MAX_OUTSTANDING_FRAMES as u64 {
-                    sent.last() + 1
-                } else {
-                    // nothing to sync
-                    return Ok(None);
-                }
-            }
-            ReplicationState::Initialized {
-                destination_range: Some(dest),
-                ..
-            } => dest.last() + 1,
-            ReplicationState::Initialized {
-                destination_range: None,
-                ..
-            } => 0,
-        };
 
-        if let Some(data) = doc.read_lsn(lsn)? {
-            Ok(Some((
-                ReplicationMsg::Frame {
-                    id: doc.source_id(),
-                    lsn,
-                    len: data.size()? as u64,
-                },
-                data,
-            )))
-        } else {
-            Ok(None)
+            let lsn = outstanding_range.next();
+            if let Some(data) = doc.read_lsn(lsn)? {
+                // update outstanding
+                self.outstanding_range = Some(outstanding_range.append(lsn));
+
+                // send frame
+                return Ok(Some((
+                    ReplicationMsg::Frame {
+                        id: doc.source_id(),
+                        lsn,
+                        len: data.size()? as u64,
+                    },
+                    data,
+                )));
+            }
         }
+
+        Ok(None)
     }
 
     /// handle a replication message from the remote side
@@ -142,30 +107,28 @@ impl ReplicationProtocol {
                 range: doc.range(id)?,
             })),
             ReplicationMsg::Range { range } => {
-                // NOTE TO CARL
-                // I think the issue is that this range is being overwritten somehow
-                // so possibly needs a union? or something like that
-                self.state = ReplicationState::Initialized {
-                    destination_range: range,
-                    sent_range: None,
-                };
+                self.outstanding_range = self.outstanding_range.map_or_else(
+                    // first range response, initialize outstanding_range from destination range
+                    || Some(LsnRange::empty_following(&range)),
+                    // subsequent range response, update outstanding range
+                    |outstanding_range| {
+                        let next = range.next();
+                        assert!(next > 0, "subsequent range responses should never be empty");
+                        Some(outstanding_range.trim_prefix(next - 1))
+                    },
+                );
                 Ok(None)
             }
-            ReplicationMsg::Frame { id, lsn, len } => match self.state {
-                ReplicationState::Uninitialized => {
-                    return Err(ReplicationError::Uninitialized);
-                }
-                ReplicationState::Initialized { .. } => {
-                    let mut reader = LimitedReader {
-                        limit: len,
-                        inner: connection,
-                    };
-                    doc.write_lsn(id, lsn, &mut reader)?;
-                    Ok(Some(ReplicationMsg::Range {
-                        range: doc.range(id)?,
-                    }))
-                }
-            },
+            ReplicationMsg::Frame { id, lsn, len } => {
+                let mut reader = LimitedReader {
+                    limit: len,
+                    inner: connection,
+                };
+                doc.write_lsn(id, lsn, &mut reader)?;
+                Ok(Some(ReplicationMsg::Range {
+                    range: doc.range(id)?,
+                }))
+            }
         }
     }
 }
@@ -183,7 +146,7 @@ pub trait ReplicationSource {
 }
 
 pub trait ReplicationDestination {
-    fn range(&mut self, id: JournalId) -> Result<Option<LsnRange>, ReplicationError>;
+    fn range(&mut self, id: JournalId) -> Result<LsnRange, ReplicationError>;
 
     /// write the given lsn to the destination journal
     fn write_lsn<R>(

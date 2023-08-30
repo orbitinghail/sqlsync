@@ -8,52 +8,36 @@ use crate::{JournalError, Serializable};
 use super::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 use super::{Cursor, Journal, JournalId, JournalResult, Scannable};
 
-pub enum MemoryJournal {
-    Empty {
-        id: JournalId,
-        nextlsn: Lsn,
-    },
-    NonEmpty {
-        id: JournalId,
-        range: LsnRange,
-        data: Vec<Vec<u8>>,
-    },
+pub struct MemoryJournal {
+    id: JournalId,
+    range: LsnRange,
+    data: Vec<Vec<u8>>,
 }
 
 impl Debug for MemoryJournal {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            MemoryJournal::Empty { id, nextlsn, .. } => f
-                .debug_tuple("MemoryJournal::Empty")
-                .field(id)
-                .field(nextlsn)
-                .finish(),
-            MemoryJournal::NonEmpty { id, range, .. } => f
-                .debug_tuple("MemoryJournal::NonEmpty")
-                .field(id)
-                .field(range)
-                .finish(),
-        }
+        f.debug_tuple("MemoryJournal")
+            .field(&self.id)
+            .field(&self.range)
+            .finish()
     }
 }
 
 impl Journal for MemoryJournal {
     fn open(id: JournalId) -> JournalResult<Self> {
-        Ok(MemoryJournal::Empty { id, nextlsn: 0 })
+        Ok(MemoryJournal {
+            id,
+            range: LsnRange::empty(),
+            data: vec![],
+        })
     }
 
     fn id(&self) -> JournalId {
-        match self {
-            Self::Empty { id, .. } => *id,
-            Self::NonEmpty { id, .. } => *id,
-        }
+        self.id
     }
 
-    fn range(&self) -> Option<LsnRange> {
-        match self {
-            MemoryJournal::Empty { .. } => None,
-            MemoryJournal::NonEmpty { range, .. } => Some(*range),
-        }
+    fn range(&self) -> LsnRange {
+        self.range
     }
 
     fn append(&mut self, obj: impl Serializable) -> JournalResult<()> {
@@ -63,39 +47,18 @@ impl Journal for MemoryJournal {
             .map_err(|err| JournalError::SerializationError(err))?;
 
         // update the journal
-        match self {
-            MemoryJournal::Empty { id, nextlsn } => {
-                *self = MemoryJournal::NonEmpty {
-                    id: *id,
-                    range: LsnRange::new(*nextlsn, *nextlsn),
-                    data: vec![entry],
-                };
-            }
-            MemoryJournal::NonEmpty { range, data, .. } => {
-                data.push(entry);
-                *range = range.extend_by(1);
-            }
-        }
+        self.data.push(entry);
+        self.range = self.range.extend_by(1);
+
         Ok(())
     }
 
     fn drop_prefix(&mut self, up_to: Lsn) -> JournalResult<()> {
-        match self {
-            MemoryJournal::Empty { .. } => Ok(()),
-            MemoryJournal::NonEmpty { id, range, data } => {
-                if let Some(remaining_range) = range.trim_prefix(up_to) {
-                    let offsets = range.intersection_offsets(&remaining_range);
-                    *data = data[offsets].to_vec();
-                    *range = remaining_range;
-                } else {
-                    *self = MemoryJournal::Empty {
-                        id: *id,
-                        nextlsn: range.last() + 1,
-                    };
-                }
-                Ok(())
-            }
-        }
+        let remaining_range = self.range.trim_prefix(up_to);
+        let offsets = self.range.intersection_offsets(&remaining_range);
+        self.data = self.data[offsets].to_vec();
+        self.range = remaining_range;
+        Ok(())
     }
 }
 
@@ -109,14 +72,6 @@ impl<'a> MemoryScanCursor<'a> {
     fn new(slice: &'a [Vec<u8>]) -> Self {
         Self {
             slice,
-            started: false,
-            rev: false,
-        }
-    }
-
-    fn empty() -> Self {
-        Self {
-            slice: &[],
             started: false,
             rev: false,
         }
@@ -187,27 +142,12 @@ impl Scannable for MemoryJournal {
         Self: 'a;
 
     fn scan<'a>(&'a self) -> Self::Cursor<'a> {
-        match self {
-            Self::Empty { .. } => MemoryScanCursor::empty(),
-            Self::NonEmpty { data, .. } => MemoryScanCursor::new(data),
-        }
+        MemoryScanCursor::new(&self.data)
     }
 
     fn scan_range<'a>(&'a self, range: LsnRange) -> Self::Cursor<'a> {
-        match self {
-            Self::Empty { .. } => MemoryScanCursor::empty(),
-            Self::NonEmpty {
-                range: journal_range,
-                data,
-                ..
-            } => journal_range.intersect(&range).map_or_else(
-                || MemoryScanCursor::empty(),
-                |intersection_range| {
-                    let offsets = journal_range.intersection_offsets(&intersection_range);
-                    MemoryScanCursor::new(&data[offsets])
-                },
-            ),
-        }
+        let offsets = self.range.intersection_offsets(&range);
+        MemoryScanCursor::new(&self.data[offsets])
     }
 }
 
@@ -221,25 +161,19 @@ impl ReplicationSource for MemoryJournal {
     }
 
     fn read_lsn<'a>(&'a self, lsn: Lsn) -> io::Result<Option<Self::Reader<'a>>> {
-        match self {
-            MemoryJournal::Empty { .. } => Ok(None),
-            MemoryJournal::NonEmpty { range, data, .. } => match range.offset(lsn) {
-                None => Ok(None),
-                Some(offset) => Ok(Some(&data[offset][..])),
-            },
+        match self.range.offset(lsn) {
+            None => Ok(None),
+            Some(offset) => Ok(Some(&self.data[offset][..])),
         }
     }
 }
 
 impl ReplicationDestination for MemoryJournal {
-    fn range(&mut self, id: JournalId) -> Result<Option<LsnRange>, ReplicationError> {
-        if id != self.id() {
+    fn range(&mut self, id: JournalId) -> Result<LsnRange, ReplicationError> {
+        if id != self.id {
             return Err(ReplicationError::UnknownJournal(id));
         }
-        match self {
-            MemoryJournal::Empty { .. } => Ok(None),
-            MemoryJournal::NonEmpty { range, .. } => Ok(Some(*range)),
-        }
+        Ok(self.range)
     }
 
     fn write_lsn<R>(
@@ -255,48 +189,32 @@ impl ReplicationDestination for MemoryJournal {
             return Err(ReplicationError::UnknownJournal(id));
         }
 
-        let mut frame_data = Vec::new();
-        reader.read_to_end(&mut frame_data)?;
+        // accept any lsn in our current range or immediately following
+        let accepted_range = self.range.extend_by(1);
 
-        match self {
-            MemoryJournal::Empty { id, nextlsn } => {
-                if lsn != *nextlsn {
-                    return Err(ReplicationError::NonContiguousLsn {
-                        received: lsn,
-                        range: LsnRange::new(*nextlsn, *nextlsn),
-                    });
+        if accepted_range.contains(lsn) {
+            let mut frame_data = Vec::new();
+            reader.read_to_end(&mut frame_data)?;
+
+            // store frame into self.data
+            match self.range.offset(lsn) {
+                Some(offset) => {
+                    self.data[offset] = frame_data
+                    // no need to update range since this was an intersection
                 }
-                *self = MemoryJournal::NonEmpty {
-                    id: *id,
-                    range: LsnRange::new(lsn, lsn),
-                    data: vec![frame_data],
-                };
-                Ok(())
+                None => {
+                    self.data.push(frame_data);
+                    // update our range to include the new lsn
+                    self.range = accepted_range;
+                }
             }
-            MemoryJournal::NonEmpty { range, data, .. } => {
-                // accept any lsn in our current range or immediately following
-                let accepted_range = range.extend_by(1);
-                if !accepted_range.contains(lsn) {
-                    return Err(ReplicationError::NonContiguousLsn {
-                        received: lsn,
-                        range: accepted_range,
-                    });
-                }
-                match range.offset(lsn) {
-                    Some(offset) => {
-                        // intersection, replace specified lsn
-                        data[offset] = frame_data;
-                        // no need to update range
-                    }
-                    None => {
-                        // no intersection, append to the end
-                        data.push(frame_data);
-                        // update our range to include the new lsn
-                        *range = accepted_range;
-                    }
-                }
-                Ok(())
-            }
+
+            Ok(())
+        } else {
+            Err(ReplicationError::NonContiguousLsn {
+                received: lsn,
+                range: accepted_range,
+            })
         }
     }
 }

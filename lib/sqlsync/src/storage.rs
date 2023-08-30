@@ -16,7 +16,7 @@ const FILE_CHANGE_COUNTER_OFFSET: usize = 24;
 
 pub struct Storage<J> {
     journal: J,
-    visible_lsn_range: Option<LsnRange>,
+    visible_lsn_range: LsnRange,
     pending: SparsePages,
 
     file_change_counter: u32,
@@ -43,7 +43,7 @@ impl<J: Journal> Storage<J> {
     }
 
     pub fn has_committed_pages(&self) -> bool {
-        self.journal.range().is_some()
+        self.journal.range().is_non_empty()
     }
 
     pub fn commit(&mut self) -> anyhow::Result<()> {
@@ -80,7 +80,7 @@ impl<J: ReplicationDestination> ReplicationDestination for Storage<J> {
     fn range(
         &mut self,
         id: crate::JournalId,
-    ) -> Result<Option<LsnRange>, crate::replication::ReplicationError> {
+    ) -> Result<LsnRange, crate::replication::ReplicationError> {
         self.journal.range(id)
     }
 
@@ -103,13 +103,10 @@ impl<J: Journal> sqlite_vfs::File for Storage<J> {
 
         // if we have visible lsns in storage, then we need to scan them
         // to find the max page idx
-        if let Some(scan_range) = self.visible_lsn_range {
-            let mut cursor = self.journal.scan_range(scan_range);
-            while cursor.advance().map_err(|_| SQLITE_IOERR)? {
-                let pages = SerializedPagesReader(&cursor);
-                max_page_idx =
-                    max_page_idx.max(Some(pages.max_page_idx().map_err(|_| SQLITE_IOERR)?));
-            }
+        let mut cursor = self.journal.scan_range(self.visible_lsn_range);
+        while cursor.advance().map_err(|_| SQLITE_IOERR)? {
+            let pages = SerializedPagesReader(&cursor);
+            max_page_idx = max_page_idx.max(Some(pages.max_page_idx().map_err(|_| SQLITE_IOERR)?));
         }
 
         Ok(max_page_idx
@@ -140,14 +137,12 @@ impl<J: Journal> sqlite_vfs::File for Storage<J> {
 
         // find the page by searching down through pending and then the journal
         let mut n = self.pending.read(page_idx, page_offset, buf);
-        if let Some(scan_range) = self.visible_lsn_range {
-            let mut cursor = self.journal.scan_range(scan_range).into_rev();
-            while n == 0 && cursor.advance().map_err(|_| SQLITE_IOERR)? {
-                let pages = SerializedPagesReader(&cursor);
-                n = pages
-                    .read(page_idx, page_offset, buf)
-                    .map_err(|_| SQLITE_IOERR)?;
-            }
+        let mut cursor = self.journal.scan_range(self.visible_lsn_range).into_rev();
+        while n == 0 && cursor.advance().map_err(|_| SQLITE_IOERR)? {
+            let pages = SerializedPagesReader(&cursor);
+            n = pages
+                .read(page_idx, page_offset, buf)
+                .map_err(|_| SQLITE_IOERR)?;
         }
 
         if n != 0 {

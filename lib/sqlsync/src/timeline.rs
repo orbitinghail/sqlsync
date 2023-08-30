@@ -74,9 +74,14 @@ pub fn apply_timeline_range<J: Journal>(
     reducer: &mut Reducer,
     range: LsnRange,
 ) -> anyhow::Result<()> {
+    // nothing to apply, optimistically return
+    if range.is_empty() {
+        return Ok(());
+    }
+
     run_in_tx(sqlite, |tx| {
         // we first need to potentially trim the range if some or all of it has already been applied
-        let range: Option<LsnRange> = tx
+        let range = tx
             .query_row(
                 TIMELINES_READ_LSN_SQL,
                 named_params! {":id": timeline.id()},
@@ -85,13 +90,16 @@ pub fn apply_timeline_range<J: Journal>(
             // trim the range to ensure we don't double apply a mutation
             .map(|applied_lsn: u64| range.trim_prefix(applied_lsn))
             .or_else(|err| match err {
-                rusqlite::Error::QueryReturnedNoRows => Ok(Some(range)),
+                rusqlite::Error::QueryReturnedNoRows => Ok(range),
                 _ => Err(err),
             })?;
 
-        log::debug!("applying range: {:?}", range);
+        if range.is_empty() {
+            // nothing to apply, optimistically return
+            Ok(())
+        } else {
+            log::debug!("applying range: {:?}", range);
 
-        if let Some(range) = range {
             // ok, some or all of the provided range needs to be applied so let's do that
             let mut cursor = timeline.scan_range(range);
             while cursor.advance()? {
@@ -114,9 +122,8 @@ pub fn apply_timeline_range<J: Journal>(
                     ":lsn": &range.last(),
                 },
             )?;
+            Ok(())
         }
-
-        Ok(())
     })
 
     // TODO: once the above tx commits we can GC applied entries in the timeline

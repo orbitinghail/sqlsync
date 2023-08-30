@@ -121,18 +121,6 @@ fn handle_client(
     // send start message
     send_msg(&mut socket, unlock!(|doc| &protocol.start(doc)))?;
 
-    // handle start from client
-    while !protocol.initialized() {
-        let msg = receive_msg(&mut socket)?;
-        log::info!("server: received {:?}", msg);
-        if let Some(resp) = unlock!(|doc| protocol.handle(doc, msg, &mut socket)?) {
-            log::info!("server: sending {:?}", resp);
-            send_msg(&mut socket, &resp)?;
-        }
-    }
-
-    log::info!("server: initialized connection to client");
-
     let mut num_steps = 0;
 
     loop {
@@ -186,16 +174,7 @@ fn start_client(
     // send start message
     send_msg(&mut socket, &protocol.start(&mut doc))?;
 
-    // handle start from server
-    let msg = receive_msg(&mut socket)?;
-    log::info!("client({}): received {:?}", timeline_id, msg);
-
-    if let Some(resp) = protocol.handle(&mut doc, msg, &mut socket)? {
-        log::info!("client({}): sending {:?}", timeline_id, resp);
-        send_msg(&mut socket, &resp)?;
-    }
-
-    log::info!("client({}): initialized connection to server", timeline_id);
+    log::info!("client({}): connected to server", timeline_id);
 
     // the amount of mutations we will send the server
     let total_mutations = 10 as usize;
@@ -236,13 +215,11 @@ fn start_client(
         }
 
         // sync pending mutations to the server
-        if protocol.initialized() {
-            if let Some((msg, mut reader)) = protocol.sync(&mut doc)? {
-                log::info!("client({}): syncing to server", timeline_id);
-                send_msg(&mut socket, &msg)?;
-                // write the frame
-                io::copy(&mut reader, &mut socket)?;
-            }
+        if let Some((msg, mut reader)) = protocol.sync(&mut doc)? {
+            log::info!("client({}): syncing to server", timeline_id);
+            send_msg(&mut socket, &msg)?;
+            // write the frame
+            io::copy(&mut reader, &mut socket)?;
         }
 
         let mut all_mutations_applied = false;

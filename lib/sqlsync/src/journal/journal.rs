@@ -33,7 +33,7 @@ pub trait Journal: Scannable + Debug + Sized {
     fn id(&self) -> JournalId;
 
     /// this journal's range
-    fn range(&self) -> Option<LsnRange>;
+    fn range(&self) -> LsnRange;
 
     /// append a new journal entry, and then write to it
     fn append(&mut self, obj: impl Serializable) -> JournalResult<()>;

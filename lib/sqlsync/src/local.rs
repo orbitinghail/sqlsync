@@ -86,7 +86,7 @@ impl<J: ReplicationSource> ReplicationSource for LocalDocument<J> {
 
 /// LocalDocument knows how to receive a storage journal from elsewhere
 impl<J: ReplicationDestination> ReplicationDestination for LocalDocument<J> {
-    fn range(&mut self, id: JournalId) -> Result<Option<LsnRange>, ReplicationError> {
+    fn range(&mut self, id: JournalId) -> Result<LsnRange, ReplicationError> {
         self.storage.range(id)
     }
 
