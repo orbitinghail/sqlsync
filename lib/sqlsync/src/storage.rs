@@ -7,7 +7,7 @@ use crate::{
     journal::{Cursor, Journal},
     lsn::LsnRange,
     page::Page,
-    replication::{ReplicationDestination, ReplicationSource},
+    replication::{ReplicationDestination, ReplicationSource}, Lsn,
 };
 
 // This is the offset of the file change counter in the sqlite header which is
@@ -40,6 +40,10 @@ impl<J: Journal> Storage<J> {
             pending: SparsePages::new(),
             file_change_counter: 0,
         }
+    }
+
+    pub fn last_committed_lsn(&self) -> Option<Lsn> {
+        self.journal.range().last()
     }
 
     pub fn has_committed_pages(&self) -> bool {

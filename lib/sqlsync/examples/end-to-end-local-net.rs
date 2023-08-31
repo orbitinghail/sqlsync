@@ -1,4 +1,5 @@
 use std::io;
+use std::io::BufReader;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::net::ToSocketAddrs;
@@ -6,9 +7,12 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use bincode::ErrorKind;
+use rand::thread_rng;
+use rand::Rng;
 use sqlsync::local::LocalDocument;
 use sqlsync::replication::ReplicationMsg;
 use sqlsync::replication::ReplicationProtocol;
+use sqlsync::Lsn;
 use sqlsync::{Journal, JournalId};
 
 use serde::{Deserialize, Serialize};
@@ -42,11 +46,11 @@ where
     }
 }
 
-fn send_msg(socket: &mut TcpStream, msg: &ReplicationMsg) -> io::Result<()> {
+fn send_msg<W: io::Write>(socket: W, msg: &ReplicationMsg) -> io::Result<()> {
     serialize_into(socket, msg)
 }
 
-fn receive_msg(socket: &mut TcpStream) -> io::Result<ReplicationMsg> {
+fn receive_msg<R: io::Read>(socket: R) -> io::Result<ReplicationMsg> {
     deserialize_from(socket)
 }
 
@@ -101,10 +105,13 @@ fn start_server<'a>(
 
 fn handle_client(
     doc: Arc<Mutex<CoordinatorDocument<MemoryJournal>>>,
-    mut socket: TcpStream,
+    socket: TcpStream,
 ) -> anyhow::Result<()> {
     log::info!("server: received client connection");
     let mut protocol = ReplicationProtocol::new();
+
+    let mut socket_reader = BufReader::new(&socket);
+    let mut socket_writer = &socket;
 
     macro_rules! unlock {
         (|$doc:ident| $block:block) => {{
@@ -119,17 +126,19 @@ fn handle_client(
     }
 
     // send start message
-    send_msg(&mut socket, unlock!(|doc| &protocol.start(doc)))?;
+    let start_msg = unlock!(|doc| protocol.start(doc));
+    log::info!("server: sending {:?}", start_msg);
+    send_msg(socket_writer, &start_msg)?;
 
     let mut num_steps = 0;
 
     loop {
-        let msg = receive_msg(&mut socket)?;
+        let msg = receive_msg(&mut socket_reader)?;
         log::info!("server: received {:?}", msg);
 
-        if let Some(resp) = unlock!(|doc| protocol.handle(doc, msg, &mut socket)?) {
+        if let Some(resp) = unlock!(|doc| protocol.handle(doc, msg, &mut socket_reader)?) {
             log::info!("server: sending {:?}", resp);
-            send_msg(&mut socket, &resp)?;
+            send_msg(socket_writer, &resp)?;
         }
 
         // step after every message
@@ -141,9 +150,16 @@ fn handle_client(
         unlock!(|doc| {
             if let Some((msg, mut reader)) = protocol.sync(doc)? {
                 log::info!("server: syncing to client: {:?}", msg);
-                send_msg(&mut socket, &msg)?;
+                send_msg(socket_writer, &msg)?;
+                let frame_len = reader.len() as u64;
                 // write the frame
-                io::copy(&mut reader, &mut socket)?;
+                let n = io::copy(&mut reader, &mut socket_writer)?;
+                assert!(
+                    n == frame_len,
+                    "expected to write {} bytes, wrote {}",
+                    frame_len,
+                    n
+                );
             }
         });
     }
@@ -154,7 +170,9 @@ fn start_client(
     num_clients: usize,
     doc_id: JournalId,
 ) -> anyhow::Result<()> {
-    let mut socket = TcpStream::connect(addr)?;
+    let socket = TcpStream::connect(addr)?;
+    let mut socket_reader = BufReader::new(&socket);
+    let mut socket_writer = &socket;
 
     let wasm_bytes = include_bytes!(
         "../../../target/wasm32-unknown-unknown/debug/examples/counter_reducer.wasm"
@@ -172,7 +190,9 @@ fn start_client(
     let mut protocol = ReplicationProtocol::new();
 
     // send start message
-    send_msg(&mut socket, &protocol.start(&mut doc))?;
+    let start_msg = protocol.start(&mut doc);
+    log::info!("client({}): sending {:?}", timeline_id, start_msg);
+    send_msg(socket_writer, &start_msg)?;
 
     log::info!("client({}): connected to server", timeline_id);
 
@@ -180,29 +200,13 @@ fn start_client(
     let total_mutations = 10 as usize;
     let mut remaining_mutations = total_mutations;
 
-    // switch to nonblocking mode for the core client loop
-    socket.set_nonblocking(true)?;
-
     loop {
-        loop {
-            let msg = match receive_msg(&mut socket) {
-                Ok(msg) => msg,
-                Err(err) => {
-                    match err.kind() {
-                        io::ErrorKind::WouldBlock => {
-                            // no more messages
-                            break;
-                        }
-                        _ => return Err(err.into()),
-                    }
-                }
-            };
-            log::info!("client({}): received {:?}", timeline_id, msg);
+        let msg = receive_msg(&mut socket_reader)?;
+        log::info!("client({}): received {:?}", timeline_id, msg);
 
-            if let Some(resp) = protocol.handle(&mut doc, msg, &mut socket)? {
-                log::info!("client({}): sending {:?}", timeline_id, resp);
-                send_msg(&mut socket, &resp)?;
-            }
+        if let Some(resp) = protocol.handle(&mut doc, msg, &mut socket_reader)? {
+            log::info!("client({}): sending {:?}", timeline_id, resp);
+            send_msg(socket_writer, &resp)?;
         }
 
         // trigger a rebase if needed
@@ -216,13 +220,12 @@ fn start_client(
 
         // sync pending mutations to the server
         if let Some((msg, mut reader)) = protocol.sync(&mut doc)? {
-            log::info!("client({}): syncing to server", timeline_id);
-            send_msg(&mut socket, &msg)?;
+            log::info!("client({}): syncing to server: {:?}", timeline_id, msg);
+            send_msg(socket_writer, &msg)?;
             // write the frame
-            io::copy(&mut reader, &mut socket)?;
+            io::copy(&mut reader, &mut socket_writer)?;
         }
 
-        let mut all_mutations_applied = false;
         log::info!("client({}): QUERYING STATE", timeline_id);
         doc.query(|tx| {
             tx.query_row("select value from counter", [], |row| {
@@ -231,30 +234,29 @@ fn start_client(
                 Ok(())
             })?;
 
-            let mut stmt = tx.prepare("select lsn from __sqlsync_timelines")?;
-            let mut num_rows = 0;
-            let mut iter = stmt.query_map([], |r| {
-                num_rows += 1;
-                Ok(r.get::<_, usize>(0)?)
-            })?;
-            all_mutations_applied = iter.all(|x| x == Ok(total_mutations)) && num_rows > 0;
-
             Ok(())
         })?;
 
-        if all_mutations_applied {
-            break;
+        if let Some(lsn) = doc.storage_lsn() {
+            // once the storage has reached (total_mutations+1) * num_clients
+            // then we have reached the end
+            log::info!("client({}): storage lsn: {}", timeline_id, lsn);
+            if lsn >= ((total_mutations * num_clients) + 1) as Lsn {
+                break;
+            }
         }
 
-        // sleep a bit
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        // small random sleep
+        thread::sleep(std::time::Duration::from_millis(
+            thread_rng().gen_range(0..100),
+        ));
     }
 
     // final query, value should be total_mutations * num_clients
     doc.query(|tx| {
         tx.query_row_and_then("select value from counter", [], |row| {
             let value: Option<usize> = row.get(0)?;
-            log::info!("client({}): counter value: {:?}", timeline_id, value);
+            log::info!("client({}): FINAL counter value: {:?}", timeline_id, value);
             if value != Some(total_mutations * num_clients) {
                 return Err(anyhow::anyhow!(
                     "client({}): counter value is incorrect: {:?}, expected {}",

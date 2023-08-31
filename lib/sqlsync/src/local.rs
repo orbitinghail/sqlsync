@@ -10,6 +10,7 @@ use crate::{
     replication::{ReplicationDestination, ReplicationError, ReplicationSource},
     storage::Storage,
     timeline::{rebase_timeline, run_timeline_migration},
+    Lsn,
 };
 
 pub struct LocalDocument<J> {
@@ -66,6 +67,10 @@ impl<J: Journal + ReplicationSource> LocalDocument<J> {
             rebase_timeline(&mut self.timeline, &mut self.sqlite, &mut self.reducer)?;
         }
         Ok(())
+    }
+
+    pub fn storage_lsn(&mut self) -> Option<Lsn> {
+        self.storage.last_committed_lsn()
     }
 }
 
