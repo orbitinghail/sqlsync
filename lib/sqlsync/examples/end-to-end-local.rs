@@ -72,19 +72,19 @@ fn main() -> anyhow::Result<()> {
         .env()
         .init()?;
 
-    let doc_id = JournalId::new();
+    let doc_id = JournalId::new128();
     // build task_reducer.wasm using: `cargo build --target wasm32-unknown-unknown --example task-reducer`
     let wasm_bytes =
         include_bytes!("../../../target/wasm32-unknown-unknown/debug/examples/task_reducer.wasm");
 
     let mut local = LocalDocument::open(
         MemoryJournal::open(doc_id)?,
-        MemoryJournal::open(JournalId::new())?,
+        MemoryJournal::open(JournalId::new128())?,
         &wasm_bytes[..],
     )?;
     let mut local2 = LocalDocument::open(
         MemoryJournal::open(doc_id)?,
-        MemoryJournal::open(JournalId::new())?,
+        MemoryJournal::open(JournalId::new128())?,
         &wasm_bytes[..],
     )?;
     let mut remote = CoordinatorDocument::open(MemoryJournal::open(doc_id)?, &wasm_bytes[..])?;

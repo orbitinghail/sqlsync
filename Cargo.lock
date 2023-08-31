@@ -118,6 +118,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "630be753d4e58660abd17930c71b647fe46c27ea6b63cc59e1e3851406972e42"
 
 [[package]]
+name = "bs58"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5353f36341f7451062466f0b755b96ac3a9547e4d7f6b70d603fc721a7d7896"
+dependencies = [
+ "tinyvec",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -392,6 +401,12 @@ name = "hermit-abi"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "443144c8cdadd93ebf52ddb4056d257f5b52c04d3c804e657d19eb73fc33668b"
+
+[[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "http"
@@ -859,7 +874,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "bs58",
  "futures",
+ "hex",
  "js-sys",
  "libsqlite3-sys",
  "log",
@@ -872,7 +889,6 @@ dependencies = [
  "testutil",
  "thiserror",
  "time",
- "uuid",
  "wasmi",
 ]
 
@@ -880,6 +896,7 @@ dependencies = [
 name = "sqlsync-cloudflare-backend"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "console_error_panic_hook",
  "futures",
  "sqlsync",
@@ -912,7 +929,6 @@ dependencies = [
  "serde",
  "sqlsync",
  "thiserror",
- "uuid",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -1051,16 +1067,6 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
-]
-
-[[package]]
-name = "uuid"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79daa5ed5740825c40b389c5e50312b9c86df53fccd33f281df655642b43869d"
-dependencies = [
- "getrandom",
- "serde",
 ]
 
 [[package]]

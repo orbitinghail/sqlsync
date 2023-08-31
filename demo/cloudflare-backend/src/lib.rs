@@ -1,26 +1,67 @@
-use futures::stream::StreamExt;
-use sqlsync::{coordinator::CoordinatorDocument, Journal, JournalId, MemoryJournal};
+use std::{cell::RefCell, io, rc::Rc, time::Duration};
+
+use futures::{stream::StreamExt, Future};
+use sqlsync::{
+    coordinator::CoordinatorDocument,
+    replication::{ReplicationMsg, ReplicationProtocol},
+    Journal, JournalId, MemoryJournal,
+};
 use worker::*;
-use worker_sys::web_sys::Event;
+
+const DURABLE_OBJECT_NAME: &str = "COORDINATOR";
+const REDUCER_BUCKET: &str = "SQLSYNC_REDUCERS";
+
+// for now, we just support a fixed reducer; this key is used to grab the latest
+// reducer from the bucket
+const REDUCER_KEY: &str = "reducer.wasm";
+
+type Document = Rc<RefCell<CoordinatorDocument<MemoryJournal>>>;
 
 #[durable_object]
 pub struct DocumentCoordinator {
     state: State,
     env: Env,
-    clients: Vec<ClientConnection>,
+    doc: Option<Document>,
 }
 
 #[durable_object]
 impl DurableObject for DocumentCoordinator {
     fn new(state: State, env: Env) -> Self {
+        console_error_panic_hook::set_once();
         Self {
             state,
             env,
-            clients: Vec::new(),
+            doc: None,
         }
     }
 
     async fn fetch(&mut self, req: Request) -> Result<Response> {
+        let doc_id = object_id_to_journal_id(self.state.id())?;
+
+        if self.doc.is_none() {
+            let bucket = self.env.bucket(REDUCER_BUCKET)?;
+            let object = bucket.get(REDUCER_KEY).execute().await?;
+            let reducer_bytes = object
+                .ok_or(Error::Internal("reducer not found".into()))?
+                .body()
+                .ok_or(Error::Internal("reducer not found".into()))?
+                .bytes()
+                .await?;
+
+            let storage =
+                MemoryJournal::open(doc_id).map_err(|e| Error::Internal(e.to_string().into()))?;
+            let doc = Rc::new(RefCell::new(
+                CoordinatorDocument::open(storage, &reducer_bytes)
+                    .map_err(|e| Error::Internal(e.to_string().into()))?,
+            ));
+
+            // spawn a background task which steps the document
+            spawn_local(coordinator_task(doc.clone()));
+
+            self.doc = Some(doc);
+        }
+        let doc = self.doc.as_ref().unwrap();
+
         if let Some(upgrade) = req.headers().get("Upgrade")? {
             if upgrade == "websocket" {
                 let pair = WebSocketPair::new()?;
@@ -28,9 +69,7 @@ impl DurableObject for DocumentCoordinator {
 
                 ws.accept()?;
 
-                let client = ClientConnection::new(ws);
-                client.spawn_event_handler();
-                self.clients.push(client);
+                spawn_client_tasks(ws, doc.clone())?;
 
                 return Response::from_websocket(pair.client);
             }
@@ -39,38 +78,110 @@ impl DurableObject for DocumentCoordinator {
     }
 }
 
-struct ClientConnection {
-    ws: WebSocket,
+async fn coordinator_task(doc: Document) -> DynResult<()> {
+    // TODO figure out how to signal the coordinator task using some kind of channel
+    // so that we can wake it up after receiving mutations rather than running
+    // it on a loop
+    let step_interval = Duration::from_millis(1000);
+
+    loop {
+        {
+            let mut doc = doc.borrow_mut();
+            while doc.has_pending_work() {
+                doc.step()?;
+            }
+        }
+
+        // sleep for a bit
+        Delay::from(step_interval).await
+    }
 }
 
-impl ClientConnection {
-    fn new(ws: WebSocket) -> Self {
-        Self { ws }
+#[derive(Clone)]
+struct ClientState {
+    ws: WebSocket,
+    doc: Document,
+    protocol: Rc<RefCell<ReplicationProtocol>>,
+}
+
+fn spawn_client_tasks(ws: WebSocket, doc: Document) -> Result<()> {
+    let state = ClientState {
+        ws: ws.clone(),
+        doc: doc.clone(),
+        protocol: Rc::new(RefCell::new(ReplicationProtocol::new())),
+    };
+
+    spawn_local(client_task_handle_sync(state.clone()));
+    spawn_local(client_task_handle_messages(state.clone()));
+
+    // kickoff replication
+    let protocol = state.protocol.borrow_mut();
+    let mut doc = state.doc.borrow_mut();
+    let start_msg = protocol.start(&mut *doc);
+    console_log!("sending start message: {:?}", start_msg);
+    send_msg(&ws, start_msg)
+}
+
+async fn client_task_handle_sync(state: ClientState) -> DynResult<()> {
+    let sync_interval = Duration::from_millis(1000);
+
+    loop {
+        {
+            let mut protocol = state.protocol.borrow_mut();
+            let mut doc = state.doc.borrow_mut();
+
+            // send all outstanding frames
+            while let Some((msg, mut reader)) = protocol.sync(&mut *doc)? {
+                console_log!("sending message: {:?}", msg);
+                let mut writer = io::Cursor::new(vec![]);
+
+                bincode::serialize_into(&mut writer, &msg)?;
+                io::copy(&mut reader, &mut writer)?;
+
+                state.ws.send_with_bytes(writer.into_inner())?;
+            }
+        }
+
+        // sleep for a bit
+        Delay::from(sync_interval).await
     }
+}
 
-    fn spawn_event_handler(&self) {
-        let ws = self.ws.clone();
+async fn client_task_handle_messages(state: ClientState) -> DynResult<()> {
+    let mut events = state.ws.events()?;
 
-        wasm_bindgen_futures::spawn_local(async move {
-            let mut events = ws.events().expect("failed to open event stream");
+    while let Some(event) = events.next().await {
+        match event.expect("failed to receive event") {
+            WebsocketEvent::Message(message) => {
+                let data = message
+                    .bytes()
+                    .ok_or(Error::Internal("expected binary message".into()))?;
 
-            while let Some(event) = events.next().await {
-                match event.expect("failed to receive event") {
-                    WebsocketEvent::Message(message) => {
-                        let data = message.bytes().unwrap();
-                        console_log!("received data with len {}", data.len());
-                    }
-                    WebsocketEvent::Close(evt) => {
-                        console_log!(
-                            "websocket closed reason: {}, code: {}",
-                            evt.reason(),
-                            evt.code()
-                        );
+                let mut reader = io::Cursor::new(data);
+                let msg = recv_msg(&mut reader)?;
+                console_log!("received message: {:?}", msg);
+
+                {
+                    let mut protocol = state.protocol.borrow_mut();
+                    let mut doc = state.doc.borrow_mut();
+
+                    if let Some(resp) = protocol.handle(&mut *doc, msg, &mut reader)? {
+                        console_log!("sending response: {:?}", resp);
+                        send_msg(&state.ws, resp)?;
                     }
                 }
             }
-        });
+            WebsocketEvent::Close(evt) => {
+                console_log!(
+                    "websocket closed reason: {}, code: {}",
+                    evt.reason(),
+                    evt.code()
+                );
+            }
+        }
     }
+
+    Ok(())
 }
 
 #[event(fetch)]
@@ -80,11 +191,16 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let router = Router::new();
 
     router
+        .on_async("/new", |_req, ctx| async move {
+            let namespace = ctx.durable_object(DURABLE_OBJECT_NAME)?;
+            let id = namespace.unique_id()?;
+            Response::ok(id.to_string())
+        })
         .on_async("/doc/:id", |req, ctx| async move {
             if let Some(id) = ctx.param("id") {
                 console_log!("forwarding request to document with id: {}", id);
-                let namespace = ctx.durable_object("COORDINATOR")?;
-                let stub = namespace.id_from_name(id)?.get_stub()?;
+                let namespace = ctx.durable_object(DURABLE_OBJECT_NAME)?;
+                let stub = namespace.id_from_string(id)?.get_stub()?;
                 stub.fetch_with_request(req).await
             } else {
                 Response::error("Bad Request", 400)
@@ -92,4 +208,33 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         })
         .run(req, env)
         .await
+}
+
+fn object_id_to_journal_id(id: ObjectId) -> Result<JournalId> {
+    JournalId::from_hex(&id.to_string()).map_err(|e| e.to_string().into())
+}
+
+fn send_msg(ws: &WebSocket, msg: ReplicationMsg) -> Result<()> {
+    let data = bincode::serialize(&msg).map_err(|e| Error::Internal(e.to_string().into()))?;
+    ws.send_with_bytes(data)
+}
+
+fn recv_msg(r: impl io::Read) -> Result<ReplicationMsg> {
+    Ok(bincode::deserialize_from(r).map_err(|e| Error::Internal(e.to_string().into()))?)
+}
+
+type DynResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn spawn_local<F>(future: F)
+where
+    F: Future<Output = DynResult<()>> + 'static,
+{
+    wasm_bindgen_futures::spawn_local(async move {
+        match future.await {
+            Ok(()) => {}
+            Err(e) => {
+                console_error!("spawn_local error: {:?}", e);
+            }
+        }
+    })
 }

@@ -1,5 +1,7 @@
 import init, { open, SqlSyncDocument } from "sqlsync-worker-crate";
+import { JournalId, JournalIdToBytes } from "./JournalId";
 import {
+  Boot,
   ErrorResponse,
   Mutate,
   MutateResponse,
@@ -11,20 +13,10 @@ import {
   SqlSyncResponse,
 } from "./types";
 
+type WithId<T> = T & { id: number };
+
 let booted = false;
-const docs = new Map<string, SqlSyncDocument>();
-
-// const websocket = new WebSocket("ws://localhost:8787/doc/1234");
-const websocket = new WebSocket(
-  "wss://sqlsync.orbitinghail.workers.dev/doc/1234"
-);
-websocket.binaryType = "arraybuffer";
-
-websocket.onopen = () => {
-  console.log("sqlsync: websocket opened");
-  let data = Uint8Array.from([1, 2, 3, 4]);
-  websocket.send(data);
-};
+const docs = new Map<JournalId, SqlSyncDocument>();
 
 addEventListener("connect", (e: Event) => {
   let evt = e as MessageEvent;
@@ -47,12 +39,21 @@ const fetchBytes = async (url: string) =>
     .then((r) => r.arrayBuffer())
     .then((b) => new Uint8Array(b));
 
-type WithId<T> = T & { id: number };
+async function handle_boot(msg: Boot) {
+  console.log("sqlsync: initializing wasm");
+  await init(msg.wasmUrl);
+  booted = true;
+  console.log("sqlsync: wasm initialized");
+}
 
 async function handle_open(msg: Open): Promise<OpenResponse> {
   if (!docs.has(msg.docId)) {
     let reducerWasmBytes = await fetchBytes(msg.reducerUrl);
-    let doc = open(msg.docId, msg.timelineId, reducerWasmBytes);
+    let doc = open(
+      JournalIdToBytes(msg.docId),
+      JournalIdToBytes(msg.timelineId),
+      reducerWasmBytes
+    );
     docs.set(msg.docId, doc);
   }
   return { tag: "open" };
@@ -85,7 +86,7 @@ async function handle_message(port: MessagePort, msg: WithId<SqlSyncRequest>) {
   try {
     if (!booted) {
       if (msg.tag === "boot") {
-        await handle_boot(msg.wasmUrl);
+        await handle_boot(msg);
         response = { tag: "booted" };
       } else {
         response = {
@@ -115,11 +116,4 @@ async function handle_message(port: MessagePort, msg: WithId<SqlSyncRequest>) {
   }
 
   port.postMessage({ id: msg.id, ...response });
-}
-
-async function handle_boot(wasmUrl: string) {
-  console.log("sqlsync: initializing wasm");
-  await init(wasmUrl);
-  booted = true;
-  console.log("sqlsync: wasm initialized");
 }

@@ -2,6 +2,10 @@ name = "sqlsync"
 main = "build/worker/shim.mjs"
 compatibility_date = "2023-03-22"
 
+r2_buckets = [
+    { binding = "SQLSYNC_REDUCERS", bucket_name = "sqlsync-reducers", preview_bucket_name = "sqlsync-reducers-dev" },
+]
+
 [build]
 command = "cargo install -q worker-build && worker-build --release"
 

@@ -179,7 +179,7 @@ fn start_client(
     );
 
     // generate random timeline id and open doc
-    let timeline_id = JournalId::new();
+    let timeline_id = JournalId::new128();
     let timeline_journal = MemoryJournal::open(timeline_id)?;
     let storage_journal = MemoryJournal::open(doc_id)?;
     let mut doc = LocalDocument::open(storage_journal, timeline_journal, &wasm_bytes[..])?;
@@ -283,7 +283,7 @@ fn main() -> anyhow::Result<()> {
 
     let addr = "127.0.0.1:8080";
     let listener = TcpListener::bind(addr)?;
-    let doc_id = JournalId::new();
+    let doc_id = JournalId::new256();
 
     thread::scope(|s| {
         let server_scope = s.clone();

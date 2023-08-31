@@ -28,5 +28,8 @@
     "vite": "^4.4.9",
     "vite-plugin-dts": "^3.5.2",
     "vite-plugin-wasm-pack": "^0.1.12"
+  },
+  "dependencies": {
+    "@scure/base": "^1.1.3"
   }
 }

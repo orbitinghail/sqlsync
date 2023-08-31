@@ -31,11 +31,12 @@ serde = "1.0"
 simple_logger = "4.1"
 thiserror = "1.0"
 time = "0.3"
-uuid = "1.4"
 wasmi = "0.31"
 worker = "0.0.18"
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
+bs58 = "0.5"
+hex = "0.4"
 
 [workspace.dependencies.libsqlite3-sys]
 git = "https://github.com/trevyn/rusqlite"

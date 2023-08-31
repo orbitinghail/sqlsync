@@ -16,7 +16,8 @@ time.workspace = true
 wasmi.workspace = true
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
-uuid = { workspace = true, features = ["v4", "serde"] }
+bs58.workspace = true
+hex.workspace = true
 libsqlite3-sys.workspace = true
 rusqlite.workspace = true
 

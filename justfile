@@ -1,5 +1,8 @@
 default:
-    @just --list {{justfile()}}
+    @just --choose
+
+build: (run-with-prefix 'wasm-')
+    cargo build
 
 run-with-prefix prefix:
     #!/usr/bin/env bash
@@ -27,10 +30,16 @@ wasm-sqlsync-worker +FLAGS='--dev':
 wasm-demo-reducer +FLAGS='':
     cargo build --target wasm32-unknown-unknown --package demo-reducer {{FLAGS}}
 
-test-end-to-end-local:
+wasm-counter-reducer:
+    cargo build --target wasm32-unknown-unknown --example counter-reducer
+
+wasm-task-reducer:
+    cargo build --target wasm32-unknown-unknown --example task-reducer
+
+test-end-to-end-local: wasm-task-reducer
     RUST_BACKTRACE=1 cargo run --example end-to-end-local
 
-test-end-to-end-local-net:
+test-end-to-end-local-net: wasm-counter-reducer
     RUST_BACKTRACE=1 cargo run --example end-to-end-local-net
 
 test-sqlsync-reducer: wasm-sqlsync-reducer-guest

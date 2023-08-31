@@ -1,3 +1,4 @@
+import { JournalId } from "./JournalId";
 import { ErrorResponse, SqlSyncRequest, SqlSyncResponse } from "./types";
 
 // need to re-create and export these here since vite-plugin-dts doesn't like
@@ -49,13 +50,13 @@ export class SqlSync {
     });
   }
 
-  async boot(wasmUrl: string): Promise<void> {
-    await this.send({ tag: "boot", wasmUrl });
+  async boot(wasmUrl: string, coordinatorUrl?: string): Promise<void> {
+    await this.send({ tag: "boot", wasmUrl, coordinatorUrl });
   }
 
   async open(
-    docId: string,
-    timelineId: string,
+    docId: JournalId,
+    timelineId: JournalId,
     reducerUrl: string | URL
   ): Promise<void> {
     await this.send({
@@ -66,24 +67,29 @@ export class SqlSync {
     });
   }
 
-  async query(docId: string, sql: string, params: SqlValue[]): Promise<Row[]> {
+  async query(
+    docId: JournalId,
+    sql: string,
+    params: SqlValue[]
+  ): Promise<Row[]> {
     let { rows } = await this.send({ tag: "query", docId, sql, params });
     return rows;
   }
 
-  async mutate(docId: string, mutation: Uint8Array): Promise<void> {
+  async mutate(docId: JournalId, mutation: Uint8Array): Promise<void> {
     await this.send({ tag: "mutate", docId, mutation });
   }
 }
 
 export default function init(
   workerUrl: string | URL,
-  sqlSyncWasmUrl: string | URL
+  sqlSyncWasmUrl: string | URL,
+  coordinatorUrl?: string | URL
 ): Promise<SqlSync> {
   return new Promise(async (resolve) => {
     let worker = new SharedWorker(workerUrl, { type: "module" });
     let sqlsync = new SqlSync(worker.port);
-    await sqlsync.boot(sqlSyncWasmUrl.toString());
+    await sqlsync.boot(sqlSyncWasmUrl.toString(), coordinatorUrl?.toString());
     console.log("sqlsync: booted worker");
     resolve(sqlsync);
   });

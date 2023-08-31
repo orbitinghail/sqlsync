@@ -7,12 +7,15 @@ const DEMO_REDUCER_URL = new URL(
   "../../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm",
   import.meta.url
 );
-const DOC_ID = crypto.randomUUID();
-const TIMELINE_ID = crypto.randomUUID();
 
 import init from "sqlsync-worker";
 import wasmUrl from "sqlsync-worker/sqlsync.wasm?url";
 import workerUrl from "sqlsync-worker/worker.js?url";
+
+const COORDINATOR_URL = "localhost:8787";
+
+const DOC_ID = crypto.randomUUID();
+const TIMELINE_ID = crypto.randomUUID();
 
 const sqlsync = await init(workerUrl, wasmUrl);
 

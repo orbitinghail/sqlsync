@@ -29,8 +29,8 @@ pub fn main() {
 
 #[wasm_bindgen]
 pub fn open(
-    doc_id: String,
-    timeline_id: String,
+    doc_id: &[u8],
+    timeline_id: &[u8],
     reducer_wasm_bytes: &[u8],
 ) -> WasmResult<SqlSyncDocument> {
     let storage = MemoryJournal::open(doc_id.try_into()?)?;
