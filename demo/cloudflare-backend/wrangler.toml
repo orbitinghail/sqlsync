@@ -7,7 +7,8 @@ r2_buckets = [
 ]
 
 [build]
-command = "cargo install -q worker-build && worker-build --release"
+# TODO: this should be --release for production
+command = "cargo install -q worker-build && worker-build --dev"
 
 [durable_objects]
 bindings = [{ name = "COORDINATOR", class_name = "DocumentCoordinator" }]

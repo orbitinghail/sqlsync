@@ -14,9 +14,6 @@ use super::Scannable;
 
 #[derive(Error, Debug)]
 pub enum JournalError {
-    #[error("failed to open journal, error: {0}")]
-    FailedToOpenJournal(#[source] anyhow::Error),
-
     #[error("io error: {0}")]
     IoError(#[from] io::Error),
 

@@ -8,20 +8,57 @@ const DEMO_REDUCER_URL = new URL(
   import.meta.url
 );
 
-import init from "sqlsync-worker";
+import init, { JournalId, RandomJournalId } from "sqlsync-worker";
 import wasmUrl from "sqlsync-worker/sqlsync.wasm?url";
 import workerUrl from "sqlsync-worker/worker.js?url";
 
 const COORDINATOR_URL = "localhost:8787";
 
-const DOC_ID = crypto.randomUUID();
-const TIMELINE_ID = crypto.randomUUID();
+// const newDocument = async () => {
+//   const response = await fetch(`${location.protocol}//${COORDINATOR_URL}/new`, {
+//     method: "POST",
+//   });
+//   return (await response.text()) as JournalId;
+// };
+//const DOC_ID = await newDocument();
+const DOC_ID = "6cBMtRnfvn5B5GSP5oxFyuXh9ExxrjgQ93zaBhnpEVqR" as JournalId;
 
-const sqlsync = await init(workerUrl, wasmUrl);
+const TIMELINE_ID = RandomJournalId();
+
+const sqlsync = await init(workerUrl, wasmUrl, COORDINATOR_URL);
 
 await sqlsync.open(DOC_ID, TIMELINE_ID, DEMO_REDUCER_URL);
 
-console.log(await sqlsync.query(DOC_ID, "SELECT 'bye'", []));
+type Mutation =
+  | {
+      tag: "InitSchema";
+    }
+  | {
+      tag: "Incr";
+      value: number;
+    }
+  | {
+      tag: "Decr";
+      value: number;
+    };
+
+const mutate = (mutation: Mutation) => {
+  const buf = JSON.stringify(mutation);
+  const bytes = new TextEncoder().encode(buf);
+  return sqlsync.mutate(DOC_ID, bytes);
+};
+
+await mutate({ tag: "InitSchema" });
+
+window.incr = async (value = 1) => {
+  await mutate({ tag: "Incr", value });
+};
+window.decr = async (value = 1) => {
+  await mutate({ tag: "Decr", value });
+};
+window.query = (query = "select * from counter") => {
+  return sqlsync.query(DOC_ID, query, []);
+};
 
 // TODO: Figure out how to make sure errors are propagated out of the worker
 

@@ -45,11 +45,15 @@ impl JournalId {
         Self::Raw256(data)
     }
 
-    pub fn bytes(&self) -> &[u8] {
-        match self {
-            Self::Raw128(data) => data,
-            Self::Raw256(data) => data,
-        }
+    pub fn from_base58(str: &str) -> Result<JournalId, JournalIdParseError> {
+        let data = bs58::decode(str).with_alphabet(BS58_ALPHABET).into_vec()?;
+        data.as_slice().try_into()
+    }
+
+    pub fn to_base58(&self) -> String {
+        bs58::encode(self.bytes())
+            .with_alphabet(BS58_ALPHABET)
+            .into_string()
     }
 
     pub fn from_hex(str: &str) -> Result<JournalId, JournalIdParseError> {
@@ -57,19 +61,21 @@ impl JournalId {
         data.as_slice().try_into()
     }
 
-    pub fn from_base58(str: &str) -> Result<JournalId, JournalIdParseError> {
-        let data = bs58::decode(str).with_alphabet(BS58_ALPHABET).into_vec()?;
-        data.as_slice().try_into()
+    pub fn to_hex(&self) -> String {
+        hex::encode(self.bytes())
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        match self {
+            Self::Raw128(data) => data,
+            Self::Raw256(data) => data,
+        }
     }
 }
 
 impl Debug for JournalId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(
-            &bs58::encode(self.bytes())
-                .with_alphabet(BS58_ALPHABET)
-                .into_string(),
-        )
+        f.write_str(&self.to_base58())
     }
 }
 

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlsync_reducer::{execute, init_reducer, types::ReducerError};
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "type")]
+#[serde(tag = "tag")]
 enum Mutation {
     InitSchema,
     Incr { value: i32 },

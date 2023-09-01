@@ -1,7 +1,0 @@
-{
-  "compilerOptions": {
-    "composite": true,
-    "lib": ["ES2020", "WebWorker"]
-  },
-  "include": ["src/worker.ts", "src/types.d.ts", "src/JournalId.ts"]
-}

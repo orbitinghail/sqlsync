@@ -1,11 +1,14 @@
-use rusqlite::{named_params, Connection};
+use std::io;
+
+use rusqlite::{named_params, Connection, Transaction};
+use thiserror::Error;
 
 use crate::{
-    db::run_in_tx,
     journal::{Cursor, Journal},
     lsn::{Lsn, LsnRange},
     positioned_io::PositionedReader,
-    reducer::Reducer,
+    reducer::{Reducer, ReducerError},
+    JournalError, ScanError,
 };
 
 const TIMELINES_TABLE_SQL: &str = "
@@ -27,8 +30,49 @@ const TIMELINES_UPDATE_LSN_SQL: &str = "
     ON CONFLICT (id) DO UPDATE SET lsn = :lsn
 ";
 
-pub fn run_timeline_migration(sqlite: &mut Connection) -> anyhow::Result<()> {
+#[derive(Error, Debug)]
+pub enum TimelineError {
+    #[error("io error: {0}")]
+    IoError(#[from] io::Error),
+
+    #[error(transparent)]
+    Sqlite(#[from] rusqlite::Error),
+
+    #[error(transparent)]
+    JournalError(#[from] JournalError),
+
+    #[error(transparent)]
+    ScanError(#[from] ScanError),
+
+    #[error(transparent)]
+    ReducerError(#[from] ReducerError),
+}
+
+type Result<T> = std::result::Result<T, TimelineError>;
+
+fn run_in_tx<F>(sqlite: &mut Connection, f: F) -> Result<()>
+where
+    F: FnOnce(&mut Transaction) -> Result<()>,
+{
+    let mut txn = sqlite.transaction()?;
+    f(&mut txn)?; // will cause a rollback on failure
+    txn.commit()?;
+    Ok(())
+}
+
+pub fn run_timeline_migration(sqlite: &mut Connection) -> Result<()> {
     sqlite.execute(TIMELINES_TABLE_SQL, [])?;
+    Ok(())
+}
+
+pub fn apply_mutation<J: Journal>(
+    timeline: &mut J,
+    sqlite: &mut Connection,
+    reducer: &mut Reducer,
+    mutation: &[u8],
+) -> Result<()> {
+    run_in_tx(sqlite, |tx| Ok(reducer.apply(tx, &mutation)?))?;
+    timeline.append(mutation)?;
     Ok(())
 }
 
@@ -36,7 +80,7 @@ pub fn rebase_timeline<J: Journal>(
     timeline: &mut J,
     sqlite: &mut Connection,
     reducer: &mut Reducer,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let applied_lsn: Option<Lsn> = sqlite
         .query_row(
             TIMELINES_READ_LSN_SQL,
@@ -73,7 +117,7 @@ pub fn apply_timeline_range<J: Journal>(
     sqlite: &mut Connection,
     reducer: &mut Reducer,
     range: LsnRange,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     // nothing to apply, optimistically return
     if range.is_empty() {
         return Ok(());

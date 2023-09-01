@@ -3,7 +3,7 @@ use std::{cmp, io};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{lsn::LsnRange, positioned_io::PositionedReader, JournalId, Lsn};
+use crate::{lsn::LsnRange, positioned_io::PositionedReader, JournalError, JournalId, Lsn};
 
 // maximum number of frames we will send without receiving an acknowledgement
 const MAX_OUTSTANDING_FRAMES: usize = 3;
@@ -23,13 +23,13 @@ pub enum ReplicationError {
     #[error(transparent)]
     Io(#[from] io::Error),
 
-    #[error(transparent)]
-    Anyhow(#[from] anyhow::Error),
-
     // #[error("replication protocol is uninitialized")]
     // Uninitialized,
     #[error("unknown journal id: {0}")]
     UnknownJournal(JournalId),
+
+    #[error(transparent)]
+    JournalError(#[from] JournalError),
 
     #[error(
         "replication must be contiguous, received lsn {received} but expected lsn in range {range}"

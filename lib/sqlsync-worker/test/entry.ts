@@ -1,4 +1,4 @@
-import { JournalId } from "../src/JournalId.js";
+import { RandomJournalId } from "../src/JournalId.js";
 import init from "../src/main.js";
 
 const TEST_REDUCER_URL = new URL(
@@ -15,8 +15,8 @@ const SQLSYNC_WASM_URL = new URL(
 let sqlsync = await init(SQLSYNC_WORKER_URL, SQLSYNC_WASM_URL);
 
 // journal ids are either 16 or 32 bytes
-let DOC_ID = JournalId();
-let TIMELINE_ID = JournalId();
+let DOC_ID = RandomJournalId();
+let TIMELINE_ID = RandomJournalId();
 
 console.log("sqlsync: opening document");
 await sqlsync.open(DOC_ID, TIMELINE_ID, TEST_REDUCER_URL.toString());

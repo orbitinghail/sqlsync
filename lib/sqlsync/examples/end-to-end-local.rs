@@ -129,7 +129,7 @@ fn main() -> anyhow::Result<()> {
                 for task in tasks {
                     log::info!("  {:?}", task);
                 }
-                Ok(())
+                Ok::<_, anyhow::Error>(())
             })
         };
     }

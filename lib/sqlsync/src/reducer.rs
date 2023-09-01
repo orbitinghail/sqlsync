@@ -6,17 +6,35 @@ use rusqlite::{
     Transaction,
 };
 use sqlsync_reducer::{
-    host_ffi::{register_log_handler, WasmFFI},
+    host_ffi::{register_log_handler, WasmFFI, WasmFFIError},
     types::{ExecResponse, QueryResponse, Request, Row, SqliteValue},
 };
-use wasmi::{Engine, Linker, Module, Store};
+use thiserror::Error;
+use wasmi::{errors::LinkerError, Engine, Linker, Module, Store};
+
+#[derive(Error, Debug)]
+pub enum ReducerError {
+    #[error(transparent)]
+    Link(#[from] LinkerError),
+
+    #[error(transparent)]
+    Runtime(#[from] wasmi::Error),
+
+    #[error(transparent)]
+    Interface(#[from] WasmFFIError),
+
+    #[error(transparent)]
+    Sqlite(#[from] rusqlite::Error),
+}
+
+type Result<T> = std::result::Result<T, ReducerError>;
 
 pub struct Reducer {
     store: Store<WasmFFI>,
 }
 
 impl Reducer {
-    pub fn new(wasm_bytes: &[u8]) -> anyhow::Result<Self> {
+    pub fn new(wasm_bytes: &[u8]) -> Result<Self> {
         let engine = Engine::default();
         let module = Module::new(&engine, wasm_bytes)?;
 
@@ -36,7 +54,7 @@ impl Reducer {
         Ok(Self { store })
     }
 
-    pub fn apply(&mut self, tx: &mut Transaction, mutation: &[u8]) -> anyhow::Result<()> {
+    pub fn apply(&mut self, tx: &mut Transaction, mutation: &[u8]) -> Result<()> {
         let ffi = self.store.data().to_owned();
 
         // start the reducer
@@ -63,9 +81,9 @@ impl Reducer {
                             .query_and_then(params, move |row| {
                                 (0..num_columns)
                                     .map(|i| Ok(to_sqlite_value(row.get_ref(i)?)))
-                                    .collect::<Result<Row, rusqlite::Error>>()
+                                    .collect::<std::result::Result<Row, rusqlite::Error>>()
                             })?
-                            .collect::<Result<Vec<_>, _>>()?;
+                            .collect::<std::result::Result<Vec<_>, _>>()?;
 
                         let ptr = ffi.encode(&mut self.store, &QueryResponse { columns, rows })?;
 

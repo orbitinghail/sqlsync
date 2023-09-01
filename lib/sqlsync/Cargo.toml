@@ -10,7 +10,6 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 sqlite-vfs = { path = "../sqlite-vfs" }
 log.workspace = true
-anyhow.workspace = true
 rand.workspace = true
 time.workspace = true
 wasmi.workspace = true

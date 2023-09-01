@@ -12,6 +12,7 @@ pub mod local;
 pub mod positioned_io;
 pub mod timeline;
 pub mod unixtime;
+pub mod error;
 
 pub use journal::*;
 pub use serialization::{Deserializable, Serializable};

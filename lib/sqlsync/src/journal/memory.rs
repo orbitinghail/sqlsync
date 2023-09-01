@@ -3,7 +3,7 @@ use std::io;
 
 use crate::lsn::{Lsn, LsnRange};
 use crate::positioned_io::PositionedReader;
-use crate::{JournalError, Serializable};
+use crate::{JournalError, ScanError, Serializable};
 
 use super::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 use super::{Cursor, Journal, JournalId, JournalResult, Scannable};
@@ -96,7 +96,7 @@ impl<'a> MemoryScanCursor<'a> {
 }
 
 impl<'a> Cursor for MemoryScanCursor<'a> {
-    fn advance(&mut self) -> io::Result<bool> {
+    fn advance(&mut self) -> std::result::Result<bool, ScanError> {
         if !self.started {
             self.started = true;
         } else {

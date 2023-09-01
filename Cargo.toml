@@ -37,6 +37,8 @@ wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
 bs58 = "0.5"
 hex = "0.4"
+gloo = "0.10"
+wasm-bindgen-futures = "0.4"
 
 [workspace.dependencies.libsqlite3-sys]
 git = "https://github.com/trevyn/rusqlite"

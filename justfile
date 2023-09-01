@@ -54,5 +54,10 @@ node_modules:
 
 # release targets below this point
 
-package-sqlsync-worker: (wasm-sqlsync-worker '--release')
+upload-demo-reducer: wasm-demo-reducer
+    cd demo/cloudflare-backend && pnpm exec wrangler r2 object put sqlsync-reducers/reducer.wasm --file ../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm
+    cd demo/cloudflare-backend && pnpm exec wrangler r2 object put sqlsync-reducers-dev/reducer.wasm --file ../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm
+
+package-sqlsync-worker +FLAGS='--release':
+    just wasm-sqlsync-worker '{{FLAGS}}'
     cd lib/sqlsync-worker && pnpm build

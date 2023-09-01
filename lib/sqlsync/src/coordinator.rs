@@ -1,21 +1,21 @@
-use anyhow::Result;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
-use std::{io, result};
+use std::io;
 
 use rusqlite::Connection;
 
 use crate::db::open_with_vfs;
+use crate::error::Result;
 use crate::reducer::Reducer;
 use crate::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 use crate::timeline::{apply_timeline_range, run_timeline_migration};
-use crate::Lsn;
 use crate::{
     journal::{Journal, JournalId},
     lsn::LsnRange,
     storage::Storage,
 };
+use crate::{JournalError, Lsn};
 
 struct ReceiveQueueEntry {
     id: JournalId,
@@ -55,7 +55,10 @@ impl<J: Journal> CoordinatorDocument<J> {
         })
     }
 
-    fn get_or_create_timeline_mut(&mut self, id: JournalId) -> Result<&mut J> {
+    fn get_or_create_timeline_mut(
+        &mut self,
+        id: JournalId,
+    ) -> std::result::Result<&mut J, JournalError> {
         match self.timelines.entry(id) {
             Entry::Occupied(entry) => Ok(entry.into_mut()),
             Entry::Vacant(entry) => Ok(entry.insert(J::open(id)?)),
@@ -82,7 +85,7 @@ impl<J: Journal> CoordinatorDocument<J> {
         }
     }
 
-    pub fn step(&mut self) -> anyhow::Result<()> {
+    pub fn step(&mut self) -> Result<()> {
         // check to see if we have anything in the receive queue
         let entry = self.timeline_receive_queue.pop_front();
 
@@ -125,7 +128,7 @@ impl<J: ReplicationSource> ReplicationSource for CoordinatorDocument<J> {
 
 /// CoordinatorDocument knows how to receive timeline journals from elsewhere
 impl<J: Journal + ReplicationDestination> ReplicationDestination for CoordinatorDocument<J> {
-    fn range(&mut self, id: JournalId) -> result::Result<LsnRange, ReplicationError> {
+    fn range(&mut self, id: JournalId) -> std::result::Result<LsnRange, ReplicationError> {
         let timeline = self.get_or_create_timeline_mut(id)?;
         ReplicationDestination::range(timeline, id)
     }
@@ -135,7 +138,7 @@ impl<J: Journal + ReplicationDestination> ReplicationDestination for Coordinator
         id: JournalId,
         lsn: crate::Lsn,
         reader: &mut R,
-    ) -> result::Result<(), ReplicationError>
+    ) -> std::result::Result<(), ReplicationError>
     where
         R: io::Read,
     {

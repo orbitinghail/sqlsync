@@ -21,8 +21,5 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src", "test"],
-  "references": [
-    { "path": "./tsconfig.worker.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
+  "references": [{ "path": "./tsconfig.node.json" }]
 }

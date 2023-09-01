@@ -16,12 +16,15 @@ bincode.workspace = true
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
 console_error_panic_hook.workspace = true
+gloo = { workspace = true, features = ["futures"] }
+wasm-bindgen-futures.workspace = true
+futures.workspace = true
 
 sqlsync = { path = "../../sqlsync" }
 
 [dependencies.web-sys]
 workspace = true
-features = ["console", "WebSocket", "MessageEvent"]
+features = ["console"]
 
 [package.metadata.wasm-pack.profile.dev]
 wasm-opt = false

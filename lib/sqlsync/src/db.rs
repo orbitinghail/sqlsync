@@ -1,8 +1,9 @@
-use anyhow::Result;
 use rusqlite::{Connection, OpenFlags, Transaction};
 use sqlite_vfs::FilePtr;
 
 use crate::{journal::Journal, page::PAGESIZE, storage::Storage, vfs::StorageVfs};
+
+type Result<T> = std::result::Result<T, rusqlite::Error>;
 
 pub fn open_with_vfs<J: Journal>(journal: J) -> Result<(Connection, Box<Storage<J>>)> {
     let mut storage = Box::new(Storage::new(journal));
@@ -19,14 +20,11 @@ pub fn open_with_vfs<J: Journal>(journal: J) -> Result<(Connection, Box<Storage<
         "main.db",
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
         &vfs_name,
-    )
-    .unwrap();
+    )?;
 
-    sqlite.pragma_update(None, "page_size", PAGESIZE).unwrap();
-    sqlite.pragma_update(None, "synchronous", "off").unwrap();
-    sqlite
-        .pragma_update(None, "journal_mode", "memory")
-        .unwrap();
+    sqlite.pragma_update(None, "page_size", PAGESIZE)?;
+    sqlite.pragma_update(None, "synchronous", "off")?;
+    sqlite.pragma_update(None, "journal_mode", "memory")?;
 
     // TODO: benchmark with/without cache
     // sqlite.pragma_update(None, "default_cache_size", 0).unwrap();
@@ -35,20 +33,11 @@ pub fn open_with_vfs<J: Journal>(journal: J) -> Result<(Connection, Box<Storage<
     Ok((sqlite, storage))
 }
 
-pub fn run_in_tx<F>(sqlite: &mut Connection, f: F) -> Result<()>
-where
-    F: FnOnce(&mut Transaction) -> Result<()>,
-{
-    let mut txn = sqlite.transaction()?;
-    f(&mut txn)?; // will cause a rollback on failure
-    txn.commit()?;
-    Ok(())
-}
-
 // run a closure on db in a txn, rolling back any changes
-pub fn readonly_query<F, O>(sqlite: &mut Connection, f: F) -> Result<O>
+pub fn readonly_query<F, O, E>(sqlite: &mut Connection, f: F) -> std::result::Result<O, E>
 where
-    F: FnOnce(Transaction) -> Result<O>,
+    F: FnOnce(Transaction) -> std::result::Result<O, E>,
+    E: std::convert::From<rusqlite::Error>,
 {
     // TODO: this is a hack to get around rusqlite's lack of support for readonly txns
     //       this can be better enforced by wrapping the tx in something that rejects commit

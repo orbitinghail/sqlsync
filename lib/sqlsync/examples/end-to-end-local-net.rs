@@ -234,7 +234,7 @@ fn start_client(
                 Ok(())
             })?;
 
-            Ok(())
+            Ok::<_, anyhow::Error>(())
         })?;
 
         if let Some(lsn) = doc.storage_lsn() {
@@ -267,7 +267,7 @@ fn start_client(
             }
             Ok(())
         })?;
-        Ok(())
+        Ok::<_, anyhow::Error>(())
     })?;
 
     log::info!("client({}): closing connection", timeline_id);

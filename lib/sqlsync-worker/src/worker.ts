@@ -16,6 +16,7 @@ import {
 type WithId<T> = T & { id: number };
 
 let booted = false;
+let coordinatorUrl: string | undefined; // set by boot
 const docs = new Map<JournalId, SqlSyncDocument>();
 
 addEventListener("connect", (e: Event) => {
@@ -41,6 +42,7 @@ const fetchBytes = async (url: string) =>
 
 async function handle_boot(msg: Boot) {
   console.log("sqlsync: initializing wasm");
+  coordinatorUrl = msg.coordinatorUrl;
   await init(msg.wasmUrl);
   booted = true;
   console.log("sqlsync: wasm initialized");
@@ -52,7 +54,8 @@ async function handle_open(msg: Open): Promise<OpenResponse> {
     let doc = open(
       JournalIdToBytes(msg.docId),
       JournalIdToBytes(msg.timelineId),
-      reducerWasmBytes
+      reducerWasmBytes,
+      coordinatorUrl
     );
     docs.set(msg.docId, doc);
   }

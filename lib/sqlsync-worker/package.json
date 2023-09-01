@@ -12,7 +12,7 @@
     "./worker.js": "./dist/worker.js",
     "./sqlsync.wasm": "./dist/assets/sqlsync_worker_crate_bg.wasm"
   },
-  "types": "./dist/sqlsync-worker.d.ts",
+  "types": "./dist/main.d.ts",
   "scripts": {
     "dev": "vite",
     "build-test-reducer": "cargo build -p test-reducer --target wasm32-unknown-unknown",

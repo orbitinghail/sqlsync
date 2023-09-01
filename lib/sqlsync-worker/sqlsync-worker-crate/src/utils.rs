@@ -1,16 +1,14 @@
-use std::io;
+use std::{convert::TryFrom, io};
 
+use anyhow::anyhow;
+use gloo::utils::errors::JsError;
 use js_sys::Uint8Array;
 use log::Level;
-use sqlsync::{
-    sqlite::{
-        self,
-        types::{FromSqlError, ToSqlOutput, Value, ValueRef},
-        ToSql,
-    },
-    JournalError, JournalIdParseError,
+use sqlsync::sqlite::{
+    self,
+    types::{ToSqlOutput, Value, ValueRef},
+    ToSql,
 };
-use thiserror::Error;
 use wasm_bindgen::JsValue;
 use web_sys::console;
 
@@ -44,71 +42,53 @@ impl log::Log for ConsoleLogger {
 
 pub type WasmResult<T> = Result<T, WasmError>;
 
-#[derive(Error, Debug)]
-pub enum WasmError {
-    #[error(transparent)]
-    AnyhowError(#[from] anyhow::Error),
+#[derive(Debug)]
+pub struct WasmError(anyhow::Error);
 
-    #[error(transparent)]
-    JournalError(#[from] JournalError),
-
-    #[error(transparent)]
-    SqliteError(#[from] sqlite::Error),
-
-    #[error(transparent)]
-    FromSqlError(#[from] FromSqlError),
-
-    #[error(transparent)]
-    IdParseError(#[from] JournalIdParseError),
-
-    #[error("JsValue error: {0:?}")]
-    JsError(JsValue),
-}
-
-impl WasmError {
-    pub fn into_anyhow(self) -> anyhow::Error {
-        match self {
-            Self::AnyhowError(e) => e,
-            Self::JournalError(e) => e.into(),
-            Self::SqliteError(e) => e.into(),
-            Self::FromSqlError(e) => e.into(),
-            Self::IdParseError(e) => e.into(),
-            Self::JsError(e) => anyhow::anyhow!("{:?}", e),
-        }
+impl From<WasmError> for JsValue {
+    fn from(value: WasmError) -> Self {
+        JsValue::from_str(&value.0.to_string())
     }
 }
 
 impl From<JsValue> for WasmError {
     fn from(value: JsValue) -> Self {
-        Self::JsError(value)
-    }
-}
-
-impl From<WasmError> for JsValue {
-    fn from(value: WasmError) -> Self {
-        match value {
-            WasmError::AnyhowError(e) => JsValue::from_str(&format!("{:?}", e)),
-            WasmError::JournalError(e) => JsValue::from_str(&format!("{:?}", e)),
-            WasmError::SqliteError(e) => JsValue::from_str(&format!("{:?}", e)),
-            WasmError::FromSqlError(e) => JsValue::from_str(&format!("{:?}", e)),
-            WasmError::IdParseError(e) => JsValue::from_str(&format!("{:?}", e)),
-            WasmError::JsError(e) => e,
+        match JsError::try_from(value) {
+            Ok(js_error) => WasmError(js_error.into()),
+            Err(not_js_error) => WasmError(anyhow!(not_js_error.to_string())),
         }
     }
 }
 
-impl From<WasmError> for io::Error {
-    fn from(value: WasmError) -> Self {
-        match value {
-            WasmError::AnyhowError(e) => io::Error::new(io::ErrorKind::Other, e),
-            WasmError::JournalError(e) => io::Error::new(io::ErrorKind::Other, e),
-            WasmError::SqliteError(e) => io::Error::new(io::ErrorKind::Other, e),
-            WasmError::FromSqlError(e) => io::Error::new(io::ErrorKind::Other, e),
-            WasmError::IdParseError(e) => io::Error::new(io::ErrorKind::Other, e),
-            WasmError::JsError(e) => io::Error::new(io::ErrorKind::Other, format!("{:?}", e)),
-        }
+impl From<anyhow::Error> for WasmError {
+    fn from(value: anyhow::Error) -> Self {
+        WasmError(value)
     }
 }
+
+macro_rules! impl_from_error {
+    ($($error:ty, )+) => {
+        $(
+            impl From<$error> for WasmError {
+                fn from(value: $error) -> Self {
+                    WasmError(anyhow::anyhow!(value))
+                }
+            }
+        )+
+    };
+}
+
+impl_from_error!(
+    bincode::Error,
+    io::Error,
+    sqlsync::error::Error,
+    sqlsync::sqlite::Error,
+    sqlsync::JournalError,
+    sqlsync::replication::ReplicationError,
+    sqlsync::JournalIdParseError,
+    gloo::utils::errors::JsError,
+    gloo::net::websocket::WebSocketError,
+);
 
 pub struct JsValueToSql<'a>(pub &'a JsValue);
 

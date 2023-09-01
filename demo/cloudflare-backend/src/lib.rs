@@ -1,6 +1,7 @@
 use std::{cell::RefCell, io, rc::Rc, time::Duration};
 
 use futures::{stream::StreamExt, Future};
+use js_sys::Uint8Array;
 use sqlsync::{
     coordinator::CoordinatorDocument,
     replication::{ReplicationMsg, ReplicationProtocol},
@@ -36,23 +37,31 @@ impl DurableObject for DocumentCoordinator {
     }
 
     async fn fetch(&mut self, req: Request) -> Result<Response> {
+        // check that the Upgrade header is set and == "websocket"
+        let is_upgrade_req = req.headers().get("Upgrade")?.unwrap_or("".into()) == "websocket";
+        if !is_upgrade_req {
+            return Response::error("Bad Request", 400);
+        }
+
         let doc_id = object_id_to_journal_id(self.state.id())?;
 
         if self.doc.is_none() {
+            console_log!("creating new document with id {}", doc_id);
+
             let bucket = self.env.bucket(REDUCER_BUCKET)?;
             let object = bucket.get(REDUCER_KEY).execute().await?;
             let reducer_bytes = object
-                .ok_or(Error::Internal("reducer not found".into()))?
+                .ok_or_else(|| Error::RustError("reducer not found".into()))?
                 .body()
-                .ok_or(Error::Internal("reducer not found".into()))?
+                .ok_or_else(|| Error::RustError("reducer not found".into()))?
                 .bytes()
                 .await?;
 
             let storage =
-                MemoryJournal::open(doc_id).map_err(|e| Error::Internal(e.to_string().into()))?;
+                MemoryJournal::open(doc_id).map_err(|e| Error::RustError(e.to_string()))?;
             let doc = Rc::new(RefCell::new(
                 CoordinatorDocument::open(storage, &reducer_bytes)
-                    .map_err(|e| Error::Internal(e.to_string().into()))?,
+                    .map_err(|e| Error::RustError(e.to_string()))?,
             ));
 
             // spawn a background task which steps the document
@@ -62,19 +71,14 @@ impl DurableObject for DocumentCoordinator {
         }
         let doc = self.doc.as_ref().unwrap();
 
-        if let Some(upgrade) = req.headers().get("Upgrade")? {
-            if upgrade == "websocket" {
-                let pair = WebSocketPair::new()?;
-                let ws = pair.server;
+        let pair = WebSocketPair::new()?;
+        let ws = pair.server;
 
-                ws.accept()?;
+        ws.accept()?;
 
-                spawn_client_tasks(ws, doc.clone())?;
+        spawn_client_tasks(ws, doc.clone())?;
 
-                return Response::from_websocket(pair.client);
-            }
-        }
-        Response::error("Bad Request", 400)
+        Response::from_websocket(pair.client)
     }
 }
 
@@ -138,7 +142,7 @@ async fn client_task_handle_sync(state: ClientState) -> DynResult<()> {
                 bincode::serialize_into(&mut writer, &msg)?;
                 io::copy(&mut reader, &mut writer)?;
 
-                state.ws.send_with_bytes(writer.into_inner())?;
+                send_bytes(&state.ws, writer.into_inner().as_slice())?;
             }
         }
 
@@ -155,7 +159,7 @@ async fn client_task_handle_messages(state: ClientState) -> DynResult<()> {
             WebsocketEvent::Message(message) => {
                 let data = message
                     .bytes()
-                    .ok_or(Error::Internal("expected binary message".into()))?;
+                    .ok_or(Error::RustError("expected binary message".into()))?;
 
                 let mut reader = io::Cursor::new(data);
                 let msg = recv_msg(&mut reader)?;
@@ -187,6 +191,7 @@ async fn client_task_handle_messages(state: ClientState) -> DynResult<()> {
 #[event(fetch)]
 async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     console_error_panic_hook::set_once();
+    let cors = Cors::default().with_origins(vec!["*"]);
 
     let router = Router::new();
 
@@ -194,20 +199,25 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .on_async("/new", |_req, ctx| async move {
             let namespace = ctx.durable_object(DURABLE_OBJECT_NAME)?;
             let id = namespace.unique_id()?;
-            Response::ok(id.to_string())
+            let id = object_id_to_journal_id(id)?;
+            console_log!("creating new document with id {}", id);
+            Response::ok(id.to_base58())
         })
         .on_async("/doc/:id", |req, ctx| async move {
             if let Some(id) = ctx.param("id") {
                 console_log!("forwarding request to document with id: {}", id);
                 let namespace = ctx.durable_object(DURABLE_OBJECT_NAME)?;
-                let stub = namespace.id_from_string(id)?.get_stub()?;
+                let id =
+                    JournalId::from_base58(&id).map_err(|e| Error::RustError(e.to_string()))?;
+                let stub = namespace.id_from_string(&id.to_hex())?.get_stub()?;
                 stub.fetch_with_request(req).await
             } else {
                 Response::error("Bad Request", 400)
             }
         })
         .run(req, env)
-        .await
+        .await?
+        .with_cors(&cors)
 }
 
 fn object_id_to_journal_id(id: ObjectId) -> Result<JournalId> {
@@ -215,12 +225,17 @@ fn object_id_to_journal_id(id: ObjectId) -> Result<JournalId> {
 }
 
 fn send_msg(ws: &WebSocket, msg: ReplicationMsg) -> Result<()> {
-    let data = bincode::serialize(&msg).map_err(|e| Error::Internal(e.to_string().into()))?;
-    ws.send_with_bytes(data)
+    let data = bincode::serialize(&msg).map_err(|e| Error::RustError(e.to_string()))?;
+    send_bytes(ws, data.as_slice())
+}
+
+fn send_bytes(ws: &WebSocket, bytes: &[u8]) -> Result<()> {
+    let uint8_array = Uint8Array::from(bytes);
+    Ok(ws.as_ref().send_with_array_buffer(&uint8_array.buffer())?)
 }
 
 fn recv_msg(r: impl io::Read) -> Result<ReplicationMsg> {
-    Ok(bincode::deserialize_from(r).map_err(|e| Error::Internal(e.to_string().into()))?)
+    Ok(bincode::deserialize_from(r).map_err(|e| Error::RustError(e.to_string()))?)
 }
 
 type DynResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;

@@ -4,7 +4,7 @@ mod journal;
 mod memory;
 pub mod replication;
 
-pub use cursor::{Cursor, Scannable};
+pub use cursor::{Cursor, Scannable, ScanError};
 pub use id::{JournalId, JournalIdParseError};
 pub use journal::{Journal, JournalError, JournalResult};
 

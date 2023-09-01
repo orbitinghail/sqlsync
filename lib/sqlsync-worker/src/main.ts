@@ -1,4 +1,6 @@
 import { JournalId } from "./JournalId";
+export * from "./JournalId";
+
 import { ErrorResponse, SqlSyncRequest, SqlSyncResponse } from "./types";
 
 // need to re-create and export these here since vite-plugin-dts doesn't like

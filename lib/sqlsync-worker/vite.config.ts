@@ -7,8 +7,8 @@ export default defineConfig({
   plugins: [
     wasmPack(["sqlsync-worker-crate"]),
     dts({
-      include: ["src/main.ts"],
-      rollupTypes: true,
+      // include: ["src/main.ts", "src/JournalId.ts"],
+      // rollupTypes: true,
       insertTypesEntry: true,
     }),
   ],
@@ -18,7 +18,7 @@ export default defineConfig({
         main: resolve(__dirname, "src/main.ts"),
         worker: resolve(__dirname, "src/worker.ts"),
       },
-      fileName: "[name]",
+      // fileName: "[name]",
       formats: ["es"],
     },
     sourcemap: true,

@@ -1,6 +1,13 @@
-use std::io;
+use std::{io, result::Result};
+use thiserror::Error;
 
 use crate::{lsn::LsnRange, positioned_io::PositionedReader};
+
+#[derive(Error, Debug)]
+pub enum ScanError {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+}
 
 pub trait Cursor {
     /// advance the cursor
@@ -12,7 +19,7 @@ pub trait Cursor {
     ///     while cursor.advance()? {
     ///         ... cursor.read() ...
     ///     }
-    fn advance(&mut self) -> io::Result<bool>;
+    fn advance(&mut self) -> Result<bool, ScanError>;
 
     /// return the number of advances remaining in the scan
     fn remaining(&self) -> usize;

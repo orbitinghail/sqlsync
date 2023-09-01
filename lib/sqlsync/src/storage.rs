@@ -7,7 +7,8 @@ use crate::{
     journal::{Cursor, Journal},
     lsn::LsnRange,
     page::Page,
-    replication::{ReplicationDestination, ReplicationSource}, Lsn,
+    replication::{ReplicationDestination, ReplicationSource},
+    JournalResult, Lsn,
 };
 
 // This is the offset of the file change counter in the sqlite header which is
@@ -50,7 +51,7 @@ impl<J: Journal> Storage<J> {
         self.journal.range().is_non_empty()
     }
 
-    pub fn commit(&mut self) -> anyhow::Result<()> {
+    pub fn commit(&mut self) -> JournalResult<()> {
         if self.pending.num_pages() > 0 {
             self.journal.append(std::mem::take(&mut self.pending))?;
             // update the visible range
