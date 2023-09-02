@@ -1,6 +1,5 @@
 default:
     @just --choose
-
 build: (run-with-prefix 'wasm-')
     cargo build
 
@@ -58,14 +57,17 @@ upload-demo-reducer *FLAGS:
     #!/usr/bin/env bash
     set -euo pipefail
     just wasm-demo-reducer '{{FLAGS}}'
-    REDUCER_PATH="../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm"
+    cd demo/cloudflare-backend
     if [[ '{{FLAGS}}' = '--release' ]]; then
         REDUCER_PATH="../../target/wasm32-unknown-unknown/release/demo_reducer.wasm"
+        echo "Uploading $REDUCER_PATH to cloudflare r2 bucket"
+        pnpm exec wrangler r2 object put sqlsync-reducers/reducer.wasm --file ../../target/wasm32-unknown-unknown/release/demo_reducer.wasm
+    else
+        REDUCER_PATH="../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm"
+        echo "Uploading $REDUCER_PATH to cloudflare r2 dev bucket and local miniflare"
+        pnpm exec wrangler r2 object put sqlsync-reducers-dev/reducer.wasm --file ../../target/wasm32-unknown-unknown/release/demo_reducer.wasm
+        curl -X PUT -H "Content-Type: application/wasm" --data-binary @$REDUCER_PATH http://localhost:8787/reducer
     fi
-    echo "Uploading $REDUCER_PATH to cloudflare KV store"
-    cd demo/cloudflare-backend
-    pnpm exec wrangler r2 object put sqlsync-reducers/reducer.wasm --file ../../target/wasm32-unknown-unknown/release/demo_reducer.wasm
-    pnpm exec wrangler r2 object put sqlsync-reducers-dev/reducer.wasm --file ../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm
 
 package-sqlsync-worker +FLAGS='--release':
     just wasm-sqlsync-worker '{{FLAGS}}'

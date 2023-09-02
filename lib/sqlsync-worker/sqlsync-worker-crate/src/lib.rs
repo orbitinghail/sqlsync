@@ -1,14 +1,15 @@
 mod utils;
 
-use std::{cell::RefCell, convert::TryInto, io, rc::Rc, time::Instant};
+use std::{cell::RefCell, convert::TryInto, io, rc::Rc};
 
 use futures::{
-    stream::{SplitSink, SplitStream},
-    Future, SinkExt, StreamExt,
+    select,
+    stream::{Fuse, SplitSink, SplitStream},
+    SinkExt, StreamExt,
 };
 use gloo::{
     net::websocket::{futures::WebSocket, Message},
-    timers::future::TimeoutFuture,
+    timers::future::{IntervalStream, TimeoutFuture},
 };
 use js_sys::Reflect;
 use sqlsync::{
@@ -54,131 +55,173 @@ pub fn open(
     let doc = Rc::new(RefCell::new(doc));
 
     if let Some(coordinator_url) = coordinator_url {
-        spawn_replication_tasks(&coordinator_url, doc.clone())?;
+        // TODO: create a oneshot channel in order to shut down replication when the doc closes
+        wasm_bindgen_futures::spawn_local(replication_task(doc.clone(), coordinator_url));
     }
 
     Ok(SqlSyncDocument { doc })
 }
 
-fn spawn_replication_tasks(
-    coordinator_url: &str,
-    doc: Rc<RefCell<LocalDocument<MemoryJournal>>>,
-) -> WasmResult<()> {
-    let doc_id = { doc.borrow().doc_id() };
-    let url = format!("ws://{}/doc/{}", coordinator_url, doc_id.to_base58());
-    let ws = WebSocket::open(&url)?;
-    let (writer, reader) = ws.split();
-    let protocol = Rc::new(RefCell::new(ReplicationProtocol::new()));
-    let writer = Rc::new(RefCell::new(writer));
+type DocCell = Rc<RefCell<LocalDocument<MemoryJournal>>>;
+type WebsocketSplitPair = (SplitSink<WebSocket, Message>, Fuse<SplitStream<WebSocket>>);
 
-    let state = ReplicationTaskState {
-        doc: doc.clone(),
-        protocol: protocol.clone(),
-    };
-    spawn_fallible_task(replication_sync_task(state.clone(), writer.clone()));
-    spawn_fallible_task(replication_read_task(state.clone(), reader, writer.clone()));
-
-    Ok(())
-}
-
-#[derive(Clone)]
-struct ReplicationTaskState {
-    doc: Rc<RefCell<LocalDocument<MemoryJournal>>>,
-    protocol: Rc<RefCell<ReplicationProtocol>>,
-}
-
-async fn replication_sync_task(
-    state: ReplicationTaskState,
-    writer: Rc<RefCell<SplitSink<WebSocket, Message>>>,
-) -> WasmResult<()> {
-    let sync_interval = 1000;
-
+async fn replication_task(doc: DocCell, coordinator_url: String) {
     loop {
-        // keep sending while we have things to send
-        loop {
-            // we need to separate this block from the websocket write in order
-            // to release the borrows while awaiting the write
-            let msg_buf = {
-                let mut protocol = state.protocol.borrow_mut();
-                let mut doc = state.doc.borrow_mut();
-
-                // read an outstanding frame into the msg_buf
-                if let Some((msg, mut reader)) = protocol.sync(&mut *doc)? {
-                    log::info!("sending message: {:?}", msg);
-
-                    let mut buf = io::Cursor::new(vec![]);
-                    bincode::serialize_into(&mut buf, &msg)?;
-                    io::copy(&mut reader, &mut buf)?;
-                    Some(buf)
-                } else {
-                    None
-                }
-            };
-
-            if let Some(buf) = msg_buf {
-                let mut writer = writer.borrow_mut();
-                writer.send(Message::Bytes(buf.into_inner())).await?;
-            } else {
-                break;
+        match replication_task_inner(doc.clone(), &coordinator_url).await {
+            Ok(()) => {}
+            Err(e) => {
+                log::error!("replication error: {:?}", e);
+                // restart after a delay
+                TimeoutFuture::new(100).await;
             }
         }
-
-        // sleep for a bit
-        TimeoutFuture::new(sync_interval).await;
     }
 }
 
-async fn replication_read_task(
-    state: ReplicationTaskState,
-    mut reader: SplitStream<WebSocket>,
-    writer: Rc<RefCell<SplitSink<WebSocket, Message>>>,
+async fn replication_task_inner(doc: DocCell, coordinator_url: &str) -> WasmResult<()> {
+    let doc_id = { doc.borrow().doc_id() };
+    let url = format!("ws://{}/doc/{}", coordinator_url, doc_id.to_base58());
+
+    let mut reconnect_timeout = 10;
+    let mut sync_interval = IntervalStream::new(1000).fuse();
+    let mut ws: Option<WebsocketSplitPair> = None;
+    let mut protocol = ReplicationProtocol::new();
+
+    loop {
+        if let Some((ref mut writer, ref mut reader)) = ws {
+            // now we need to select, either the sync timeout or the websocket
+            select! {
+                _ = sync_interval.next() => {
+                    sync(&mut protocol, &doc, writer).await?;
+                }
+                msg = reader.select_next_some() => {
+                    match msg {
+                        Ok(msg) => {
+                            // reset reconnect timeout on successful read
+                            reconnect_timeout = 10;
+
+                            handle_message(&mut protocol, &doc, writer, msg).await?;
+                        }
+                        Err(e) => {
+                            log::error!("websocket error: {:?}", e);
+                            // drop the websocket, we will reconnect on the next loop
+                            ws = None;
+                        }
+                    }
+                }
+            }
+        } else {
+            // if we don't have a websocket, wait for the reconnect timeout
+            TimeoutFuture::new(reconnect_timeout).await;
+
+            // increase the exponential backoff
+            reconnect_timeout *= 2;
+            // with max
+            reconnect_timeout = reconnect_timeout.min(10000);
+
+            log::info!("connecting to {}", url);
+
+            // open a new websocket
+            // note: we don't know if this failed until we try to read
+            let (mut writer, reader) = WebSocket::open(&url)?.split();
+
+            // reset the protocol state
+            protocol = ReplicationProtocol::new();
+
+            // kickoff replication
+            start_replication(&mut protocol, &doc, &mut writer).await?;
+
+            ws = Some((writer, reader.fuse()));
+        }
+    }
+}
+
+async fn start_replication(
+    protocol: &mut ReplicationProtocol,
+    doc: &DocCell,
+    writer: &mut SplitSink<WebSocket, Message>,
 ) -> WasmResult<()> {
-    // kickoff replication
     let start_msg = {
-        let protocol = state.protocol.borrow_mut();
-        let mut doc = state.doc.borrow_mut();
+        let mut doc = doc.borrow_mut();
         protocol.start(&mut *doc)
     };
     log::info!("sending start message: {:?}", start_msg);
     let start_msg = bincode::serialize(&start_msg)?;
-    writer.borrow_mut().send(Message::Bytes(start_msg)).await?;
+    writer.send(Message::Bytes(start_msg)).await?;
 
-    while let Some(msg) = reader.next().await {
-        match msg {
-            Ok(Message::Bytes(bytes)) => {
-                // we need to separate this block from the websocket write in order
-                // to release the borrows while awaiting the write
-                let resp = {
-                    let mut protocol = state.protocol.borrow_mut();
-                    let mut doc = state.doc.borrow_mut();
+    Ok(())
+}
 
-                    let mut buf = io::Cursor::new(bytes);
-                    let msg: ReplicationMsg = bincode::deserialize_from(&mut buf)?;
-                    log::info!("received message: {:?}", msg);
+async fn sync(
+    protocol: &mut ReplicationProtocol,
+    doc: &DocCell,
+    writer: &mut SplitSink<WebSocket, Message>,
+) -> WasmResult<()> {
+    // send as many frames as we can
+    loop {
+        // we need to separate this block from the websocket write in order
+        // to release the borrows while awaiting the write
+        let msg_buf = {
+            let mut doc = doc.borrow_mut();
 
-                    let resp = protocol.handle(&mut *doc, msg, &mut buf)?;
+            // read an outstanding frame into the msg_buf
+            if let Some((msg, mut reader)) = protocol.sync(&mut *doc)? {
+                log::info!("sending message: {:?}", msg);
 
-                    // for now we trigger rebase after every msg
-                    console::time_with_label("rebase");
-                    doc.rebase()?;
-                    console::time_end_with_label("rebase");
-
-                    resp
-                };
-
-                if let Some(resp) = resp {
-                    log::info!("sending response: {:?}", resp);
-                    let resp = bincode::serialize(&resp)?;
-                    writer.borrow_mut().send(Message::Bytes(resp)).await?;
-                }
+                let mut buf = io::Cursor::new(vec![]);
+                bincode::serialize_into(&mut buf, &msg)?;
+                io::copy(&mut reader, &mut buf)?;
+                Some(buf)
+            } else {
+                None
             }
-            Ok(Message::Text(_)) => {
-                return Err(anyhow::anyhow!("unexpected text message").into());
+        };
+
+        if let Some(buf) = msg_buf {
+            writer.send(Message::Bytes(buf.into_inner())).await?;
+        } else {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_message(
+    protocol: &mut ReplicationProtocol,
+    doc: &DocCell,
+    writer: &mut SplitSink<WebSocket, Message>,
+    msg: Message,
+) -> WasmResult<()> {
+    match msg {
+        Message::Bytes(bytes) => {
+            // we need to separate this block from the websocket write in order
+            // to release the borrows while awaiting the write
+            let resp = {
+                let mut doc = doc.borrow_mut();
+
+                let mut buf = io::Cursor::new(bytes);
+                let msg: ReplicationMsg = bincode::deserialize_from(&mut buf)?;
+                log::info!("received message: {:?}", msg);
+
+                let resp = protocol.handle(&mut *doc, msg, &mut buf)?;
+
+                // for now we trigger rebase after every msg
+                console::time_with_label("rebase");
+                doc.rebase()?;
+                console::time_end_with_label("rebase");
+
+                resp
+            };
+
+            if let Some(resp) = resp {
+                log::info!("sending response: {:?}", resp);
+                let resp = bincode::serialize(&resp)?;
+                writer.send(Message::Bytes(resp)).await?;
             }
-            Err(e) => {
-                log::error!("websocket read error: {:?}", e);
-                return Err(e.into());
-            }
+        }
+        Message::Text(_) => {
+            return Err(anyhow::anyhow!("unexpected text message").into());
         }
     }
 
@@ -221,18 +264,4 @@ impl SqlSyncDocument {
             obj
         })?)
     }
-}
-
-fn spawn_fallible_task<F>(future: F)
-where
-    F: Future<Output = WasmResult<()>> + 'static,
-{
-    wasm_bindgen_futures::spawn_local(async move {
-        match future.await {
-            Ok(()) => {}
-            Err(e) => {
-                log::error!("spawn_local error: {:?}", e);
-            }
-        }
-    })
 }

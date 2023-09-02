@@ -204,6 +204,14 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let router = Router::new();
 
     router
+        .put_async("/reducer", |mut req, ctx| async move {
+            // upload a reducer to the bucket
+            // this just overwrites the existing reducer
+            let bucket = ctx.bucket(REDUCER_BUCKET)?;
+            let data = req.bytes().await?;
+            bucket.put(REDUCER_KEY, data).execute().await?;
+            Response::ok("ok")
+        })
         .on_async("/new", |_req, ctx| async move {
             let namespace = ctx.durable_object(DURABLE_OBJECT_NAME)?;
             let id = namespace.unique_id()?;

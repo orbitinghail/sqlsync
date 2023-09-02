@@ -1,6 +1,7 @@
 name = "sqlsync"
 main = "build/worker/shim.mjs"
-compatibility_date = "2023-03-22"
+compatibility_date = "2023-08-14"
+compatibility_flags = ["web_socket_compression"]
 
 r2_buckets = [
     { binding = "SQLSYNC_REDUCERS", bucket_name = "sqlsync-reducers", preview_bucket_name = "sqlsync-reducers-dev" },

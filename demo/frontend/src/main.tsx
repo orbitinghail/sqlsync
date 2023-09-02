@@ -14,14 +14,20 @@ import workerUrl from "sqlsync-worker/worker.js?url";
 
 const COORDINATOR_URL = "localhost:8787";
 
-// const newDocument = async () => {
-//   const response = await fetch(`${location.protocol}//${COORDINATOR_URL}/new`, {
-//     method: "POST",
-//   });
-//   return (await response.text()) as JournalId;
-// };
-//const DOC_ID = await newDocument();
-const DOC_ID = "6cBMtRnfvn5B5GSP5oxFyuXh9ExxrjgQ93zaBhnpEVqR" as JournalId;
+const newDocument = async () => {
+  const response = await fetch(`${location.protocol}//${COORDINATOR_URL}/new`, {
+    method: "POST",
+  });
+  return (await response.text()) as JournalId;
+};
+
+// check if we have a document id in the url (stored in the fragment)
+const url = new URL(location.href);
+const DOC_ID = (url.hash.slice(1) as JournalId) || (await newDocument());
+
+// update the url
+url.hash = DOC_ID;
+history.replaceState({}, "", url.toString());
 
 const TIMELINE_ID = RandomJournalId();
 
