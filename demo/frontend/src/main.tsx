@@ -27,8 +27,6 @@ const TIMELINE_ID = RandomJournalId();
 
 const sqlsync = await init(workerUrl, wasmUrl, COORDINATOR_URL);
 
-await sqlsync.open(DOC_ID, TIMELINE_ID, DEMO_REDUCER_URL);
-
 type Mutation =
   | {
       tag: "InitSchema";
@@ -48,7 +46,11 @@ const mutate = (mutation: Mutation) => {
   return sqlsync.mutate(DOC_ID, bytes);
 };
 
-await mutate({ tag: "InitSchema" });
+const open_state = await sqlsync.open(DOC_ID, TIMELINE_ID, DEMO_REDUCER_URL);
+
+if (!open_state.alreadyOpen) {
+  await mutate({ tag: "InitSchema" });
+}
 
 window.incr = async (value = 1) => {
   await mutate({ tag: "Incr", value });

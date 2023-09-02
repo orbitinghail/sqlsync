@@ -28,7 +28,7 @@ export type Open = Req<
   "open",
   { docId: JournalId; timelineId: JournalId; reducerUrl: string }
 >;
-export type OpenResponse = Res<"open", {}>;
+export type OpenResponse = Res<"open", { alreadyOpen: boolean }>;
 
 export type Query = Req<
   "query",

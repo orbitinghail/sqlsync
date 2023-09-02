@@ -6,7 +6,7 @@ use std::{
 
 use crate::{positioned_io::PositionedReader, Serializable};
 
-pub const PAGESIZE: usize = 4096;
+pub const PAGESIZE: usize = 512;
 
 pub type PageIdx = u64;
 const PAGE_IDX_SIZE: usize = size_of::<PageIdx>();

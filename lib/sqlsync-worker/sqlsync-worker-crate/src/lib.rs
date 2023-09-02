@@ -1,6 +1,6 @@
 mod utils;
 
-use std::{cell::RefCell, convert::TryInto, io, rc::Rc};
+use std::{cell::RefCell, convert::TryInto, io, rc::Rc, time::Instant};
 
 use futures::{
     stream::{SplitSink, SplitStream},
@@ -19,6 +19,7 @@ use sqlsync::{
 };
 use utils::{ConsoleLogger, JsValueFromSql, JsValueToSql, WasmError, WasmResult};
 use wasm_bindgen::prelude::*;
+use web_sys::console;
 
 static LOGGER: ConsoleLogger = ConsoleLogger;
 
@@ -157,8 +158,10 @@ async fn replication_read_task(
 
                     let resp = protocol.handle(&mut *doc, msg, &mut buf)?;
 
-                    // for now we trigger rebase after every message
+                    // for now we trigger rebase after every msg
+                    console::time_with_label("rebase");
                     doc.rebase()?;
+                    console::time_end_with_label("rebase");
 
                     resp
                 };

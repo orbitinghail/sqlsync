@@ -67,7 +67,7 @@ impl<J: Journal + ReplicationSource> LocalDocument<J> {
     }
 
     pub fn rebase(&mut self) -> Result<()> {
-        if self.storage.has_committed_pages() {
+        if self.storage.has_committed_pages() && self.storage.has_invisible_pages() {
             self.storage.revert();
             rebase_timeline(&mut self.timeline, &mut self.sqlite, &mut self.reducer)?;
         }

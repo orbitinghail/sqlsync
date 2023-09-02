@@ -51,6 +51,10 @@ impl<J: Journal> Storage<J> {
         self.journal.range().is_non_empty()
     }
 
+    pub fn has_invisible_pages(&self) -> bool {
+        self.visible_lsn_range.last() < self.journal.range().last()
+    }
+
     pub fn commit(&mut self) -> JournalResult<()> {
         if self.pending.num_pages() > 0 {
             self.journal.append(std::mem::take(&mut self.pending))?;

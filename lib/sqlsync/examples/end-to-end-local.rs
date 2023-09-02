@@ -147,7 +147,7 @@ fn main() -> anyhow::Result<()> {
             log::info!("{}: initializing schema", std::stringify!($client));
             mutate!($client, Mutation::InitSchema)?
         };
-        ($client:ident, AppendTask $id:literal, $description:literal) => {
+        ($client:ident, AppendTask $id:literal, $description:expr) => {
             log::info!(
                 "{}: appending task {} {}",
                 std::stringify!($client),

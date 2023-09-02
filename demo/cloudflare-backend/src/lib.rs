@@ -130,6 +130,11 @@ async fn client_task_handle_sync(state: ClientState) -> DynResult<()> {
     let sync_interval = Duration::from_millis(1000);
 
     loop {
+        if state.ws.as_ref().ready_state() > 1 {
+            console_log!("websocket closed; exiting handle_sync task");
+            break;
+        }
+
         {
             let mut protocol = state.protocol.borrow_mut();
             let mut doc = state.doc.borrow_mut();
@@ -149,6 +154,8 @@ async fn client_task_handle_sync(state: ClientState) -> DynResult<()> {
         // sleep for a bit
         Delay::from(sync_interval).await
     }
+
+    Ok(())
 }
 
 async fn client_task_handle_messages(state: ClientState) -> DynResult<()> {
@@ -181,6 +188,7 @@ async fn client_task_handle_messages(state: ClientState) -> DynResult<()> {
                     evt.reason(),
                     evt.code()
                 );
+                break;
             }
         }
     }

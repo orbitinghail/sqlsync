@@ -50,6 +50,7 @@ async function handle_boot(msg: Boot) {
 
 async function handle_open(msg: Open): Promise<OpenResponse> {
   if (!docs.has(msg.docId)) {
+    console.log("sqlsync: opening document", msg.docId);
     let reducerWasmBytes = await fetchBytes(msg.reducerUrl);
     let doc = open(
       JournalIdToBytes(msg.docId),
@@ -58,8 +59,11 @@ async function handle_open(msg: Open): Promise<OpenResponse> {
       coordinatorUrl
     );
     docs.set(msg.docId, doc);
+    return { tag: "open", alreadyOpen: false };
   }
-  return { tag: "open" };
+
+  console.log("sqlsync: document already open", msg.docId);
+  return { tag: "open", alreadyOpen: true };
 }
 
 function handle_query(msg: Query): QueryResponse {

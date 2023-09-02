@@ -1,7 +1,12 @@
 import { JournalId } from "./JournalId";
 export * from "./JournalId";
 
-import { ErrorResponse, SqlSyncRequest, SqlSyncResponse } from "./types";
+import {
+  ErrorResponse,
+  OpenResponse,
+  SqlSyncRequest,
+  SqlSyncResponse,
+} from "./types";
 
 // need to re-create and export these here since vite-plugin-dts doesn't like
 // including types.d.ts for some reason
@@ -60,8 +65,8 @@ export class SqlSync {
     docId: JournalId,
     timelineId: JournalId,
     reducerUrl: string | URL
-  ): Promise<void> {
-    await this.send({
+  ): Promise<OpenResponse> {
+    return await this.send({
       tag: "open",
       docId,
       timelineId,

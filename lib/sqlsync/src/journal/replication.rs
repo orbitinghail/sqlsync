@@ -6,7 +6,8 @@ use thiserror::Error;
 use crate::{lsn::LsnRange, positioned_io::PositionedReader, JournalError, JournalId, Lsn};
 
 // maximum number of frames we will send without receiving an acknowledgement
-const MAX_OUTSTANDING_FRAMES: usize = 3;
+// note: this does not affect durability, as we keep don't truncate the source journal until rebase
+const MAX_OUTSTANDING_FRAMES: usize = 5;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum ReplicationMsg {
