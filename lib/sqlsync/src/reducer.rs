@@ -12,6 +12,8 @@ use sqlsync_reducer::{
 use thiserror::Error;
 use wasmi::{errors::LinkerError, Engine, Linker, Module, Store};
 
+use crate::unixtime::unix_timestamp_milliseconds;
+
 #[derive(Error, Debug)]
 pub enum ReducerError {
     #[error(transparent)]
@@ -77,6 +79,8 @@ impl Reducer {
                             .collect();
                         let num_columns = columns.len();
 
+                        let start = unix_timestamp_milliseconds();
+
                         let rows = stmt
                             .query_and_then(params, move |row| {
                                 (0..num_columns)
@@ -85,6 +89,9 @@ impl Reducer {
                             })?
                             .collect::<std::result::Result<Vec<_>, _>>()?;
 
+                        let end = unix_timestamp_milliseconds();
+                        log::info!("query took {}ms", end - start);
+
                         let ptr = ffi.encode(&mut self.store, &QueryResponse { columns, rows })?;
 
                         responses.insert(id, ptr);
@@ -92,8 +99,13 @@ impl Reducer {
                     Request::Exec { sql, params } => {
                         log::info!("received exec req: {}, {:?}", sql, params);
 
+                        let start = unix_timestamp_milliseconds();
+
                         let params = params_from_iter(params.into_iter().map(from_sqlite_value));
                         let changes = tx.execute(&sql, params)?;
+
+                        let end = unix_timestamp_milliseconds();
+                        log::info!("exec took {}ms", end - start);
 
                         let ptr = ffi.encode(&mut self.store, &ExecResponse { changes })?;
                         responses.insert(id, ptr);

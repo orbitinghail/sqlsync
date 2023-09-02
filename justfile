@@ -27,7 +27,7 @@ wasm-worker-test-reducer:
 wasm-sqlsync-worker +FLAGS='--dev':
     cd lib/sqlsync-worker/sqlsync-worker-crate && wasm-pack build --target web {{FLAGS}}
 
-wasm-demo-reducer +FLAGS='':
+wasm-demo-reducer *FLAGS:
     cargo build --target wasm32-unknown-unknown --package demo-reducer {{FLAGS}}
 
 wasm-counter-reducer:
@@ -54,9 +54,18 @@ node_modules:
 
 # release targets below this point
 
-upload-demo-reducer: wasm-demo-reducer
-    cd demo/cloudflare-backend && pnpm exec wrangler r2 object put sqlsync-reducers/reducer.wasm --file ../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm
-    cd demo/cloudflare-backend && pnpm exec wrangler r2 object put sqlsync-reducers-dev/reducer.wasm --file ../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm
+upload-demo-reducer *FLAGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just wasm-demo-reducer '{{FLAGS}}'
+    REDUCER_PATH="../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm"
+    if [[ '{{FLAGS}}' = '--release' ]]; then
+        REDUCER_PATH="../../target/wasm32-unknown-unknown/release/demo_reducer.wasm"
+    fi
+    echo "Uploading $REDUCER_PATH to cloudflare KV store"
+    cd demo/cloudflare-backend
+    pnpm exec wrangler r2 object put sqlsync-reducers/reducer.wasm --file ../../target/wasm32-unknown-unknown/release/demo_reducer.wasm
+    pnpm exec wrangler r2 object put sqlsync-reducers-dev/reducer.wasm --file ../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm
 
 package-sqlsync-worker +FLAGS='--release':
     just wasm-sqlsync-worker '{{FLAGS}}'

@@ -4,7 +4,7 @@ import App from "./App.tsx";
 import "./index.css";
 
 const DEMO_REDUCER_URL = new URL(
-  "../../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm",
+  "../../../target/wasm32-unknown-unknown/release/demo_reducer.wasm",
   import.meta.url
 );
 

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "wrangler dev --experimental-local"
+    "dev": "wrangler dev"
   },
   "devDependencies": {
     "wrangler": "^2.13.0"

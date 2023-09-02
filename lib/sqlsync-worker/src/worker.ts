@@ -82,7 +82,9 @@ function handle_mutate(msg: Mutate): MutateResponse {
     throw new Error(`no document with id ${msg.docId}`);
   }
 
+  console.time("mutate");
   doc.mutate(msg.mutation);
+  console.timeEnd("mutate");
   return { tag: "mutate" };
 }
 

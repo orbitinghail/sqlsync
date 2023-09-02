@@ -9,6 +9,7 @@ export default defineConfig({
       allow: [
         searchForWorkspaceRoot(process.cwd()),
         "../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm",
+        "../../target/wasm32-unknown-unknown/release/demo_reducer.wasm",
       ],
     },
   },

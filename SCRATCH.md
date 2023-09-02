@@ -1,9 +1,10 @@
 # TASKS (start here)
-- replication engine
-  - defer local rebase rather than running it on sync
 - opfs journal
 - s3 or durable functions journal
 - log compaction
+- replication frames hint
+  - hint that more frames are coming allowing the receiver to delay sending range ACKs and rebases, this will improve replication perf through minimizing round trips
+- if mutations decide to not make any changes, don't write any updates to storage
 
 # Log compaction
 With the rebase sync architecture, compacting the storage log is very easy and safe. At any point the coordinator can snapshot and start a new log from the snapshot.
@@ -25,9 +26,23 @@ coordinator can always serve from the last log lazily without keeping it in
 memory. (at least until GC runs and kills old logs, but that should never hit
 the immediately previous log)
 
-# Storage Replication Frames
+# rebase performance
+Currently we are rebasing the timeline every time we receive a frame from the server. This is needlessly expensive and can be improved.
 
-Currently we send a fixed number of journal entries during each sync. This is
-probably fine for timelines, but not great for storage.
+Two perf holes:
+1. the server is sending us more frames soon
+2. we have a lot of pending mutations that haven't been seen by the server
 
-It would be better to dynamically calculate the number of entries to sync based on some "weight" measurement. For example, the weight of storage entires could be the number of associated pages.
+2 can sometimes imply 1, however 1 can also happen if other clients are sending tons of changes.
+
+To optimize for 1, the server can send a hint to the client with the number of outstanding frames. This allows the client to make better decisions about rebase.
+
+To optimize for 2, we can try to optimize using the following facts
+ - how many pending mutations have yet to be acknowledged by the server
+ - how fast are other timelines changing (we can determine this by looking at the timelines table in the db)
+
+We can come up with some heuristics regarding these facts to balance user experience and rebases.
+
+---
+
+Note, we can also optimize rebase perf through mutation batching. Currently we pass in a single mutation to the reducer at a time. This involves many round trips through wasmi which is not very fast. It would be much faster to batch mutations to the reducer allowing reducers to optimize internally. For example, merging many mutations into a single insert/update statement.
