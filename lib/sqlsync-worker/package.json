@@ -10,6 +10,8 @@
   "exports": {
     ".": "./dist/main.js",
     "./worker.js": "./dist/worker.js",
+    "./main.ts": "./src/main.ts",
+    "./worker.ts": "./src/worker.ts",
     "./sqlsync.wasm": "./dist/assets/sqlsync_worker_crate_bg.wasm"
   },
   "types": "./dist/main.d.ts",

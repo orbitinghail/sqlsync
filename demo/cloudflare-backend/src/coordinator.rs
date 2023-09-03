@@ -85,17 +85,6 @@ impl CoordinatorTask {
         const STEP_MIN_MS: u32 = 100;
         let mut step_trigger = TimeoutFuture::new(STEP_MIN_MS).fuse();
 
-        // GOOD MORNING CARL
-        /*
-            things to think about to get the gears going...
-
-            currently the client and server can get out of sync if the client runs mutations when offline
-            and the server concurrently looses it's timeline cache
-            - when the server comes back online it tells the client it has no timeline (which is true)
-                - currently the client is just like... I dunno how to sync
-                - but actually the client should send all of it's mutations to the server
-        */
-
         loop {
             select_biased! {
                 // handle steps
@@ -136,20 +125,15 @@ impl CoordinatorTask {
                 // handle messages from clients
                 (client_idx, msg) = messages.select_next_some() => {
                     let client = clients.get_mut(&client_idx).unwrap();
-                    match client.handle_message(&mut self.doc, msg).await {
-                        Ok(msg) => {
-                            if matches!(msg, ReplicationMsg::Frame{..}) {
-                                // schedule a step whenever we receive changes from the client
-                                step_trigger = TimeoutFuture::new(STEP_MIN_MS).fuse();
-                            }
-                        },
-                        Err(e) => {
-                            console_error!("error handling message: {:?}", e);
-                            // remove client; note, we don't have to remove the
-                            // reader from messages because SelectAll handles that
-                            // automatically
-                            clients.remove(&client_idx);
-                        }
+                    if let Err(e) = client.handle_message(&mut self.doc, msg).await {
+                        console_error!("error handling message: {:?}", e);
+                        // remove client; note, we don't have to remove the
+                        // reader from messages because SelectAll handles that
+                        // automatically
+                        clients.remove(&client_idx);
+                    } else {
+                        // schedule a step whenever we receive messages from a client
+                        step_trigger = TimeoutFuture::new(STEP_MIN_MS).fuse();
                     }
                 },
             }
@@ -217,16 +201,16 @@ impl Client {
         &mut self,
         doc: &mut Document,
         msg: Result<Message, WebSocketError>,
-    ) -> anyhow::Result<ReplicationMsg> {
+    ) -> anyhow::Result<()> {
         match msg {
             Ok(Message::Bytes(bytes)) => {
                 let mut cursor = Cursor::new(bytes);
                 let msg: ReplicationMsg = bincode::deserialize_from(&mut cursor)?;
                 console_log!("received message {:?}", msg);
-                if let Some(resp) = self.protocol.handle(doc, msg.clone(), &mut cursor)? {
+                if let Some(resp) = self.protocol.handle(doc, msg, &mut cursor)? {
                     self.send_msg(resp).await?;
                 }
-                Ok(msg)
+                Ok(())
             }
 
             Ok(Message::Text(_)) => {

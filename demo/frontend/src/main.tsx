@@ -8,9 +8,9 @@ const DEMO_REDUCER_URL = new URL(
   import.meta.url
 );
 
-import init, { JournalId, RandomJournalId } from "sqlsync-worker";
+import init, { JournalId, RandomJournalId } from "sqlsync-worker/main.ts";
 import wasmUrl from "sqlsync-worker/sqlsync.wasm?url";
-import workerUrl from "sqlsync-worker/worker.js?url";
+import workerUrl from "sqlsync-worker/worker.ts?url";
 
 const COORDINATOR_URL = "localhost:8787";
 

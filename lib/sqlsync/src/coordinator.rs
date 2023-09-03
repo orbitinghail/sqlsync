@@ -109,8 +109,6 @@ impl<J: Journal> CoordinatorDocument<J> {
 
             // commit changes
             self.storage.commit()?;
-
-            // TODO: announce that we have new data to all clients
         }
 
         Ok(())
