@@ -80,6 +80,10 @@ impl<J: ReplicationSource> ReplicationSource for Storage<J> {
         self.journal.source_id()
     }
 
+    fn source_range(&self) -> crate::LsnRange {
+        self.journal.source_range()
+    }
+
     fn read_lsn<'a>(&'a self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'a>>> {
         self.journal.read_lsn(lsn)
     }

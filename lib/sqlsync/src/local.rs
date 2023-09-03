@@ -89,6 +89,10 @@ impl<J: ReplicationSource> ReplicationSource for LocalDocument<J> {
         self.timeline.source_id()
     }
 
+    fn source_range(&self) -> LsnRange {
+        self.timeline.source_range()
+    }
+
     fn read_lsn<'a>(&'a self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'a>>> {
         self.timeline.read_lsn(lsn)
     }

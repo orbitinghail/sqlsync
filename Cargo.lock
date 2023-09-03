@@ -387,8 +387,7 @@ checksum = "b6c80984affa11d98d1b88b66ac8853f143217b399d3c74116778ff8fdb4ed2e"
 [[package]]
 name = "gloo"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd35526c28cc55c1db77aed6296de58677dbab863b118483a27845631d870249"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "gloo-console",
  "gloo-dialogs",
@@ -406,8 +405,7 @@ dependencies = [
 [[package]]
 name = "gloo-console"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a17868f56b4a24f677b17c8cb69958385102fa879418052d60b50bc1727e261"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "gloo-utils",
  "js-sys",
@@ -419,8 +417,7 @@ dependencies = [
 [[package]]
 name = "gloo-dialogs"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf4748e10122b01435750ff530095b1217cf6546173459448b83913ebe7815df"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "wasm-bindgen",
  "web-sys",
@@ -429,8 +426,7 @@ dependencies = [
 [[package]]
 name = "gloo-events"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27c26fb45f7c385ba980f5fa87ac677e363949e065a083722697ef1b2cc91e41"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "wasm-bindgen",
  "web-sys",
@@ -439,8 +435,7 @@ dependencies = [
 [[package]]
 name = "gloo-file"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97563d71863fb2824b2e974e754a81d19c4a7ec47b09ced8a0e6656b6d54bd1f"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "futures-channel",
  "gloo-events",
@@ -452,8 +447,7 @@ dependencies = [
 [[package]]
 name = "gloo-history"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91be9f3dd048f35a59c8de3d716ef6d568360078c73ed35a7700776ed53153c8"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "gloo-events",
  "gloo-utils",
@@ -468,8 +462,7 @@ dependencies = [
 [[package]]
 name = "gloo-net"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ac9e8288ae2c632fa9f8657ac70bfe38a1530f345282d7ba66a1f70b72b7dc4"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -489,8 +482,7 @@ dependencies = [
 [[package]]
 name = "gloo-render"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56008b6744713a8e8d98ac3dcb7d06543d5662358c9c805b4ce2167ad4649833"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "wasm-bindgen",
  "web-sys",
@@ -499,8 +491,7 @@ dependencies = [
 [[package]]
 name = "gloo-storage"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbc8031e8c92758af912f9bc08fbbadd3c6f3cfcbf6b64cdf3d6a81f0139277a"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "gloo-utils",
  "js-sys",
@@ -514,8 +505,7 @@ dependencies = [
 [[package]]
 name = "gloo-timers"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -526,8 +516,7 @@ dependencies = [
 [[package]]
 name = "gloo-utils"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b5555354113b18c547c1d3a98fbf7fb32a9ff4f6fa112ce823a21641a0ba3aa"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "js-sys",
  "serde",
@@ -539,8 +528,7 @@ dependencies = [
 [[package]]
 name = "gloo-worker"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76495d3dd87de51da268fa3a593da118ab43eb7f8809e17eb38d3319b424e400"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "bincode",
  "futures",
@@ -558,8 +546,7 @@ dependencies = [
 [[package]]
 name = "gloo-worker-macros"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "956caa58d4857bc9941749d55e4bd3000032d8212762586fa5705632967140e7"
+source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1149,9 +1136,12 @@ dependencies = [
 name = "sqlsync-cloudflare-backend"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bincode",
  "console_error_panic_hook",
  "futures",
+ "gloo",
+ "gloo-net",
  "serde-wasm-bindgen",
  "serde_bytes",
  "sqlsync",

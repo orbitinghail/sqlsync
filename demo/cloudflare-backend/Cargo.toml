@@ -7,6 +7,8 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
+gloo = { workspace = true, features = ["futures"] }
+gloo-net = { workspace = true, features = ["cloudflare"] }
 futures.workspace = true
 worker.workspace = true
 console_error_panic_hook.workspace = true
@@ -14,3 +16,4 @@ sqlsync = { path = "../../lib/sqlsync" }
 bincode.workspace = true
 serde-wasm-bindgen.workspace = true
 serde_bytes.workspace = true
+anyhow.workspace = true

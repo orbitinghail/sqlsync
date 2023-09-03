@@ -172,6 +172,10 @@ impl ReplicationSource for MemoryJournal {
         self.id()
     }
 
+    fn source_range(&self) -> LsnRange {
+        self.range()
+    }
+
     fn read_lsn<'a>(&'a self, lsn: Lsn) -> io::Result<Option<Self::Reader<'a>>> {
         match self.range.offset(lsn) {
             None => Ok(None),
@@ -201,8 +205,13 @@ impl ReplicationDestination for MemoryJournal {
             return Err(ReplicationError::UnknownJournal(id));
         }
 
-        // accept any lsn in our current range or immediately following
-        let accepted_range = self.range.extend_by(1);
+        let accepted_range = if self.range.is_empty() {
+            // if we have no range, then we reset to the incoming lsn
+            LsnRange::new(lsn, lsn)
+        } else {
+            // accept any lsn in our current range or immediately following
+            self.range.extend_by(1)
+        };
 
         if accepted_range.contains(lsn) {
             let mut frame_data = Vec::new();

@@ -127,6 +127,10 @@ impl<J: Journal + ReplicationSource> ReplicationSource for CoordinatorDocument<J
         self.storage.source_id()
     }
 
+    fn source_range(&self) -> LsnRange {
+        self.storage.source_range()
+    }
+
     fn read_lsn<'a>(&'a self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'a>>> {
         self.storage.read_lsn(lsn)
     }

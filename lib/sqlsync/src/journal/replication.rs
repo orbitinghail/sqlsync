@@ -7,12 +7,15 @@ use crate::{lsn::LsnRange, positioned_io::PositionedReader, JournalError, Journa
 
 // maximum number of frames we will send without receiving an acknowledgement
 // note: this does not affect durability, as we keep don't truncate the source journal until rebase
-const MAX_OUTSTANDING_FRAMES: usize = 100;
+const MAX_OUTSTANDING_FRAMES: usize = 10;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum ReplicationMsg {
     /// request the lsn range of the specified journal
-    RangeRequest { id: JournalId },
+    RangeRequest {
+        id: JournalId,
+        source_range: LsnRange,
+    },
     /// reply to a RangeRequest with the range of the specified journal
     Range { range: LsnRange },
     /// send one LSN frame from the specified journal
@@ -58,6 +61,7 @@ impl ReplicationProtocol {
         // what frames the destination already has
         ReplicationMsg::RangeRequest {
             id: doc.source_id(),
+            source_range: doc.source_range(),
         }
     }
 
@@ -104,9 +108,17 @@ impl ReplicationProtocol {
         connection: &mut impl io::Read,
     ) -> Result<Option<ReplicationMsg>, ReplicationError> {
         match msg {
-            ReplicationMsg::RangeRequest { id } => Ok(Some(ReplicationMsg::Range {
-                range: doc.range(id)?,
-            })),
+            ReplicationMsg::RangeRequest { id, source_range } => {
+                let mut range = doc.range(id)?;
+
+                // if our range is empty, then we should reset to the remote's source range
+                // this is to handle timeline truncation until we have a more reliable mechanism
+                if range.is_empty() {
+                    range = LsnRange::empty_preceeding(&source_range);
+                }
+
+                Ok(Some(ReplicationMsg::Range { range }))
+            }
             ReplicationMsg::Range { range } => {
                 self.outstanding_range = self.outstanding_range.map_or_else(
                     // first range response, initialize outstanding_range from destination range
@@ -141,6 +153,9 @@ pub trait ReplicationSource {
 
     /// the id of the source journal
     fn source_id(&self) -> JournalId;
+
+    /// the range of the source journal
+    fn source_range(&self) -> LsnRange;
 
     /// read the given lsn from the source journal if it exists
     fn read_lsn<'a>(&'a self, lsn: Lsn) -> io::Result<Option<Self::Reader<'a>>>;

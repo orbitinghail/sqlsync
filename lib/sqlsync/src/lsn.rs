@@ -38,6 +38,16 @@ impl LsnRange {
         }
     }
 
+    /// returns an empty range with the nextlsn set to the first lsn of the target range
+    pub fn empty_preceeding(range: &LsnRange) -> Self {
+        LsnRange::Empty {
+            nextlsn: match range {
+                LsnRange::Empty { nextlsn } => *nextlsn,
+                LsnRange::NonEmpty { first, .. } => *first,
+            },
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         match self {
             LsnRange::Empty { .. } => true,
