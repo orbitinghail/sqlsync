@@ -1,6 +1,8 @@
 use coordinator::Coordinator;
+use js_sys::{ArrayBuffer, Reflect, Uint8Array};
 use sqlsync::JournalId;
-use wasm_bindgen_futures::spawn_local;
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::{spawn_local, JsFuture};
 use worker::*;
 
 mod coordinator;
@@ -8,10 +10,6 @@ mod persistence;
 
 pub const DURABLE_OBJECT_NAME: &str = "COORDINATOR";
 pub const REDUCER_BUCKET: &str = "SQLSYNC_REDUCERS";
-
-// for now, we just support a fixed reducer; this key is used to grab the latest
-// reducer from the bucket
-pub const REDUCER_KEY: &str = "reducer.wasm";
 
 #[durable_object]
 pub struct DocumentCoordinator {
@@ -40,7 +38,34 @@ impl DurableObject for DocumentCoordinator {
 
         // initialize the coordinator if it hasn't been initialized yet
         if self.coordinator.is_none() {
-            let (coordinator, task) = Coordinator::init(&self.state, &self.env).await?;
+            // retrieve the reducer digest from the request url
+            let url = req.url()?;
+            let reducer_digest = match url.query_pairs().find(|(k, _)| k == "reducer") {
+                Some((_, v)) => v,
+                None => return Response::error("Bad Request", 400),
+            };
+            let bucket = self.env.bucket(REDUCER_BUCKET)?;
+            let object = bucket
+                .get(format!("{}.wasm", reducer_digest))
+                .execute()
+                .await?;
+            let reducer_bytes = match object {
+                Some(object) => {
+                    object
+                        .body()
+                        .ok_or_else(|| Error::RustError("reducer not found in bucket".to_string()))?
+                        .bytes()
+                        .await?
+                }
+                None => {
+                    return Response::error(
+                        format!("reducer {} not found in bucket", reducer_digest),
+                        404,
+                    )
+                }
+            };
+
+            let (coordinator, task) = Coordinator::init(&self.state, reducer_bytes).await?;
             spawn_local(task.into_task());
             self.coordinator = Some(coordinator);
         }
@@ -71,13 +96,53 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let router = Router::new();
 
     router
-        .put_async("/reducer", |mut req, ctx| async move {
+        .put_async("/reducer", |req, ctx| async move {
             // upload a reducer to the bucket
-            // this just overwrites the existing reducer
             let bucket = ctx.bucket(REDUCER_BUCKET)?;
-            let data = req.bytes().await?;
-            bucket.put(REDUCER_KEY, data).execute().await?;
-            Response::ok("ok")
+
+            let data_len: u64 = match req.headers().get("Content-Length")?.map(|s| s.parse()) {
+                Some(Ok(len)) => len,
+                _ => return Response::error("Bad Request", 400),
+            };
+            if data_len > 10 * 1024 * 1024 {
+                return Response::error("Payload Too Large", 413);
+            }
+
+            // let mut data = req.bytes().await?;
+            let data = JsFuture::from(req.inner().array_buffer()?)
+                .await?
+                .dyn_into::<ArrayBuffer>()
+                .expect("expected ArrayBuffer");
+
+            let global = js_sys::global()
+                .dyn_into::<js_sys::Object>()
+                .expect("global not found");
+            let subtle = Reflect::get(&global, &"crypto".into())?
+                .dyn_into::<web_sys::Crypto>()
+                .expect("crypto not found")
+                .subtle();
+
+            // sha256 sum the data and convert to bs58
+            let digest =
+                JsFuture::from(subtle.digest_with_str_and_buffer_source("SHA-256", &data)?).await?;
+
+            // convert digest to base58
+            let digest = bs58::encode(Uint8Array::new(&digest).to_vec())
+                .with_alphabet(bs58::Alphabet::BITCOIN)
+                .into_string();
+            let name = format!("{}.wasm", digest);
+
+            console_log!(
+                "uploading reducer (size: {} MB) to {}",
+                data_len / 1024 / 1024,
+                name
+            );
+
+            // read data into Vec<u8>
+            let data = Uint8Array::new(&data).to_vec();
+
+            bucket.put(&name, data).execute().await?;
+            Response::ok(name)
         })
         .on_async("/new", |_req, ctx| async move {
             let namespace = ctx.durable_object(DURABLE_OBJECT_NAME)?;
@@ -92,7 +157,13 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 let namespace = ctx.durable_object(DURABLE_OBJECT_NAME)?;
                 let id =
                     JournalId::from_base58(&id).map_err(|e| Error::RustError(e.to_string()))?;
-                let stub = namespace.id_from_string(&id.to_hex())?.get_stub()?;
+                let id = match namespace.id_from_string(&id.to_hex()) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        return Response::error(format!("Invalid Durable Object ID: {}", e), 400)
+                    }
+                };
+                let stub = id.get_stub()?;
                 stub.fetch_with_request(req).await
             } else {
                 Response::error("Bad Request", 400)

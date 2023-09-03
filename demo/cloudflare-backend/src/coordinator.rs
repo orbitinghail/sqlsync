@@ -17,9 +17,9 @@ use sqlsync::{
     replication::{ReplicationMsg, ReplicationProtocol, ReplicationSource},
     MemoryJournal, MemoryJournalFactory,
 };
-use worker::{console_error, console_log, Env, Error, State};
+use worker::{console_error, console_log, Error, State};
 
-use crate::{object_id_to_journal_id, persistence::Persistence, REDUCER_BUCKET, REDUCER_KEY};
+use crate::{object_id_to_journal_id, persistence::Persistence};
 
 type Document = CoordinatorDocument<MemoryJournal>;
 
@@ -28,20 +28,14 @@ pub struct Coordinator {
 }
 
 impl Coordinator {
-    pub async fn init(state: &State, env: &Env) -> worker::Result<(Coordinator, CoordinatorTask)> {
+    pub async fn init(
+        state: &State,
+        reducer_bytes: Vec<u8>,
+    ) -> worker::Result<(Coordinator, CoordinatorTask)> {
         let id = object_id_to_journal_id(state.id())?;
         let (accept_queue_tx, accept_queue_rx) = mpsc::channel(10);
 
         console_log!("creating new document with id {}", id);
-
-        let bucket = env.bucket(REDUCER_BUCKET)?;
-        let object = bucket.get(REDUCER_KEY).execute().await?;
-        let reducer_bytes = object
-            .ok_or_else(|| Error::RustError("reducer not found".into()))?
-            .body()
-            .ok_or_else(|| Error::RustError("reducer not found".into()))?
-            .bytes()
-            .await?;
 
         let mut storage = MemoryJournal::open(id).map_err(|e| Error::RustError(e.to_string()))?;
 

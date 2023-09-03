@@ -47,6 +47,7 @@ pub fn open(
     doc_id: &[u8],
     timeline_id: &[u8],
     reducer_wasm_bytes: &[u8],
+    reducer_digest: &[u8],
     coordinator_url: Option<String>,
 ) -> WasmResult<SqlSyncDocument> {
     let storage = MemoryJournal::open(doc_id.try_into()?)?;
@@ -56,7 +57,11 @@ pub fn open(
 
     if let Some(coordinator_url) = coordinator_url {
         // TODO: create a oneshot channel in order to shut down replication when the doc closes
-        wasm_bindgen_futures::spawn_local(replication_task(doc.clone(), coordinator_url));
+        wasm_bindgen_futures::spawn_local(replication_task(
+            doc.clone(),
+            coordinator_url,
+            reducer_digest.to_owned(),
+        ));
     }
 
     Ok(SqlSyncDocument { doc })
@@ -65,9 +70,9 @@ pub fn open(
 type DocCell = Rc<RefCell<LocalDocument<MemoryJournal>>>;
 type WebsocketSplitPair = (SplitSink<WebSocket, Message>, Fuse<SplitStream<WebSocket>>);
 
-async fn replication_task(doc: DocCell, coordinator_url: String) {
+async fn replication_task(doc: DocCell, coordinator_url: String, reducer_digest: Vec<u8>) {
     loop {
-        match replication_task_inner(doc.clone(), &coordinator_url).await {
+        match replication_task_inner(doc.clone(), &coordinator_url, &reducer_digest).await {
             Ok(()) => {}
             Err(e) => {
                 log::error!("replication error: {:?}", e);
@@ -78,9 +83,19 @@ async fn replication_task(doc: DocCell, coordinator_url: String) {
     }
 }
 
-async fn replication_task_inner(doc: DocCell, coordinator_url: &str) -> WasmResult<()> {
+async fn replication_task_inner(
+    doc: DocCell,
+    coordinator_url: &str,
+    reducer_digest: &[u8],
+) -> WasmResult<()> {
     let doc_id = { doc.borrow().doc_id() };
-    let url = format!("ws://{}/doc/{}", coordinator_url, doc_id.to_base58());
+    let reducer_digest_b58 = bs58::encode(reducer_digest).into_string();
+    let url = format!(
+        "ws://{}/doc/{}?reducer={}",
+        coordinator_url,
+        doc_id.to_base58(),
+        reducer_digest_b58
+    );
 
     let mut reconnect_timeout = 10;
     let mut sync_interval = IntervalStream::new(1000).fuse();

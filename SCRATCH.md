@@ -1,4 +1,6 @@
 # TASKS (start here)
+- timeline truncation after server persistence
+  - otherwise the server is storing all timelines forever in memory
 - opfs journal
 - log compaction
 - replication frames hint

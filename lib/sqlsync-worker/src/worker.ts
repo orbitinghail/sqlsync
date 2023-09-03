@@ -52,10 +52,15 @@ async function handle_open(msg: Open): Promise<OpenResponse> {
   if (!docs.has(msg.docId)) {
     console.log("sqlsync: opening document", msg.docId);
     let reducerWasmBytes = await fetchBytes(msg.reducerUrl);
+    let reducerDigest = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", reducerWasmBytes)
+    );
+
     let doc = open(
       JournalIdToBytes(msg.docId),
       JournalIdToBytes(msg.timelineId),
       reducerWasmBytes,
+      reducerDigest,
       coordinatorUrl
     );
     docs.set(msg.docId, doc);

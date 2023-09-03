@@ -1138,13 +1138,17 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "bs58",
  "console_error_panic_hook",
  "futures",
  "gloo",
  "gloo-net",
+ "js-sys",
  "serde-wasm-bindgen",
  "serde_bytes",
  "sqlsync",
+ "wasm-bindgen",
+ "web-sys",
  "worker",
 ]
 
@@ -1168,6 +1172,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "bs58",
  "console_error_panic_hook",
  "futures",
  "gloo",

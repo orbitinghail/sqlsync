@@ -19,6 +19,7 @@ console_error_panic_hook.workspace = true
 gloo = { workspace = true, features = ["futures"] }
 wasm-bindgen-futures.workspace = true
 futures.workspace = true
+bs58.workspace = true
 
 sqlsync = { path = "../../sqlsync" }
 

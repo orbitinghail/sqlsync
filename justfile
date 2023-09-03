@@ -1,5 +1,8 @@
+SQLSYNC_PROD_URL := "https://sqlsync.orbitinghail.workers.dev"
+
 default:
     @just --choose
+
 build: (run-with-prefix 'wasm-')
     cargo build
 
@@ -53,22 +56,31 @@ node_modules:
 
 # release targets below this point
 
-upload-demo-reducer *FLAGS:
+# mode should be either debug or release
+# target should be either local or remote
+upload-demo-reducer mode='release' target='local':
     #!/usr/bin/env bash
     set -euo pipefail
-    just wasm-demo-reducer '{{FLAGS}}'
     cd demo/cloudflare-backend
-    if [[ '{{FLAGS}}' = '--release' ]]; then
+
+    if [[ '{{mode}}' = 'release' ]]; then
+        just wasm-demo-reducer '--release'
         REDUCER_PATH="../../target/wasm32-unknown-unknown/release/demo_reducer.wasm"
-        echo "Uploading $REDUCER_PATH to cloudflare r2 bucket"
-        pnpm exec wrangler r2 object put sqlsync-reducers/reducer.wasm --file ../../target/wasm32-unknown-unknown/release/demo_reducer.wasm
     else
+        just wasm-demo-reducer
         REDUCER_PATH="../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm"
-        echo "Uploading $REDUCER_PATH to cloudflare r2 dev bucket and local miniflare"
-        pnpm exec wrangler r2 object put sqlsync-reducers-dev/reducer.wasm --file ../../target/wasm32-unknown-unknown/release/demo_reducer.wasm
-        curl -X PUT -H "Content-Type: application/wasm" --data-binary @$REDUCER_PATH http://localhost:8787/reducer
     fi
 
-package-sqlsync-worker +FLAGS='--release':
+    if [[ '{{target}}' = 'remote' ]]; then
+        echo "Uploading $REDUCER_PATH to sqlsync prod"
+        curl -X PUT --data-binary @$REDUCER_PATH {{SQLSYNC_PROD_URL}}/reducer
+        echo
+    else
+        echo "Uploading $REDUCER_PATH to localhost:8787"
+        curl -X PUT --data-binary @$REDUCER_PATH http://localhost:8787/reducer
+        echo
+    fi
+
+build-sqlsync-worker +FLAGS='--release':
     just wasm-sqlsync-worker '{{FLAGS}}'
-    cd lib/sqlsync-worker && pnpm build
+    cd lib/sqlsync-worker && pnpm i && pnpm build

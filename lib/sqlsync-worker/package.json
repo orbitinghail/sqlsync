@@ -18,10 +18,8 @@
   "scripts": {
     "dev": "vite",
     "build-test-reducer": "cargo build -p test-reducer --target wasm32-unknown-unknown",
-    "build-wasm": "cd sqlsync-worker-crate && wasm-pack build --dev --target web",
-    "build-wasm-release": "cd sqlsync-worker-crate && wasm-pack build --release --target web",
-    "build": "pnpm run build-wasm && tsc && vite build",
-    "build-release": "pnpm run build-wasm-release && tsc && vite build"
+    "build": "tsc && vite build",
+    "build-release": "tsc && vite build"
   },
   "devDependencies": {
     "@types/node": "^20.5.6",

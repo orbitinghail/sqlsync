@@ -12,6 +12,9 @@ export default defineConfig({
       insertTypesEntry: true,
     }),
   ],
+  optimizeDeps: {
+    exclude: ["sqlsync-worker-crate"],
+  },
   build: {
     lib: {
       entry: {
