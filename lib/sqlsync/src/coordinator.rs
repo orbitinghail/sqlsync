@@ -11,7 +11,7 @@ use crate::reducer::Reducer;
 use crate::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 use crate::timeline::{apply_timeline_range, run_timeline_migration};
 use crate::{
-    journal::{Journal, JournalId},
+    journal::{Journal, JournalFactory, JournalId},
     lsn::LsnRange,
     storage::Storage,
 };
@@ -22,10 +22,11 @@ struct ReceiveQueueEntry {
     range: LsnRange,
 }
 
-pub struct CoordinatorDocument<J> {
+pub struct CoordinatorDocument<J: Journal> {
     reducer: Reducer,
     storage: Box<Storage<J>>,
     sqlite: Connection,
+    timeline_factory: J::Factory,
     timelines: HashMap<JournalId, J>,
     timeline_receive_queue: VecDeque<ReceiveQueueEntry>,
 }
@@ -40,7 +41,11 @@ impl<J: Journal> Debug for CoordinatorDocument<J> {
 }
 
 impl<J: Journal> CoordinatorDocument<J> {
-    pub fn open(storage: J, reducer_wasm_bytes: &[u8]) -> Result<Self> {
+    pub fn open(
+        storage: J,
+        timeline_factory: J::Factory,
+        reducer_wasm_bytes: &[u8],
+    ) -> Result<Self> {
         let (mut sqlite, storage) = open_with_vfs(storage)?;
 
         // TODO: this feels awkward here
@@ -50,6 +55,7 @@ impl<J: Journal> CoordinatorDocument<J> {
             reducer: Reducer::new(reducer_wasm_bytes)?,
             storage,
             sqlite,
+            timeline_factory,
             timelines: HashMap::new(),
             timeline_receive_queue: VecDeque::new(),
         })
@@ -61,7 +67,7 @@ impl<J: Journal> CoordinatorDocument<J> {
     ) -> std::result::Result<&mut J, JournalError> {
         match self.timelines.entry(id) {
             Entry::Occupied(entry) => Ok(entry.into_mut()),
-            Entry::Vacant(entry) => Ok(entry.insert(J::open(id)?)),
+            Entry::Vacant(entry) => Ok(entry.insert(self.timeline_factory.open(id)?)),
         }
     }
 
@@ -112,7 +118,7 @@ impl<J: Journal> CoordinatorDocument<J> {
 }
 
 /// CoordinatorDocument knows how to replicate it's storage journal
-impl<J: ReplicationSource> ReplicationSource for CoordinatorDocument<J> {
+impl<J: Journal + ReplicationSource> ReplicationSource for CoordinatorDocument<J> {
     type Reader<'a> = <J as ReplicationSource>::Reader<'a>
     where
         Self: 'a;

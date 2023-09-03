@@ -16,7 +16,7 @@ use sqlsync::{
     local::LocalDocument,
     replication::{ReplicationMsg, ReplicationProtocol},
     sqlite::params_from_iter,
-    Journal, MemoryJournal,
+    MemoryJournal,
 };
 use utils::{ConsoleLogger, JsValueFromSql, JsValueToSql, WasmError, WasmResult};
 use wasm_bindgen::prelude::*;

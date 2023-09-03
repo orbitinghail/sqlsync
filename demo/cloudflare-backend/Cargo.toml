@@ -12,3 +12,5 @@ worker.workspace = true
 console_error_panic_hook.workspace = true
 sqlsync = { path = "../../lib/sqlsync" }
 bincode.workspace = true
+serde-wasm-bindgen.workspace = true
+serde_bytes.workspace = true

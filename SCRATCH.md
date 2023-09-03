@@ -1,6 +1,5 @@
 # TASKS (start here)
 - opfs journal
-- s3 or durable functions journal
 - log compaction
 - replication frames hint
   - hint that more frames are coming allowing the receiver to delay sending range ACKs and rebases, this will improve replication perf through minimizing round trips

@@ -4,10 +4,13 @@ use futures::{stream::StreamExt, Future};
 use js_sys::Uint8Array;
 use sqlsync::{
     coordinator::CoordinatorDocument,
-    replication::{ReplicationMsg, ReplicationProtocol},
-    Journal, JournalId, MemoryJournal,
+    replication::{ReplicationMsg, ReplicationProtocol, ReplicationSource},
+    JournalId, MemoryJournal, MemoryJournalFactory,
 };
 use worker::*;
+
+mod persistence;
+use persistence::Persistence;
 
 const DURABLE_OBJECT_NAME: &str = "COORDINATOR";
 const REDUCER_BUCKET: &str = "SQLSYNC_REDUCERS";
@@ -57,15 +60,21 @@ impl DurableObject for DocumentCoordinator {
                 .bytes()
                 .await?;
 
-            let storage =
+            let mut storage =
                 MemoryJournal::open(doc_id).map_err(|e| Error::RustError(e.to_string()))?;
+
+            // load the persistence layer
+            let persistence = Persistence::init(self.state.storage()).await?;
+            // replay any persisted frames into storage
+            persistence.replay(doc_id, &mut storage).await?;
+
             let doc = Rc::new(RefCell::new(
-                CoordinatorDocument::open(storage, &reducer_bytes)
+                CoordinatorDocument::open(storage, MemoryJournalFactory, &reducer_bytes)
                     .map_err(|e| Error::RustError(e.to_string()))?,
             ));
 
             // spawn a background task which steps the document
-            spawn_local(coordinator_task(doc.clone()));
+            spawn_local(coordinator_task(doc.clone(), persistence));
 
             self.doc = Some(doc);
         }
@@ -82,7 +91,7 @@ impl DurableObject for DocumentCoordinator {
     }
 }
 
-async fn coordinator_task(doc: Document) -> DynResult<()> {
+async fn coordinator_task(doc: Document, mut persistence: Persistence) -> DynResult<()> {
     // TODO figure out how to signal the coordinator task using some kind of channel
     // so that we can wake it up after receiving mutations rather than running
     // it on a loop
@@ -94,6 +103,17 @@ async fn coordinator_task(doc: Document) -> DynResult<()> {
             while doc.has_pending_work() {
                 doc.step()?;
             }
+        }
+
+        // persist new frames to storage
+        let mut next_lsn = persistence.expected_lsn();
+        while let Some(frame) = {
+            let doc = doc.borrow_mut();
+            doc.read_lsn(next_lsn)?.map(|f| f.to_owned())
+        } {
+            console_log!("persisting lsn {} to storage", next_lsn);
+            persistence.write_lsn(next_lsn, frame).await?;
+            next_lsn = persistence.expected_lsn();
         }
 
         // sleep for a bit

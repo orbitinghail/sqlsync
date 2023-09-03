@@ -3,7 +3,7 @@ use std::io;
 
 use crate::lsn::{Lsn, LsnRange};
 use crate::positioned_io::PositionedReader;
-use crate::{JournalError, ScanError, Serializable};
+use crate::{JournalError, JournalFactory, ScanError, Serializable};
 
 use super::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 use super::{Cursor, Journal, JournalId, JournalResult, Scannable};
@@ -23,14 +23,26 @@ impl Debug for MemoryJournal {
     }
 }
 
-impl Journal for MemoryJournal {
-    fn open(id: JournalId) -> JournalResult<Self> {
+impl MemoryJournal {
+    pub fn open(id: JournalId) -> JournalResult<Self> {
         Ok(MemoryJournal {
             id,
             range: LsnRange::empty(),
             data: vec![],
         })
     }
+}
+
+pub struct MemoryJournalFactory;
+
+impl JournalFactory<MemoryJournal> for MemoryJournalFactory {
+    fn open(&self, id: JournalId) -> JournalResult<MemoryJournal> {
+        MemoryJournal::open(id)
+    }
+}
+
+impl Journal for MemoryJournal {
+    type Factory = MemoryJournalFactory;
 
     fn id(&self) -> JournalId {
         self.id

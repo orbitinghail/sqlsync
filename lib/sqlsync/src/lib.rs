@@ -8,16 +8,16 @@ mod storage;
 mod vfs;
 
 pub mod coordinator;
+pub mod error;
 pub mod local;
 pub mod positioned_io;
 pub mod timeline;
 pub mod unixtime;
-pub mod error;
 
 pub use journal::*;
 pub use serialization::{Deserializable, Serializable};
 
-pub use lsn::Lsn;
+pub use lsn::{Lsn, LsnRange};
 
 pub mod sqlite {
     pub use rusqlite::*;

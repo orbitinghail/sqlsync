@@ -12,8 +12,9 @@ use rand::Rng;
 use sqlsync::local::LocalDocument;
 use sqlsync::replication::ReplicationMsg;
 use sqlsync::replication::ReplicationProtocol;
+use sqlsync::JournalId;
 use sqlsync::Lsn;
-use sqlsync::{Journal, JournalId};
+use sqlsync::MemoryJournalFactory;
 
 use serde::{Deserialize, Serialize};
 use sqlsync::{coordinator::CoordinatorDocument, MemoryJournal};
@@ -73,7 +74,8 @@ fn start_server<'a>(
 
     // build a ServerDocument and protect it with a mutex since multiple threads will be accessing it
     let storage_journal = MemoryJournal::open(doc_id)?;
-    let coordinator = CoordinatorDocument::open(storage_journal, &wasm_bytes[..])?;
+    let coordinator =
+        CoordinatorDocument::open(storage_journal, MemoryJournalFactory, &wasm_bytes[..])?;
     let coordinator = Arc::new(Mutex::new(coordinator));
 
     for _ in 0..expected_clients {

@@ -1029,6 +1029,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_bytes"
+version = "0.11.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab33ec92f677585af6d88c65593ae2375adde54efdbf16d597f2cbc7a6d368ff"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.183"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1143,6 +1152,8 @@ dependencies = [
  "bincode",
  "console_error_panic_hook",
  "futures",
+ "serde-wasm-bindgen",
+ "serde_bytes",
  "sqlsync",
  "worker",
 ]

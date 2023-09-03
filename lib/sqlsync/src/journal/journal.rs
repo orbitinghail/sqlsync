@@ -24,7 +24,7 @@ pub enum JournalError {
 pub type JournalResult<T> = Result<T, JournalError>;
 
 pub trait Journal: Scannable + Debug + Sized {
-    fn open(id: JournalId) -> JournalResult<Self>;
+    type Factory: JournalFactory<Self>;
 
     /// this journal's id
     fn id(&self) -> JournalId;
@@ -37,4 +37,8 @@ pub trait Journal: Scannable + Debug + Sized {
 
     /// drop the journal's prefix
     fn drop_prefix(&mut self, up_to: Lsn) -> JournalResult<()>;
+}
+
+pub trait JournalFactory<J> {
+    fn open(&self, id: JournalId) -> JournalResult<J>;
 }

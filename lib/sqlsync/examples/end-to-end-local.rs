@@ -7,7 +7,7 @@ use std::{collections::BTreeMap, format, io};
 use serde::{Deserialize, Serialize};
 use sqlsync::{
     coordinator::CoordinatorDocument, local::LocalDocument, replication::ReplicationProtocol,
-    sqlite::Transaction, Journal, JournalId, MemoryJournal,
+    sqlite::Transaction, JournalId, MemoryJournal, MemoryJournalFactory,
 };
 
 #[derive(Debug)]
@@ -87,7 +87,11 @@ fn main() -> anyhow::Result<()> {
         MemoryJournal::open(JournalId::new128())?,
         &wasm_bytes[..],
     )?;
-    let mut remote = CoordinatorDocument::open(MemoryJournal::open(doc_id)?, &wasm_bytes[..])?;
+    let mut remote = CoordinatorDocument::open(
+        MemoryJournal::open(doc_id)?,
+        MemoryJournalFactory,
+        &wasm_bytes[..],
+    )?;
 
     let mut protocols = BTreeMap::new();
     protocols.insert("local->remote", ReplicationProtocol::new());
