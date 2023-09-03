@@ -12,8 +12,8 @@ import init, { JournalId, RandomJournalId } from "sqlsync-worker/main.ts";
 import wasmUrl from "sqlsync-worker/sqlsync.wasm?url";
 import workerUrl from "sqlsync-worker/worker.js?url";
 
-// const COORDINATOR_URL = "localhost:8787";
-const COORDINATOR_URL = "sqlsync.orbitinghail.workers.dev";
+const COORDINATOR_URL = "localhost:8787";
+// const COORDINATOR_URL = "sqlsync.orbitinghail.workers.dev";
 
 const newDocument = async () => {
   const response = await fetch(`${location.protocol}//${COORDINATOR_URL}/new`, {
