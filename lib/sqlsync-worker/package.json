@@ -12,7 +12,7 @@
   "main": "./dist/worker.js",
   "types": "./dist/worker.d.ts",
   "exports": {
-    ".": "./dist/worker.js",
+    "./worker.js": "./dist/worker.js",
     "./api.js": "./dist/api.js",
     "./worker.ts": "./src/worker.ts",
     "./api.ts": "./src/api.ts",

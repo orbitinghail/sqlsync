@@ -8,9 +8,12 @@ const DEMO_REDUCER_URL = new URL(
   import.meta.url
 );
 
-import init, { JournalId, RandomJournalId } from "sqlsync-worker";
+import init, {
+  JournalId,
+  randomJournalId,
+} from "sqlsync-react/sqlsync-react.ts";
 import wasmUrl from "sqlsync-worker/sqlsync.wasm?url";
-import workerUrl from "sqlsync-worker/worker.cjs?url";
+import workerUrl from "sqlsync-worker/worker.ts?url";
 
 // const COORDINATOR_URL = "localhost:8787";
 const COORDINATOR_URL = "sqlsync.orbitinghail.workers.dev";
@@ -30,7 +33,7 @@ const DOC_ID = (url.hash.slice(1) as JournalId) || (await newDocument());
 url.hash = DOC_ID;
 history.replaceState({}, "", url.toString());
 
-const TIMELINE_ID = RandomJournalId();
+const TIMELINE_ID = randomJournalId();
 
 const sqlsync = await init(workerUrl, wasmUrl, COORDINATOR_URL);
 

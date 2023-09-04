@@ -1,18 +1,12 @@
-/*
-import { JournalId } from "./JournalId";
-export * from "./JournalId";
-
 import {
   ErrorResponse,
+  JournalId,
   OpenResponse,
+  Row,
   SqlSyncRequest,
   SqlSyncResponse,
-} from "./types";
-
-// need to re-create and export these here since vite-plugin-dts doesn't like
-// including types.d.ts for some reason
-export type SqlValue = undefined | null | boolean | number | string;
-export type Row = { [key: string]: SqlValue };
+  SqlValue,
+} from "sqlsync-worker/api.ts";
 
 const requestId = (() => {
   let requestId = 0;
@@ -104,5 +98,3 @@ export default function init(
     resolve(sqlsync);
   });
 }
-
-*/

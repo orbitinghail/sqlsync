@@ -20,14 +20,14 @@ run-with-prefix prefix:
 unit-test:
     cargo test
 
+wasm-sqlsync +FLAGS='--dev':
+    cd lib/sqlsync-worker/sqlsync-wasm && wasm-pack build --target web {{FLAGS}}
+
 wasm-sqlsync-reducer-guest:
     cargo build --target wasm32-unknown-unknown --example guest
 
 wasm-worker-test-reducer:
     cargo build --target wasm32-unknown-unknown --package test-reducer
-
-wasm-sqlsync +FLAGS='--dev':
-    cd lib/sqlsync-worker/sqlsync-wasm && wasm-pack build --target web {{FLAGS}}
 
 wasm-demo-reducer *FLAGS:
     cargo build --target wasm32-unknown-unknown --package demo-reducer {{FLAGS}}
@@ -54,8 +54,6 @@ node_modules:
     cd lib/sqlsync-worker && pnpm i
     cd demo/frontend && pnpm i
 
-# release targets below this point
-
 # mode should be either debug or release
 # target should be either local or remote
 upload-demo-reducer mode='release' target='local':
@@ -80,7 +78,3 @@ upload-demo-reducer mode='release' target='local':
         curl -X PUT --data-binary @$REDUCER_PATH http://localhost:8787/reducer
         echo
     fi
-
-build-sqlsync-worker +FLAGS='--release':
-    just wasm-sqlsync '{{FLAGS}}'
-    cd lib/sqlsync-worker && pnpm i && pnpm build
