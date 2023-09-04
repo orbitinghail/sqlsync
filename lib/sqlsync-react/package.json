@@ -1,0 +1,25 @@
+{
+  "name": "sqlsync-react",
+  "version": "0.0.1",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/sqlsync-react.js",
+  "exports": {
+    "import": "./dist/sqlsync-react.js",
+    "require": "./dist/sqlsync-react.umd.cjs"
+  },
+  "types": "./dist/sqlsync-react.d.ts",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.5.6",
+    "@types/sharedworker": "^0.0.102",
+    "typescript": "^5.2.2",
+    "vite": "^4.4.9",
+    "vite-plugin-dts": "^3.5.2"
+  }
+}
