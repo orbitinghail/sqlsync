@@ -1,3 +1,4 @@
+/*
 import { JournalId } from "./JournalId";
 export * from "./JournalId";
 
@@ -94,10 +95,14 @@ export default function init(
   coordinatorUrl?: string | URL
 ): Promise<SqlSync> {
   return new Promise(async (resolve) => {
-    let worker = new SharedWorker(workerUrl, { type: "module" });
+    let worker = new SharedWorker(workerUrl, {
+      type: workerUrl.toString().endsWith(".cjs") ? "classic" : "module",
+    });
     let sqlsync = new SqlSync(worker.port);
     await sqlsync.boot(sqlSyncWasmUrl.toString(), coordinatorUrl?.toString());
     console.log("sqlsync: booted worker");
     resolve(sqlsync);
   });
 }
+
+*/

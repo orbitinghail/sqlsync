@@ -1169,7 +1169,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sqlsync-worker-crate"
+name = "sqlsync-wasm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1197,17 +1197,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "test-reducer"
-version = "0.1.0"
-dependencies = [
- "futures",
- "log",
- "serde",
- "serde_json",
- "sqlsync-reducer",
 ]
 
 [[package]]

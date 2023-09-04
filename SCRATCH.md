@@ -1,4 +1,7 @@
 # TASKS (start here)
+- demo frontend & basic react hooks
+- readme
+- talk
 - timeline truncation after server persistence
   - otherwise the server is storing all timelines forever in memory
 - opfs journal

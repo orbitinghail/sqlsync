@@ -26,8 +26,8 @@ wasm-sqlsync-reducer-guest:
 wasm-worker-test-reducer:
     cargo build --target wasm32-unknown-unknown --package test-reducer
 
-wasm-sqlsync-worker +FLAGS='--dev':
-    cd lib/sqlsync-worker/sqlsync-worker-crate && wasm-pack build --target web {{FLAGS}}
+wasm-sqlsync +FLAGS='--dev':
+    cd lib/sqlsync-worker/sqlsync-wasm && wasm-pack build --target web {{FLAGS}}
 
 wasm-demo-reducer *FLAGS:
     cargo build --target wasm32-unknown-unknown --package demo-reducer {{FLAGS}}
@@ -47,7 +47,7 @@ test-end-to-end-local-net: wasm-counter-reducer
 test-sqlsync-reducer: wasm-sqlsync-reducer-guest
     cargo run --example host
 
-dev-sqlsync-worker: wasm-sqlsync-worker
+dev-sqlsync-worker: wasm-sqlsync
     cd lib/sqlsync-worker && pnpm dev
 
 node_modules:
@@ -82,5 +82,5 @@ upload-demo-reducer mode='release' target='local':
     fi
 
 build-sqlsync-worker +FLAGS='--release':
-    just wasm-sqlsync-worker '{{FLAGS}}'
+    just wasm-sqlsync '{{FLAGS}}'
     cd lib/sqlsync-worker && pnpm i && pnpm build

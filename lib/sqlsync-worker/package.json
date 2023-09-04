@@ -3,31 +3,29 @@
   "version": "0.0.1",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "sqlsync-wasm/pkg/sqlsync_wasm.js",
+    "sqlsync-wasm/pkg/sqlsync_wasm.d.ts",
+    "sqlsync-wasm/pkg/sqlsync_wasm_bg.wasm"
   ],
-  "main": "./dist/sqlsync-worker.umd.cjs",
-  "module": "./dist/sqlsync-worker.js",
+  "main": "./dist/worker.js",
+  "types": "./dist/worker.d.ts",
   "exports": {
-    ".": "./dist/main.js",
-    "./worker.js": "./dist/worker.js",
-    "./main.ts": "./src/main.ts",
+    ".": "./dist/worker.js",
+    "./api.js": "./dist/api.js",
     "./worker.ts": "./src/worker.ts",
-    "./sqlsync.wasm": "./dist/assets/sqlsync_worker_crate_bg.wasm"
+    "./api.ts": "./src/api.ts",
+    "./sqlsync.wasm": "./sqlsync-wasm/pkg/sqlsync_wasm_bg.wasm"
   },
-  "types": "./dist/main.d.ts",
   "scripts": {
-    "dev": "vite",
-    "build-test-reducer": "cargo build -p test-reducer --target wasm32-unknown-unknown",
-    "build": "tsc && vite build",
-    "build-release": "tsc && vite build"
+    "build-wasm": "cd sqlsync-wasm && wasm-pack build --target web --dev",
+    "build-wasm-release": "cd sqlsync-wasm && wasm-pack build --target web --release",
+    "build": "pnpm run build-wasm && tsc",
+    "build-release": "pnpm run build-wasm-release && tsc"
   },
   "devDependencies": {
-    "@types/node": "^20.5.6",
-    "@types/sharedworker": "^0.0.102",
-    "typescript": "^5.2.2",
-    "vite": "^4.4.9",
-    "vite-plugin-dts": "^3.5.2",
-    "vite-plugin-wasm-pack": "^0.1.12"
+    "typescript": "^5.2.2"
   },
   "dependencies": {
     "@scure/base": "^1.1.3"

@@ -1,5 +1,5 @@
 [package]
-name = "sqlsync-worker-crate"
+name = "sqlsync-wasm"
 version = "0.1.0"
 authors = ["Carl Sverre <carl@orbitinghail.dev>"]
 edition = "2018"

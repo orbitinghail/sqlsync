@@ -1,8 +1,12 @@
-import init, { open, SqlSyncDocument } from "sqlsync-worker-crate";
-import { JournalId, JournalIdToBytes } from "./JournalId";
+import init, {
+  SqlSyncDocument,
+  open,
+} from "../sqlsync-wasm/pkg/sqlsync_wasm.js";
+
 import {
   Boot,
   ErrorResponse,
+  JournalId,
   Mutate,
   MutateResponse,
   Open,
@@ -11,7 +15,8 @@ import {
   QueryResponse,
   SqlSyncRequest,
   SqlSyncResponse,
-} from "./types";
+  journalIdToBytes,
+} from "./api.js";
 
 type WithId<T> = T & { id: number };
 
@@ -57,8 +62,8 @@ async function handle_open(msg: Open): Promise<OpenResponse> {
     );
 
     let doc = open(
-      JournalIdToBytes(msg.docId),
-      JournalIdToBytes(msg.timelineId),
+      journalIdToBytes(msg.docId),
+      journalIdToBytes(msg.timelineId),
       reducerWasmBytes,
       reducerDigest,
       coordinatorUrl
