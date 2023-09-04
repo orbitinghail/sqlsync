@@ -23,11 +23,7 @@ export default defineConfig({
   },
   server: {
     fs: {
-      allow: [
-        searchForWorkspaceRoot(process.cwd()),
-        "../../target/wasm32-unknown-unknown/debug/test_reducer.wasm",
-        "../../target/wasm32-unknown-unknown/release/test_reducer.wasm",
-      ],
+      allow: [searchForWorkspaceRoot(process.cwd())],
     },
   },
 });

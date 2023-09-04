@@ -8,18 +8,18 @@ importers:
 
   demo/frontend:
     dependencies:
+      '@orbitinghail/sqlsync-react':
+        specifier: workspace:*
+        version: link:../../lib/sqlsync-react
+      '@orbitinghail/sqlsync-worker':
+        specifier: workspace:*
+        version: link:../../lib/sqlsync-worker
       react:
         specifier: ^18.2.0
         version: 18.2.0
       react-dom:
         specifier: ^18.2.0
         version: 18.2.0(react@18.2.0)
-      sqlsync-react:
-        specifier: workspace:*
-        version: link:../../lib/sqlsync-react
-      sqlsync-worker:
-        specifier: workspace:*
-        version: link:../../lib/sqlsync-worker
     devDependencies:
       '@types/node':
         specifier: ^20.5.6
@@ -72,7 +72,7 @@ importers:
 
   lib/sqlsync-react:
     dependencies:
-      sqlsync-worker:
+      '@orbitinghail/sqlsync-worker':
         specifier: workspace:^
         version: link:../sqlsync-worker
     devDependencies:

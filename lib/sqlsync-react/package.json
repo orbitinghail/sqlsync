@@ -1,5 +1,5 @@
 {
-  "name": "sqlsync-react",
+  "name": "@orbitinghail/sqlsync-react",
   "version": "0.0.1",
   "files": [
     "dist",
@@ -27,6 +27,6 @@
     "vite-plugin-dts": "^3.5.2"
   },
   "dependencies": {
-    "sqlsync-worker": "workspace:^"
+    "@orbitinghail/sqlsync-worker": "workspace:^"
   }
 }

@@ -6,7 +6,7 @@ import {
   SqlSyncRequest,
   SqlSyncResponse,
   SqlValue,
-} from "sqlsync-worker/api.ts";
+} from "@orbitinghail/sqlsync-worker/api.ts";
 
 const requestId = (() => {
   let requestId = 0;

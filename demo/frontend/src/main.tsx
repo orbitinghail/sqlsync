@@ -11,9 +11,9 @@ const DEMO_REDUCER_URL = new URL(
 import init, {
   JournalId,
   randomJournalId,
-} from "sqlsync-react/sqlsync-react.ts";
-import wasmUrl from "sqlsync-worker/sqlsync.wasm?url";
-import workerUrl from "sqlsync-worker/worker.ts?url";
+} from "@orbitinghail/sqlsync-react/sqlsync-react.ts";
+import wasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
+import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
 
 // const COORDINATOR_URL = "localhost:8787";
 const COORDINATOR_URL = "sqlsync.orbitinghail.workers.dev";
