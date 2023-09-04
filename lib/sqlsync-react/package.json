@@ -21,10 +21,16 @@
   },
   "devDependencies": {
     "@types/node": "^20.5.6",
-    "@types/sharedworker": "^0.0.102",
+    "@types/react": "^18.2.21",
+    "@types/react-dom": "^18.2.7",
     "typescript": "^5.2.2",
     "vite": "^4.4.9",
-    "vite-plugin-dts": "^3.5.2"
+    "vite-plugin-dts": "^3.5.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
   },
   "dependencies": {
     "@orbitinghail/sqlsync-worker": "workspace:^"

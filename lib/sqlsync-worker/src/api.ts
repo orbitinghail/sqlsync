@@ -41,10 +41,7 @@ export type Boot = {
 };
 export type BootResponse = { tag: "booted" };
 
-export type Open = Req<
-  "open",
-  { docId: JournalId; timelineId: JournalId; reducerUrl: string }
->;
+export type Open = Req<"open", { docId: JournalId; reducerUrl: string }>;
 export type OpenResponse = Res<"open", { alreadyOpen: boolean }>;
 
 export type Query = Req<

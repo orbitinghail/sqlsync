@@ -16,9 +16,14 @@ import {
   SqlSyncRequest,
   SqlSyncResponse,
   journalIdToBytes,
+  randomJournalId,
 } from "./api.js";
 
 type WithId<T> = T & { id: number };
+
+// queue of concurrent boot requests; resolve after boot completes
+let booting = false;
+let bootQueue: (() => void)[] = [];
 
 let booted = false;
 let coordinatorUrl: string | undefined; // set by boot
@@ -46,10 +51,19 @@ const fetchBytes = async (url: string) =>
     .then((b) => new Uint8Array(b));
 
 async function handle_boot(msg: Boot) {
-  console.log("sqlsync: initializing wasm");
-  coordinatorUrl = msg.coordinatorUrl;
-  await init(msg.wasmUrl);
-  booted = true;
+  if (booting) {
+    // put a promise resolve in the queue
+    await new Promise<void>((resolve) => bootQueue.push(resolve));
+  } else {
+    booting = true;
+    console.log("sqlsync: initializing wasm");
+    coordinatorUrl = msg.coordinatorUrl;
+    await init(msg.wasmUrl);
+    booted = true;
+    booting = false;
+    // clear boot queue
+    bootQueue.forEach((resolve) => resolve());
+  }
   console.log("sqlsync: wasm initialized");
 }
 
@@ -61,9 +75,12 @@ async function handle_open(msg: Open): Promise<OpenResponse> {
       await crypto.subtle.digest("SHA-256", reducerWasmBytes)
     );
 
+    // TODO: use persisted timeline id when we start persisting the journal to OPFS
+    const timelineId = randomJournalId();
+
     let doc = open(
       journalIdToBytes(msg.docId),
-      journalIdToBytes(msg.timelineId),
+      journalIdToBytes(timelineId),
       reducerWasmBytes,
       reducerDigest,
       coordinatorUrl
