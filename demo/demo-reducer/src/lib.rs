@@ -1,4 +1,4 @@
-// build: "cargo build --target wasm32-unknown-unknown -p demo-reducer"
+// build: "cargo build --target wasm32-unknown-unknown -p demo-reducer --release"
 
 use serde::{Deserialize, Serialize};
 use sqlsync_reducer::{execute, init_reducer, types::ReducerError};
@@ -7,8 +7,12 @@ use sqlsync_reducer::{execute, init_reducer, types::ReducerError};
 #[serde(tag = "tag")]
 enum Mutation {
     InitSchema,
-    Incr { value: i32 },
-    Decr { value: i32 },
+
+    CreateTask { id: String, description: String },
+
+    DeleteTask { id: String },
+
+    ToggleCompleted { id: String },
 }
 
 init_reducer!(reducer);
@@ -17,33 +21,35 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
 
     match mutation {
         Mutation::InitSchema => {
-            futures::join!(
-                execute!(
-                    "CREATE TABLE IF NOT EXISTS counter (
-                    id INTEGER PRIMARY KEY,
-                    value INTEGER
+            futures::join!(execute!(
+                "CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY,
+                    description TEXT NOT NULL,
+                    completed BOOLEAN NOT NULL,
+                    created_at TEXT NOT NULL
                 )"
-                ),
-                execute!("INSERT OR IGNORE INTO counter (id, value) VALUES (0, 0)")
-            );
+            ));
         }
 
-        Mutation::Incr { value } => {
-            execute!(
-                "INSERT INTO counter (id, value) VALUES (0, 0)
-                ON CONFLICT (id) DO UPDATE SET value = value + ?",
-                value
-            )
-            .await;
+        Mutation::CreateTask { id, description } => {
+            log::debug!("appending task({}): {}", id, description);
+            futures::join!(execute!(
+                "insert into tasks (id, description, completed, created_at)
+                    values (?, ?, false, datetime('now'))",
+                id,
+                description
+            ));
         }
 
-        Mutation::Decr { value } => {
-            execute!(
-                "INSERT INTO counter (id, value) VALUES (0, 0)
-                ON CONFLICT (id) DO UPDATE SET value = value - ?",
-                value
-            )
-            .await;
+        Mutation::DeleteTask { id } => {
+            futures::join!(execute!("delete from tasks where id = ?", id));
+        }
+
+        Mutation::ToggleCompleted { id } => {
+            futures::join!(execute!(
+                "update tasks set completed = not completed where id = ?",
+                id
+            ));
         }
     }
 

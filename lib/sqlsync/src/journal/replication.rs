@@ -73,15 +73,12 @@ impl ReplicationProtocol {
         doc: &'a D,
     ) -> Result<Option<(ReplicationMsg, D::Reader<'a>)>, ReplicationError> {
         if let Some(outstanding_range) = self.outstanding_range {
-            log::info!("sync: outstanding_range: {:?}", outstanding_range);
-
             if outstanding_range.len() >= MAX_OUTSTANDING_FRAMES {
                 // we have too many outstanding frames, so we can't send any more
                 return Ok(None);
             }
 
             let lsn = outstanding_range.next();
-            log::info!("sync: lsn: {:?}", lsn);
             if let Some(data) = doc.read_lsn(lsn)? {
                 // update outstanding
                 self.outstanding_range = Some(outstanding_range.append(lsn));

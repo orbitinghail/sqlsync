@@ -1,12 +1,18 @@
+// matches the Mutation type in demo/demo-reducer
 export type Mutation =
   | {
       tag: "InitSchema";
     }
   | {
-      tag: "Incr";
-      value: number;
+      tag: "CreateTask";
+      id: string;
+      description: string;
     }
   | {
-      tag: "Decr";
-      value: number;
+      tag: "DeleteTask";
+      id: string;
+    }
+  | {
+      tag: "ToggleCompleted";
+      id: string;
     };

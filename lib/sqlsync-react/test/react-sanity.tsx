@@ -12,7 +12,7 @@ import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
 import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
 
 const DEMO_REDUCER_URL = new URL(
-  "../../../target/wasm32-unknown-unknown/release/demo_reducer.wasm",
+  "../../../target/wasm32-unknown-unknown/debug/sqlsync_react_test_reducer.wasm",
   import.meta.url
 );
 const DOC_ID = randomJournalId();
