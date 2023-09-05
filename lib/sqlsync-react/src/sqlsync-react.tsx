@@ -32,12 +32,12 @@ export function SqlSyncProvider({
   );
 }
 
-export type DocumentConfig = {
+export type DocumentState = {
   docId: JournalId;
-  reducerUrl: string | URL;
+  changes: number;
 };
 
-const DocumentContext = React.createContext<DocumentConfig | null>(null);
+const DocumentContext = React.createContext<DocumentState | null>(null);
 
 export function DocumentProvider<Mutation>({
   children,
@@ -47,9 +47,11 @@ export function DocumentProvider<Mutation>({
 }: {
   children: React.ReactNode;
   initMutation?: Mutation;
-} & DocumentConfig) {
+  docId: JournalId;
+  reducerUrl: string | URL;
+}) {
   let sqlsync = React.useContext(SqlSyncContext);
-  let [doc, setDoc] = React.useState<DocumentConfig | null>(null);
+  let [doc, setDoc] = React.useState<DocumentState | null>(null);
 
   React.useEffect(() => {
     if (!sqlsync) return;
@@ -59,9 +61,21 @@ export function DocumentProvider<Mutation>({
       if (initMutation) {
         sqlsync?.mutateJSON(docId, initMutation);
       }
+
       return setDoc({
         docId,
-        reducerUrl,
+        changes: 0,
+      });
+    });
+
+    // subscribe to doc changes
+    return sqlsync?.subscribeChanges(docId, () => {
+      setDoc((doc) => {
+        if (!doc) return null;
+        return {
+          ...doc,
+          changes: doc.changes + 1,
+        };
       });
     });
   }, [sqlsync, docId, reducerUrl]);
@@ -94,8 +108,6 @@ export function useQuery<T = Row>(
     loading: true,
     error: null,
   });
-
-  // TODO: switch to a subscribe method when it's available
 
   React.useEffect(() => {
     if (!sqlsync || !doc) return;

@@ -19,6 +19,9 @@ pub struct LocalDocument<J> {
     timeline: J,
     storage: Box<Storage<J>>,
     sqlite: Connection,
+
+    // TODO: build a better subscription system
+    on_storage_change: Option<Box<dyn Fn()>>,
 }
 
 impl<J: Journal> Debug for LocalDocument<J> {
@@ -42,20 +45,30 @@ impl<J: Journal + ReplicationSource> LocalDocument<J> {
             timeline,
             storage,
             sqlite,
+            on_storage_change: None,
         })
+    }
+
+    pub fn subscribe(&mut self, f: impl Fn() + 'static) {
+        // panic if already set
+        if self.on_storage_change.is_some() {
+            panic!("LocalDocument can't have more than one subscriber");
+        }
+        self.on_storage_change = Some(Box::new(f));
+    }
+
+    pub fn unsubscribe(&mut self) {
+        self.on_storage_change = None;
+    }
+
+    fn notify_subscription(&self) {
+        if let Some(f) = &self.on_storage_change {
+            f();
+        }
     }
 
     pub fn doc_id(&self) -> JournalId {
         self.storage.source_id()
-    }
-
-    pub fn mutate(&mut self, m: &[u8]) -> Result<()> {
-        Ok(apply_mutation(
-            &mut self.timeline,
-            &mut self.sqlite,
-            &mut self.reducer,
-            m,
-        )?)
     }
 
     pub fn query<F, O, E>(&mut self, f: F) -> std::result::Result<O, E>
@@ -66,10 +79,17 @@ impl<J: Journal + ReplicationSource> LocalDocument<J> {
         readonly_query(&mut self.sqlite, f)
     }
 
+    pub fn mutate(&mut self, m: &[u8]) -> Result<()> {
+        apply_mutation(&mut self.timeline, &mut self.sqlite, &mut self.reducer, m)?;
+        self.notify_subscription();
+        Ok(())
+    }
+
     pub fn rebase(&mut self) -> Result<()> {
         if self.storage.has_committed_pages() && self.storage.has_invisible_pages() {
             self.storage.revert();
             rebase_timeline(&mut self.timeline, &mut self.sqlite, &mut self.reducer)?;
+            self.notify_subscription();
         }
         Ok(())
     }

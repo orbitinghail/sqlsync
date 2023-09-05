@@ -1,4 +1,5 @@
 import {
+  ChangedResponse,
   ErrorResponse,
   JournalId,
   OpenResponse,
@@ -6,6 +7,7 @@ import {
   SqlSyncRequest,
   SqlSyncResponse,
   SqlValue,
+  Tags,
 } from "@orbitinghail/sqlsync-worker/api.ts";
 
 const requestId = (() => {
@@ -18,19 +20,32 @@ const UTF8Encoder = new TextEncoder();
 export class SqlSync {
   private port: MessagePort;
   private pending: Map<number, (msg: any) => void> = new Map();
+  private onChangeTarget: EventTarget;
 
   constructor(port: MessagePort) {
     this.pending = new Map();
     this.port = port;
     this.port.onmessage = this.onmessage.bind(this);
+    this.onChangeTarget = new EventTarget();
+  }
+
+  subscribeChanges(docId: JournalId, cb: () => void): () => void {
+    this.onChangeTarget.addEventListener(docId, cb);
+    return () => {
+      this.onChangeTarget.removeEventListener(docId, cb);
+    };
   }
 
   private onmessage(event: MessageEvent) {
     console.log("sqlsync: received message", event.data);
-    let msg = event.data as { id: number };
+
+    let msg = event.data as { id: number; tag: Tags };
     let handler = this.pending.get(msg.id);
     if (handler) {
       handler(msg);
+    } else if (msg.tag === "change") {
+      let msg = event.data as ChangedResponse;
+      this.onChangeTarget.dispatchEvent(new Event(msg.docId));
     } else {
       console.warn(`received unexpected message`, msg);
     }

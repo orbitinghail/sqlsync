@@ -11,7 +11,7 @@ import {
 } from "../src/sqlsync-react";
 
 const DEMO_REDUCER_URL = new URL(
-  "../../../target/wasm32-unknown-unknown/debug/demo_reducer.wasm",
+  "../../../target/wasm32-unknown-unknown/release/demo_reducer.wasm",
   import.meta.url
 );
 const DOC_ID = randomJournalId();
@@ -46,22 +46,16 @@ ReactDOM.createRoot(document.getElementById("app")!).render(
 function App() {
   const { mutate } = useSqlSync<Mutation>();
 
-  // HACK: force invalidations to trigger re-render
-  let [invalidations, setInvalidations] = React.useState(0);
-
   const handleIncr = React.useCallback(() => {
     mutate({ tag: "Incr", value: 1 });
-    setInvalidations((i) => i + 1);
   }, [mutate]);
 
   const handleDecr = React.useCallback(() => {
     mutate({ tag: "Decr", value: 1 });
-    setInvalidations((i) => i + 1);
   }, [mutate]);
 
   const { rows, loading, error } = useQuery<{ value: number }>(
-    "select value, ? from counter",
-    invalidations
+    "select value from counter"
   );
 
   return (

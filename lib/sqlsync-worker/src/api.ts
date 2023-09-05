@@ -19,7 +19,7 @@ export const journalIdToBytes = (s: JournalId): Uint8Array => {
   return base58.decode(s);
 };
 
-export type Tags = "open" | "query" | "mutate" | "error";
+export type Tags = "boot" | "open" | "query" | "mutate" | "change" | "error";
 
 type Req<T extends Tags, Body> = { tag: T } & Body;
 type Res<T extends Tags, Body> = { tag: T } & Body;
@@ -34,12 +34,8 @@ export type SqlSyncResponse<T extends SqlSyncRequest> =
   | Associate<T, Query, QueryResponse>
   | Associate<T, Mutate, MutateResponse>;
 
-export type Boot = {
-  tag: "boot";
-  wasmUrl: string;
-  coordinatorUrl?: string;
-};
-export type BootResponse = { tag: "booted" };
+export type Boot = Req<"boot", { wasmUrl: string; coordinatorUrl?: string }>;
+export type BootResponse = Res<"boot", {}>;
 
 export type Open = Req<"open", { docId: JournalId; reducerUrl: string }>;
 export type OpenResponse = Res<"open", { alreadyOpen: boolean }>;
@@ -52,5 +48,7 @@ export type QueryResponse = Res<"query", { rows: Row[] }>;
 
 export type Mutate = Req<"mutate", { docId: JournalId; mutation: Uint8Array }>;
 export type MutateResponse = Res<"mutate", {}>;
+
+export type ChangedResponse = Res<"change", { docId: JournalId }>;
 
 export type ErrorResponse = Res<"error", { error: Error }>;

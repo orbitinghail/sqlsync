@@ -20,7 +20,7 @@ use sqlsync::{
 };
 use utils::{ConsoleLogger, JsValueFromSql, JsValueToSql, WasmError, WasmResult};
 use wasm_bindgen::prelude::*;
-use web_sys::console;
+use web_sys::{console, EventTarget};
 
 static LOGGER: ConsoleLogger = ConsoleLogger;
 
@@ -30,8 +30,7 @@ export type SqlValue = undefined | null | boolean | number | string;
 export type Row = { [key: string]: SqlValue };
 
 interface SqlSyncDocument {
-  query(sql: string, params: SqlValue[]): Row[];
-  query<T>(sql: string, params: SqlValue[]): T[];
+  query<T extends Row>(sql: string, params: SqlValue[]): T[];
 }
 "#;
 
@@ -49,10 +48,18 @@ pub fn open(
     reducer_wasm_bytes: &[u8],
     reducer_digest: &[u8],
     coordinator_url: Option<String>,
+    event_target: EventTarget,
 ) -> WasmResult<SqlSyncDocument> {
     let storage = MemoryJournal::open(doc_id.try_into()?)?;
     let timeline = MemoryJournal::open(timeline_id.try_into()?)?;
-    let doc = LocalDocument::open(storage, timeline, reducer_wasm_bytes)?;
+    let mut doc = LocalDocument::open(storage, timeline, reducer_wasm_bytes)?;
+
+    // TODO: Build a more robust (and granular) query subscription system
+    doc.subscribe(move || {
+        let evt = &web_sys::Event::new("change").unwrap();
+        event_target.dispatch_event(evt).unwrap();
+    });
+
     let doc = Rc::new(RefCell::new(doc));
 
     if let Some(coordinator_url) = coordinator_url {

@@ -5,6 +5,7 @@ import init, {
 
 import {
   Boot,
+  ChangedResponse,
   ErrorResponse,
   JournalId,
   Mutate,
@@ -67,7 +68,10 @@ async function handle_boot(msg: Boot) {
   console.log("sqlsync: wasm initialized");
 }
 
-async function handle_open(msg: Open): Promise<OpenResponse> {
+async function handle_open(
+  msg: Open,
+  port: MessagePort
+): Promise<OpenResponse> {
   if (!docs.has(msg.docId)) {
     console.log("sqlsync: opening document", msg.docId);
     let reducerWasmBytes = await fetchBytes(msg.reducerUrl);
@@ -78,12 +82,18 @@ async function handle_open(msg: Open): Promise<OpenResponse> {
     // TODO: use persisted timeline id when we start persisting the journal to OPFS
     const timelineId = randomJournalId();
 
+    const eventTarget = new EventTarget();
+    eventTarget.addEventListener("change", () => {
+      port.postMessage({ tag: "change", docId: msg.docId } as ChangedResponse);
+    });
+
     let doc = open(
       journalIdToBytes(msg.docId),
       journalIdToBytes(timelineId),
       reducerWasmBytes,
       reducerDigest,
-      coordinatorUrl
+      coordinatorUrl,
+      eventTarget
     );
     docs.set(msg.docId, doc);
     return { tag: "open", alreadyOpen: false };
@@ -123,7 +133,7 @@ async function handle_message(port: MessagePort, msg: WithId<SqlSyncRequest>) {
     if (!booted) {
       if (msg.tag === "boot") {
         await handle_boot(msg);
-        response = { tag: "booted" };
+        response = { tag: "boot" };
       } else {
         response = {
           tag: "error",
@@ -132,9 +142,9 @@ async function handle_message(port: MessagePort, msg: WithId<SqlSyncRequest>) {
       }
     } else {
       if (msg.tag === "boot") {
-        response = { tag: "booted" };
+        response = { tag: "boot" };
       } else if (msg.tag === "open") {
-        response = await handle_open(msg);
+        response = await handle_open(msg, port);
       } else if (msg.tag === "query") {
         response = handle_query(msg);
       } else if (msg.tag === "mutate") {

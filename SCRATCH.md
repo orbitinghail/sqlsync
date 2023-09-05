@@ -4,11 +4,17 @@
 - talk
 - timeline truncation after server persistence
   - otherwise the server is storing all timelines forever in memory
+- [schema migrations](#schema-migrations) should be built into the reducer
 - opfs journal
-- log compaction
+- [log compaction](#log-compaction)
 - replication frames hint
   - hint that more frames are coming allowing the receiver to delay sending range ACKs and rebases, this will improve replication perf through minimizing round trips
 - if mutations decide to not make any changes, don't write any updates to storage
+
+# Schema Migrations
+Basic idea is to add another api to the reducer which is used to trigger migrations when documents are created or versions change.
+
+This is more robust than the current "InitSchema" mutation which is difficult to coordinate.
 
 # Log compaction
 With the rebase sync architecture, compacting the storage log is very easy and safe. At any point the coordinator can snapshot and start a new log from the snapshot.

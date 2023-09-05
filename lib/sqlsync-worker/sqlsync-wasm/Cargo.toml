@@ -25,7 +25,7 @@ sqlsync = { path = "../../sqlsync" }
 
 [dependencies.web-sys]
 workspace = true
-features = ["console"]
+features = ["console", "EventTarget", "Event"]
 
 [package.metadata.wasm-pack.profile.dev]
 wasm-opt = false
