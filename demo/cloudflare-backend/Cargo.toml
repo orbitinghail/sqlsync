@@ -21,4 +21,4 @@ wasm-bindgen.workspace = true
 js-sys.workspace = true
 bs58.workspace = true
 
-web-sys.features = ["Crypto", "SubtleCrypto"]
+web-sys = { workspace = true, features = ["Crypto", "SubtleCrypto"] }

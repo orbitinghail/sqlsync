@@ -3,6 +3,7 @@ mod utils;
 use std::{cell::RefCell, convert::TryInto, io, rc::Rc};
 
 use futures::{
+    channel::mpsc::{channel, Receiver},
     select,
     stream::{Fuse, SplitSink, SplitStream},
     SinkExt, StreamExt,
@@ -54,10 +55,13 @@ pub fn open(
     let timeline = MemoryJournal::open(timeline_id.try_into()?)?;
     let mut doc = LocalDocument::open(storage, timeline, reducer_wasm_bytes)?;
 
+    let (mut changes_tx, changes_rx) = channel(10);
+
     // TODO: Build a more robust (and granular) query subscription system
     doc.subscribe(move || {
         let evt = &web_sys::Event::new("change").unwrap();
         event_target.dispatch_event(evt).unwrap();
+        let _ = changes_tx.try_send(0);
     });
 
     let doc = Rc::new(RefCell::new(doc));
@@ -68,6 +72,7 @@ pub fn open(
             doc.clone(),
             coordinator_url,
             reducer_digest.to_owned(),
+            changes_rx,
         ));
     }
 
@@ -77,9 +82,21 @@ pub fn open(
 type DocCell = Rc<RefCell<LocalDocument<MemoryJournal>>>;
 type WebsocketSplitPair = (SplitSink<WebSocket, Message>, Fuse<SplitStream<WebSocket>>);
 
-async fn replication_task(doc: DocCell, coordinator_url: String, reducer_digest: Vec<u8>) {
+async fn replication_task(
+    doc: DocCell,
+    coordinator_url: String,
+    reducer_digest: Vec<u8>,
+    mut doc_changed: Receiver<u8>,
+) {
     loop {
-        match replication_task_inner(doc.clone(), &coordinator_url, &reducer_digest).await {
+        match replication_task_inner(
+            doc.clone(),
+            &coordinator_url,
+            &reducer_digest,
+            &mut doc_changed,
+        )
+        .await
+        {
             Ok(()) => {}
             Err(e) => {
                 log::error!("replication error: {:?}", e);
@@ -94,6 +111,7 @@ async fn replication_task_inner(
     doc: DocCell,
     coordinator_url: &str,
     reducer_digest: &[u8],
+    doc_changed: &mut Receiver<u8>,
 ) -> WasmResult<()> {
     let doc_id = { doc.borrow().doc_id() };
     let reducer_digest_b58 = bs58::encode(reducer_digest).into_string();
@@ -113,6 +131,9 @@ async fn replication_task_inner(
         if let Some((ref mut writer, ref mut reader)) = ws {
             // now we need to select, either the sync timeout or the websocket
             select! {
+                _ = doc_changed.select_next_some() => {
+                    sync(&mut protocol, &doc, writer).await?;
+                }
                 _ = sync_interval.next() => {
                     sync(&mut protocol, &doc, writer).await?;
                 }

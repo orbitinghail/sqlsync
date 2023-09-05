@@ -1,5 +1,3 @@
-import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
-import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import {
@@ -9,6 +7,9 @@ import {
   useQuery,
   useSqlSync,
 } from "../src/sqlsync-react";
+
+import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
+import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
 
 const DEMO_REDUCER_URL = new URL(
   "../../../target/wasm32-unknown-unknown/release/demo_reducer.wasm",

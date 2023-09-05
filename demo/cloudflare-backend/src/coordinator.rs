@@ -75,6 +75,7 @@ impl CoordinatorTask {
     pub async fn into_task(mut self) {
         let mut clients: BTreeMap<usize, Client> = BTreeMap::new();
         let mut messages = SelectAll::new();
+        let mut next_client_idx = 0;
 
         const STEP_MIN_MS: u32 = 100;
         let mut step_trigger = TimeoutFuture::new(STEP_MIN_MS).fuse();
@@ -111,16 +112,23 @@ impl CoordinatorTask {
                         console_error!("error starting replication: {:?}", e);
                         continue;
                     }
-                    let client_idx = clients.len();
+                    next_client_idx += 1;
+                    let client_idx = next_client_idx;
                     clients.insert(client_idx, client);
                     messages.push(repeat(client_idx).zip(reader));
                 },
 
                 // handle messages from clients
                 (client_idx, msg) = messages.select_next_some() => {
-                    let client = clients.get_mut(&client_idx).unwrap();
+                    let client = match clients.get_mut(&client_idx) {
+                        Some(client ) => client,
+                        None => {
+                            console_error!("received message from unknown client {}", client_idx);
+                            continue;
+                        }
+                    };
                     if let Err(e) = client.handle_message(&mut self.doc, msg).await {
-                        console_error!("error handling message: {:?}", e);
+                        console_error!("error handling message from client {}: {:?}", client_idx, e);
                         // remove client; note, we don't have to remove the
                         // reader from messages because SelectAll handles that
                         // automatically

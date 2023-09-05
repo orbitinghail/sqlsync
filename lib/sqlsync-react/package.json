@@ -12,7 +12,7 @@
       "import": "./dist/sqlsync-react.js",
       "require": "./dist/sqlsync-react.umd.cjs"
     },
-    "./sqlsync-react.ts": "./src/sqlsync-react.ts"
+    "./sqlsync-react.tsx": "./src/sqlsync-react.tsx"
   },
   "types": "./dist/sqlsync-react.d.ts",
   "scripts": {

@@ -21,7 +21,7 @@ pub struct LocalDocument<J> {
     sqlite: Connection,
 
     // TODO: build a better subscription system
-    on_storage_change: Option<Box<dyn Fn()>>,
+    on_storage_change: Option<Box<dyn FnMut()>>,
 }
 
 impl<J: Journal> Debug for LocalDocument<J> {
@@ -49,7 +49,7 @@ impl<J: Journal + ReplicationSource> LocalDocument<J> {
         })
     }
 
-    pub fn subscribe(&mut self, f: impl Fn() + 'static) {
+    pub fn subscribe(&mut self, f: impl FnMut() + 'static) {
         // panic if already set
         if self.on_storage_change.is_some() {
             panic!("LocalDocument can't have more than one subscriber");
@@ -61,8 +61,8 @@ impl<J: Journal + ReplicationSource> LocalDocument<J> {
         self.on_storage_change = None;
     }
 
-    fn notify_subscription(&self) {
-        if let Some(f) = &self.on_storage_change {
+    fn notify_subscription(&mut self) {
+        if let Some(f) = self.on_storage_change.as_mut() {
             f();
         }
     }

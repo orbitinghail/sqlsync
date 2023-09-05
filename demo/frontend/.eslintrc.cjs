@@ -23,6 +23,9 @@ module.exports = {
   },
   plugins: ["react-refresh"],
   rules: {
+    // ignore misused promises since we use async functions in react click handlers
+    "@typescript-eslint/no-misused-promises": "off",
+
     "react-refresh/only-export-components": [
       "warn",
       { allowConstantExport: true },

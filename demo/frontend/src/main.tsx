@@ -3,17 +3,20 @@ import ReactDOM from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+import {
+  DocumentProvider,
+  JournalId,
+  SqlSyncProvider,
+} from "@orbitinghail/sqlsync-react/sqlsync-react.tsx";
+
+import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
+import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
+import { Mutation } from "./mutation.ts";
+
 const DEMO_REDUCER_URL = new URL(
   "../../../target/wasm32-unknown-unknown/release/demo_reducer.wasm",
   import.meta.url
 );
-
-import init, {
-  JournalId,
-  randomJournalId,
-} from "@orbitinghail/sqlsync-react/sqlsync-react.ts";
-import wasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
-import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
 
 // const COORDINATOR_URL = "localhost:8787";
 const COORDINATOR_URL = "sqlsync.orbitinghail.workers.dev";
@@ -33,49 +36,18 @@ const DOC_ID = (url.hash.slice(1) as JournalId) || (await newDocument());
 url.hash = DOC_ID;
 history.replaceState({}, "", url.toString());
 
-const TIMELINE_ID = randomJournalId();
-
-const sqlsync = await init(workerUrl, wasmUrl, COORDINATOR_URL);
-
-type Mutation =
-  | {
-      tag: "InitSchema";
-    }
-  | {
-      tag: "Incr";
-      value: number;
-    }
-  | {
-      tag: "Decr";
-      value: number;
-    };
-
-const mutate = (mutation: Mutation) => {
-  const buf = JSON.stringify(mutation);
-  const bytes = new TextEncoder().encode(buf);
-  return sqlsync.mutate(DOC_ID, bytes);
-};
-
-const open_state = await sqlsync.open(DOC_ID, TIMELINE_ID, DEMO_REDUCER_URL);
-
-if (!open_state.alreadyOpen) {
-  await mutate({ tag: "InitSchema" });
-}
-
-window.incr = async (value = 1) => {
-  await mutate({ tag: "Incr", value });
-};
-window.decr = async (value = 1) => {
-  await mutate({ tag: "Decr", value });
-};
-window.query = (query = "select * from counter") => {
-  return sqlsync.query(DOC_ID, query, []);
-};
-
-// TODO: Figure out how to make sure errors are propagated out of the worker
-
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <SqlSyncProvider
+      config={{ workerUrl, sqlSyncWasmUrl, coordinatorUrl: COORDINATOR_URL }}
+    >
+      <DocumentProvider<Mutation>
+        docId={DOC_ID}
+        reducerUrl={DEMO_REDUCER_URL}
+        initMutation={{ tag: "InitSchema" }}
+      >
+        <App />
+      </DocumentProvider>
+    </SqlSyncProvider>
   </React.StrictMode>
 );
