@@ -1,6 +1,6 @@
 import { JournalId, Row, SqlValue } from "@orbitinghail/sqlsync-worker/api.ts";
-import React from "react";
-import init, { SqlSync, SqlSyncConfig } from "./sqlsync";
+import React, { useCallback } from "react";
+import init, { SqlSync, SqlSyncConfig, SubscribeEventDetail } from "./sqlsync";
 
 export { randomJournalId } from "@orbitinghail/sqlsync-worker/api.ts";
 export type {
@@ -35,6 +35,7 @@ export function SqlSyncProvider({
 export type DocumentState = {
   docId: JournalId;
   changes: number;
+  connected: boolean;
 };
 
 const DocumentContext = React.createContext<DocumentState | null>(null);
@@ -65,17 +66,21 @@ export function DocumentProvider<Mutation>({
       return setDoc({
         docId,
         changes: 0,
+        connected: false,
       });
     });
 
     // subscribe to doc changes
-    return sqlsync?.subscribeChanges(docId, () => {
+    return sqlsync?.subscribe(docId, (evt) => {
+      let e = evt as CustomEvent<SubscribeEventDetail>;
       setDoc((doc) => {
-        if (!doc) return null;
-        return {
-          ...doc,
-          changes: doc.changes + 1,
-        };
+        let d = doc ? doc : { docId, changes: 0, connected: false };
+        if (e.detail.tag == "change") {
+          return { ...d, changes: d.changes + 1 };
+        } else if (e.detail.tag == "connected") {
+          return { ...d, connected: e.detail.connected };
+        }
+        return d;
       });
     });
   }, [sqlsync, docId, reducerUrl]);
@@ -136,22 +141,49 @@ export function useQuery<T = Row>(
 export function useSqlSync<Mutation>(): {
   mutate: (mutation: Mutation) => Promise<void>;
   query: (query: string, params: SqlValue[]) => Promise<Row[]>;
+  setReplicationEnabled: (enabled: boolean) => Promise<void>;
+  connected: boolean;
 } {
   let sqlsync = React.useContext(SqlSyncContext);
   let doc = React.useContext(DocumentContext);
 
   return {
-    mutate: (mutation: Mutation) => {
-      // TODO: eventually we should subscribe to sqlsync and queue the mutation
-      if (!sqlsync || !doc) return Promise.reject("not ready");
-      // TODO: support a user provided serializer rather than assuming JSON
-      // serialize mutaton to JSON and convert to Uint8Array
-      return sqlsync.mutateJSON(doc.docId, mutation);
-    },
-    query: (query: string, params: SqlValue[]) => {
-      // TODO: eventually we should subscribe to sqlsync and queue the mutation
-      if (!sqlsync || !doc) return Promise.reject("not ready");
-      return sqlsync.query(doc.docId, query, params);
-    },
+    mutate: useCallback(
+      (mutation: Mutation) => {
+        // TODO: eventually we should subscribe to sqlsync and queue the mutation
+        if (!sqlsync || !doc) return Promise.reject("not ready");
+        // TODO: support a user provided serializer rather than assuming JSON
+        // serialize mutaton to JSON and convert to Uint8Array
+        return sqlsync.mutateJSON(doc.docId, mutation);
+      },
+      [sqlsync, doc]
+    ),
+    query: useCallback(
+      (query: string, params: SqlValue[]) => {
+        // TODO: eventually we should subscribe to sqlsync and queue the mutation
+        if (!sqlsync || !doc) return Promise.reject("not ready");
+        return sqlsync.query(doc.docId, query, params);
+      },
+      [sqlsync, doc]
+    ),
+    setReplicationEnabled: useCallback(
+      async (enabled: boolean) => {
+        if (!sqlsync || !doc) return Promise.reject("not ready");
+        let docId = doc.docId;
+        await sqlsync.setReplicationEnabled(docId, enabled);
+        return new Promise((resolve) => {
+          // wait for connected event
+          let unsubscribe = sqlsync?.subscribe(docId, (evt) => {
+            let e = evt as CustomEvent<SubscribeEventDetail>;
+            if (e.detail.tag == "connected") {
+              resolve();
+              unsubscribe?.();
+            }
+          });
+        });
+      },
+      [sqlsync, doc]
+    ),
+    connected: doc?.connected ?? false,
   };
 }

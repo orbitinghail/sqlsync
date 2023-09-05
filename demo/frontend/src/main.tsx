@@ -18,8 +18,8 @@ const DEMO_REDUCER_URL = new URL(
   import.meta.url
 );
 
-// const COORDINATOR_URL = "localhost:8787";
-const COORDINATOR_URL = "sqlsync.orbitinghail.workers.dev";
+const COORDINATOR_URL = "localhost:8787";
+// const COORDINATOR_URL = "sqlsync.orbitinghail.workers.dev";
 
 const newDocument = async () => {
   const response = await fetch(`${location.protocol}//${COORDINATOR_URL}/new`, {

@@ -57,18 +57,39 @@ pub fn open(
 
     let (mut changes_tx, changes_rx) = channel(10);
 
+    /*
+
+       browser toggle connection state
+           notify replicaton to change connecton state
+
+    */
+
     // TODO: Build a more robust (and granular) query subscription system
+    let evt_tgt = event_target.clone();
     doc.subscribe(move || {
         let evt = &web_sys::Event::new("change").unwrap();
-        event_target.dispatch_event(evt).unwrap();
+        evt_tgt.dispatch_event(evt).unwrap();
         let _ = changes_tx.try_send(0);
     });
 
     let doc = Rc::new(RefCell::new(doc));
+    let replication_status = Rc::new(RefCell::new(ReplicationStatus {
+        enabled: true,
+        connected: false,
+        notify: Box::new(move |connected| {
+            let evt = &web_sys::CustomEvent::new_with_event_init_dict(
+                "connected",
+                web_sys::CustomEventInit::new().detail(&JsValue::from_bool(connected)),
+            )
+            .unwrap();
+            event_target.dispatch_event(evt).unwrap();
+        }),
+    }));
 
     if let Some(coordinator_url) = coordinator_url {
         // TODO: create a oneshot channel in order to shut down replication when the doc closes
         wasm_bindgen_futures::spawn_local(replication_task(
+            replication_status.clone(),
             doc.clone(),
             coordinator_url,
             reducer_digest.to_owned(),
@@ -76,13 +97,26 @@ pub fn open(
         ));
     }
 
-    Ok(SqlSyncDocument { doc })
+    Ok(SqlSyncDocument {
+        doc,
+        replication_status,
+    })
 }
 
 type DocCell = Rc<RefCell<LocalDocument<MemoryJournal>>>;
 type WebsocketSplitPair = (SplitSink<WebSocket, Message>, Fuse<SplitStream<WebSocket>>);
 
+struct ReplicationStatus {
+    /// enabled is controlled by the app, if it's false we will not attempt to reconnect
+    enabled: bool,
+    /// connected is set by the replication task
+    connected: bool,
+    /// notify is called by the replication task when the connection status changes
+    notify: Box<dyn FnMut(bool)>,
+}
+
 async fn replication_task(
+    status: Rc<RefCell<ReplicationStatus>>,
     doc: DocCell,
     coordinator_url: String,
     reducer_digest: Vec<u8>,
@@ -90,6 +124,7 @@ async fn replication_task(
 ) {
     loop {
         match replication_task_inner(
+            status.clone(),
             doc.clone(),
             &coordinator_url,
             &reducer_digest,
@@ -108,6 +143,7 @@ async fn replication_task(
 }
 
 async fn replication_task_inner(
+    status: Rc<RefCell<ReplicationStatus>>,
     doc: DocCell,
     coordinator_url: &str,
     reducer_digest: &[u8],
@@ -122,12 +158,17 @@ async fn replication_task_inner(
         reducer_digest_b58
     );
 
-    let mut reconnect_timeout = 10;
+    let mut reconnect_timeout_ms = 10;
     let mut sync_interval = IntervalStream::new(1000).fuse();
     let mut ws: Option<WebsocketSplitPair> = None;
     let mut protocol = ReplicationProtocol::new();
 
     loop {
+        if !status.borrow().enabled {
+            // drop the websocket
+            ws = None;
+        }
+
         if let Some((ref mut writer, ref mut reader)) = ws {
             // now we need to select, either the sync timeout or the websocket
             select! {
@@ -140,8 +181,16 @@ async fn replication_task_inner(
                 msg = reader.select_next_some() => {
                     match msg {
                         Ok(msg) => {
-                            // reset reconnect timeout on successful read
-                            reconnect_timeout = 10;
+                            if !status.borrow().connected {
+                                log::info!("connected to {}", url);
+                                let mut status = status.borrow_mut();
+                                // mark connected
+                                status.connected = true;
+                                // notify connected
+                                (status.notify)(true);
+                                // reset reconnect timeout
+                                reconnect_timeout_ms = 10;
+                            }
 
                             handle_message(&mut protocol, &doc, writer, msg).await?;
                         }
@@ -154,13 +203,29 @@ async fn replication_task_inner(
                 }
             }
         } else {
-            // if we don't have a websocket, wait for the reconnect timeout
-            TimeoutFuture::new(reconnect_timeout).await;
+            // set the connection status
+            {
+                let mut status = status.borrow_mut();
+                if status.connected {
+                    log::info!("disconnected from {}", url);
+                    // mark disconnected
+                    status.connected = false;
+                    // notify disconnected
+                    (status.notify)(false);
+                }
+            }
 
-            // increase the exponential backoff
-            reconnect_timeout *= 2;
-            // with max
-            reconnect_timeout = reconnect_timeout.min(10000);
+            // if we don't have a websocket, wait for the reconnect timeout
+            TimeoutFuture::new(reconnect_timeout_ms).await;
+
+            // increase the exponential backoff up to a max of 2 seconds
+            reconnect_timeout_ms *= 2;
+            reconnect_timeout_ms = reconnect_timeout_ms.min(2000);
+
+            if !status.borrow().enabled {
+                // if replication is disabled, we don't need to reconnect
+                continue;
+            }
 
             log::info!("connecting to {}", url);
 
@@ -273,13 +338,22 @@ async fn handle_message(
 
 #[wasm_bindgen]
 pub struct SqlSyncDocument {
-    doc: Rc<RefCell<LocalDocument<MemoryJournal>>>,
+    doc: DocCell,
+    replication_status: Rc<RefCell<ReplicationStatus>>,
 }
 
 #[wasm_bindgen]
 impl SqlSyncDocument {
     pub fn mutate(&mut self, mutation: &[u8]) -> WasmResult<()> {
         Ok(self.doc.borrow_mut().mutate(mutation)?)
+    }
+
+    pub fn is_connected(&self) -> bool {
+        self.replication_status.borrow().connected
+    }
+
+    pub fn set_replication_enabled(&self, enabled: bool) {
+        self.replication_status.borrow_mut().enabled = enabled;
     }
 
     // defined in typescript_custom_section for better param and result types

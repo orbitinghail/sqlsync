@@ -11,10 +11,17 @@
   - hint that more frames are coming allowing the receiver to delay sending range ACKs and rebases, this will improve replication perf through minimizing round trips
 - if mutations decide to not make any changes, don't write any updates to storage
 
+# connection management & monitoring
+Currently the code for managing and monitoring the replication status in the client is very rough. A much cleaner event bus between the replication task, the document, and the browser should created and managed.
+
+In addition, connection metrics and debugging should be exposed to make it easier for the app to debug and recover from various kinds of issues.
+
 # Schema Migrations
 Basic idea is to add another api to the reducer which is used to trigger migrations when documents are created or versions change.
 
 This is more robust than the current "InitSchema" mutation which is difficult to coordinate.
+
+This will be the first pass on figuring out sqlsync's upgrade story. Eventually it needs to encompass the sqlsync runtime version, the reducer version, the sqlite schema version across both the client(s) and server.
 
 # Log compaction
 With the rebase sync architecture, compacting the storage log is very easy and safe. At any point the coordinator can snapshot and start a new log from the snapshot.

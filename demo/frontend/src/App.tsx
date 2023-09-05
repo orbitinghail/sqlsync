@@ -38,12 +38,35 @@ const Task = (props: Task) => {
   );
 };
 
+export function ConnectionState() {
+  const { connected, setReplicationEnabled } = useSqlSync();
+  const [loading, setLoading] = React.useState(false);
+  return (
+    <div className="flex mb-4 items-center">
+      <div className="flex-auto">
+        Connection Status: {connected ? "Connected" : "Disconnected"}
+      </div>
+      <div className="flex-no-shrink">
+        <Checkbox
+          checked={connected}
+          disabled={loading}
+          onChange={async (e) => {
+            setLoading(true);
+            await setReplicationEnabled(e.target.checked);
+            setLoading(false);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const { mutate } = useSqlSync<Mutation>();
 
   const [inputValue, setInputValue] = React.useState("");
 
-  const { rows: tasks } = useQuery<Task>("select * from tasks");
+  const { rows: tasks } = useQuery<Task>("select * from tasks order by id");
 
   const handleCreate = React.useCallback(async () => {
     if (!inputValue.trim()) {
@@ -57,6 +80,7 @@ export default function App() {
   return (
     <div className="h-100 w-full flex items-center justify-center bg-teal-lightest font-sans">
       <div className="bg-white rounded shadow p-6 m-4 w-full lg:w-3/4 lg:max-w-lg">
+        <ConnectionState />
         <div className="mb-4">
           <h1 className="text-grey-darkest">Todo List</h1>
           <div className="flex mt-4">

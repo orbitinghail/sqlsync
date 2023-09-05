@@ -6,6 +6,7 @@ import init, {
 import {
   Boot,
   ChangedResponse,
+  ConnectedResponse,
   ErrorResponse,
   JournalId,
   Mutate,
@@ -14,6 +15,8 @@ import {
   OpenResponse,
   Query,
   QueryResponse,
+  SetReplicationEnabled,
+  SetReplicationEnabledResponse,
   SqlSyncRequest,
   SqlSyncResponse,
   journalIdToBytes,
@@ -36,6 +39,7 @@ let connections: MessagePort[] = [];
 addEventListener("connect", (e: Event) => {
   let evt = e as MessageEvent;
   let port = evt.ports[0];
+
   connections.push(port);
 
   port.addEventListener("message", (e) => handle_message(port, e.data));
@@ -89,6 +93,20 @@ async function handle_open(msg: Open): Promise<OpenResponse> {
         port.postMessage({ tag: "change", docId: msg.docId } as ChangedResponse)
       );
     });
+    eventTarget.addEventListener("connected", (e: Event) => {
+      let evt = e as CustomEvent;
+      let connected = evt.detail;
+
+      console.log("sqlsync: connected", connected);
+
+      connections.forEach((port) =>
+        port.postMessage({
+          tag: "connected",
+          docId: msg.docId,
+          connected,
+        } as ConnectedResponse)
+      );
+    });
 
     let doc = open(
       journalIdToBytes(msg.docId),
@@ -114,6 +132,18 @@ function handle_query(msg: Query): QueryResponse {
 
   let rows = doc.query(msg.sql, msg.params);
   return { tag: "query", rows };
+}
+
+function handle_set_replication_enabled(
+  msg: SetReplicationEnabled
+): SetReplicationEnabledResponse {
+  let doc = docs.get(msg.docId);
+  if (!doc) {
+    throw new Error(`no document with id ${msg.docId}`);
+  }
+
+  doc.set_replication_enabled(msg.enabled);
+  return { tag: "set-replication-enabled" };
 }
 
 function handle_mutate(msg: Mutate): MutateResponse {
@@ -150,6 +180,8 @@ async function handle_message(port: MessagePort, msg: WithId<SqlSyncRequest>) {
         response = await handle_open(msg);
       } else if (msg.tag === "query") {
         response = handle_query(msg);
+      } else if (msg.tag === "set-replication-enabled") {
+        response = handle_set_replication_enabled(msg);
       } else if (msg.tag === "mutate") {
         response = handle_mutate(msg);
       } else {

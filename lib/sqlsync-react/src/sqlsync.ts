@@ -1,5 +1,6 @@
 import {
   ChangedResponse,
+  ConnectedResponse,
   ErrorResponse,
   JournalId,
   OpenResponse,
@@ -17,23 +18,39 @@ const requestId = (() => {
 
 const UTF8Encoder = new TextEncoder();
 
+export type SubscribeEventDetail =
+  | {
+      tag: "change";
+    }
+  | {
+      tag: "connected";
+      connected: boolean;
+    };
+
 export class SqlSync {
   private port: MessagePort;
   private pending: Map<number, (msg: any) => void> = new Map();
-  private onChangeTarget: EventTarget;
+  private eventTarget: EventTarget;
 
   constructor(port: MessagePort) {
     this.pending = new Map();
     this.port = port;
     this.port.onmessage = this.onmessage.bind(this);
-    this.onChangeTarget = new EventTarget();
+    this.eventTarget = new EventTarget();
   }
 
-  subscribeChanges(docId: JournalId, cb: () => void): () => void {
-    this.onChangeTarget.addEventListener(docId, cb);
+  subscribe(
+    docId: JournalId,
+    cb: EventListenerOrEventListenerObject
+  ): () => void {
+    this.eventTarget.addEventListener(docId, cb);
     return () => {
-      this.onChangeTarget.removeEventListener(docId, cb);
+      this.eventTarget.removeEventListener(docId, cb);
     };
+  }
+
+  subscribeOnce(docId: JournalId, cb: EventListenerOrEventListenerObject) {
+    this.eventTarget.addEventListener(docId, cb, { once: true });
   }
 
   private onmessage(event: MessageEvent) {
@@ -45,7 +62,16 @@ export class SqlSync {
       handler(msg);
     } else if (msg.tag === "change") {
       let msg = event.data as ChangedResponse;
-      this.onChangeTarget.dispatchEvent(new Event(msg.docId));
+      let evt = new CustomEvent<SubscribeEventDetail>(msg.docId, {
+        detail: { tag: "change" },
+      });
+      this.eventTarget.dispatchEvent(evt);
+    } else if (msg.tag === "connected") {
+      let msg = event.data as ConnectedResponse;
+      let evt = new CustomEvent<SubscribeEventDetail>(msg.docId, {
+        detail: { tag: "connected", connected: msg.connected },
+      });
+      this.eventTarget.dispatchEvent(evt);
     } else {
       console.warn(`received unexpected message`, msg);
     }
@@ -102,6 +128,13 @@ export class SqlSync {
     const bytes = UTF8Encoder.encode(serialized);
     await this.send({ tag: "mutate", docId, mutation: bytes });
   }
+
+  async setReplicationEnabled(
+    docId: JournalId,
+    enabled: boolean
+  ): Promise<void> {
+    await this.send({ tag: "set-replication-enabled", docId, enabled });
+  }
 }
 
 export type SqlSyncConfig = {
@@ -110,17 +143,26 @@ export type SqlSyncConfig = {
   coordinatorUrl?: string | URL;
 };
 
+// queue of concurrent init requests; resolve after init completes
+let initPromise: Promise<SqlSync> | null;
+
 export default function init(config: SqlSyncConfig): Promise<SqlSync> {
-  return new Promise(async (resolve) => {
-    let worker = new SharedWorker(config.workerUrl, {
-      type: config.workerUrl.toString().endsWith(".cjs") ? "classic" : "module",
+  if (!initPromise) {
+    console.log("sqlsync: initializing");
+    initPromise = new Promise(async (resolve) => {
+      let worker = new SharedWorker(config.workerUrl, {
+        type: config.workerUrl.toString().endsWith(".cjs")
+          ? "classic"
+          : "module",
+      });
+      let sqlsync = new SqlSync(worker.port);
+      await sqlsync.boot(
+        config.sqlSyncWasmUrl.toString(),
+        config.coordinatorUrl?.toString()
+      );
+      console.log("sqlsync: booted worker");
+      resolve(sqlsync);
     });
-    let sqlsync = new SqlSync(worker.port);
-    await sqlsync.boot(
-      config.sqlSyncWasmUrl.toString(),
-      config.coordinatorUrl?.toString()
-    );
-    console.log("sqlsync: booted worker");
-    resolve(sqlsync);
-  });
+  }
+  return initPromise;
 }
