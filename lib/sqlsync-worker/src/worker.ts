@@ -30,14 +30,18 @@ let booted = false;
 let coordinatorUrl: string | undefined; // set by boot
 const docs = new Map<JournalId, SqlSyncDocument>();
 
+// TODO: connections is a memory leak since there is no reliable way to detect closed ports
+let connections: MessagePort[] = [];
+
 addEventListener("connect", (e: Event) => {
   let evt = e as MessageEvent;
   let port = evt.ports[0];
+  connections.push(port);
 
   port.addEventListener("message", (e) => handle_message(port, e.data));
   port.start();
 
-  console.log("sqlsync: received connection");
+  console.log("sqlsync: received connection from tab");
 });
 
 const responseToError = (r: Response): Error => {
@@ -68,10 +72,7 @@ async function handle_boot(msg: Boot) {
   console.log("sqlsync: wasm initialized");
 }
 
-async function handle_open(
-  msg: Open,
-  port: MessagePort
-): Promise<OpenResponse> {
+async function handle_open(msg: Open): Promise<OpenResponse> {
   if (!docs.has(msg.docId)) {
     console.log("sqlsync: opening document", msg.docId);
     let reducerWasmBytes = await fetchBytes(msg.reducerUrl);
@@ -84,7 +85,9 @@ async function handle_open(
 
     const eventTarget = new EventTarget();
     eventTarget.addEventListener("change", () => {
-      port.postMessage({ tag: "change", docId: msg.docId } as ChangedResponse);
+      connections.forEach((port) =>
+        port.postMessage({ tag: "change", docId: msg.docId } as ChangedResponse)
+      );
     });
 
     let doc = open(
@@ -144,7 +147,7 @@ async function handle_message(port: MessagePort, msg: WithId<SqlSyncRequest>) {
       if (msg.tag === "boot") {
         response = { tag: "boot" };
       } else if (msg.tag === "open") {
-        response = await handle_open(msg, port);
+        response = await handle_open(msg);
       } else if (msg.tag === "query") {
         response = handle_query(msg);
       } else if (msg.tag === "mutate") {

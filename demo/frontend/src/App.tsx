@@ -27,10 +27,10 @@ const Task = (props: Task) => {
       <div className="flex-no-shrink mr-4">
         <Checkbox checked={props.completed} onChange={handleToggleCompleted} />
       </div>
-      <p className="w-full text-green">{props.description}</p>
+      <p className="w-full">{props.description}</p>
       <button
         onClick={handleDelete}
-        className="flex-no-shrink p-2 ml-2 border-2 rounded text-red border-red hover:text-white hover:bg-red"
+        className="flex-no-shrink p-2 ml-2 border-2 rounded text-red border-red hover:text-white hover:bg-red-500"
       >
         Remove
       </button>
@@ -74,7 +74,7 @@ export default function App() {
             <button
               type="submit"
               onClick={handleCreate}
-              className="flex-no-shrink p-2 border-2 rounded text-teal border-teal hover:text-white hover:bg-teal"
+              className="flex-no-shrink p-2 border-2 rounded text-teal border-teal hover:text-white hover:bg-teal-500"
             >
               Add
             </button>
