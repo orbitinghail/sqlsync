@@ -54,8 +54,13 @@ node_modules:
     cd lib/sqlsync-worker && pnpm i
     cd demo/frontend && pnpm i
 
-package-sqlsync-worker:
-    cd lib/sqlsync-worker && pnpm build-release
+package-sqlsync-worker target='release':
+    #!/usr/bin/env bash
+    if [[ '{{target}}' = 'release' ]]; then
+        cd lib/sqlsync-worker && pnpm build-release
+    else
+        cd lib/sqlsync-worker && pnpm build
+    fi
 
 # mode should be either debug or release
 # target should be either local or remote

@@ -142,16 +142,30 @@ export type SqlSyncConfig = {
 // queue of concurrent init requests; resolve after init completes
 let initPromise: Promise<SqlSync> | null;
 
+function initShared(config: SqlSyncConfig): SqlSync {
+  let worker = new SharedWorker(config.workerUrl, {
+    type: config.workerUrl.toString().endsWith(".cjs") ? "classic" : "module",
+  });
+  return new SqlSync(worker.port);
+}
+
+function initDedicated(config: SqlSyncConfig): SqlSync {
+  let worker = new Worker(config.workerUrl, {
+    type: config.workerUrl.toString().endsWith(".cjs") ? "classic" : "module",
+  });
+  return new SqlSync(worker as any as MessagePort);
+}
+
 export default function init(config: SqlSyncConfig): Promise<SqlSync> {
   if (!initPromise) {
     console.log("sqlsync: initializing");
     initPromise = new Promise(async (resolve) => {
-      let worker = new SharedWorker(config.workerUrl, {
-        type: config.workerUrl.toString().endsWith(".cjs")
-          ? "classic"
-          : "module",
-      });
-      let sqlsync = new SqlSync(worker.port);
+      // initialize shared worker if possible
+      const sqlsync =
+        typeof SharedWorker !== "undefined"
+          ? initShared(config)
+          : initDedicated(config);
+
       await sqlsync.boot(
         config.sqlSyncWasmUrl.toString(),
         config.coordinatorUrl?.toString()

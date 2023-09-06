@@ -2,16 +2,80 @@ import {
   useQuery,
   useSqlSync,
 } from "@orbitinghail/sqlsync-react/sqlsync-react.tsx";
-import React from "react";
+import React, { useMemo } from "react";
 import Checkbox from "./Checkbox";
 import { Mutation } from "./mutation";
+
+// Foldable is a component that renders a H1 header, and a button which expands to render it's children
+export const Foldable = ({
+  header,
+  children,
+}: {
+  header: string;
+  children: React.ReactNode;
+}) => {
+  const [expanded, setExpanded] = React.useState(false);
+  // use a unicode caret to show expanded state
+  const arrow = expanded ? "▼ " : "▶ ";
+  return (
+    <div className="flex flex-col mb-4 w-full">
+      <h1 className="cursor-pointer" onClick={() => setExpanded(!expanded)}>
+        {arrow}
+        {header}
+      </h1>
+      {expanded && children}
+    </div>
+  );
+};
+
+// QueryViewer is a component which let's the user type any sql query they want,
+// and it displays the output of that query or any errors.
+export const QueryViewer = () => {
+  const [inputValue, setInputValue] = React.useState("select * from tasks");
+  const { rows, error } = useQuery(inputValue);
+
+  const rows_string = useMemo(() => {
+    return JSON.stringify(
+      rows,
+      (_, value) => {
+        // handle bigint values
+        if (typeof value === "bigint") {
+          return value.toString();
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+        return value;
+      },
+      2
+    );
+  }, [rows]);
+
+  return (
+    <>
+      <div className="mt-4">
+        <p>
+          Enter any valid SQLite query into the textarea below. The only
+          available table is `tasks` in this demo.
+        </p>
+        <textarea
+          className="shadow appearance-none border rounded w-full py-2 px-3 mr-4 text-grey-darker"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+        />
+      </div>
+      <div>
+        <h2>Output</h2>
+        <pre className="mt-4">{error ? error.message : rows_string}</pre>
+      </div>
+    </>
+  );
+};
 
 interface Task {
   id: string;
   description: string;
   completed: boolean;
 }
-const Task = (props: Task) => {
+export const Task = (props: Task) => {
   const { mutate } = useSqlSync<Mutation>();
 
   const handleDelete = React.useCallback(async () => {
@@ -42,7 +106,7 @@ export function ConnectionState() {
   const { connected, setReplicationEnabled } = useSqlSync();
   const [loading, setLoading] = React.useState(false);
   return (
-    <div className="flex mb-4 items-center">
+    <div className="flex mb-4">
       <div className="flex-auto">
         Connection Status: {connected ? "Connected" : "Disconnected"}
       </div>
@@ -78,7 +142,7 @@ export default function App() {
   }, [inputValue, mutate]);
 
   return (
-    <div className="h-100 w-full flex items-center justify-center bg-teal-lightest font-sans">
+    <div className="h-100 flex-col w-full flex items-center justify-center font-sans">
       <div className="bg-white rounded shadow p-6 m-4 w-full lg:w-3/4 lg:max-w-lg">
         <ConnectionState />
         <div className="mb-4">
@@ -109,6 +173,9 @@ export default function App() {
             <Task key={task.id} {...task} />
           ))}
         </div>
+        <Foldable header="Query Viewer">
+          <QueryViewer />
+        </Foldable>
       </div>
     </div>
   );

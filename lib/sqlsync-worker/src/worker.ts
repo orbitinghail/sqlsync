@@ -36,6 +36,19 @@ const docs = new Map<JournalId, SqlSyncDocument>();
 // TODO: connections is a memory leak since there is no reliable way to detect closed ports
 let connections: MessagePort[] = [];
 
+// if we are running in a dedicated worker, shim a Port
+// we have to make this check inverted because
+// WorkerGlobalScope extends SharedWorkerGlobalScope
+if (
+  typeof SharedWorkerGlobalScope === "undefined" ||
+  !(self instanceof SharedWorkerGlobalScope)
+) {
+  let port = self as any as MessagePort;
+  connections.push(port);
+  port.addEventListener("message", (e) => handle_message(port, e.data));
+  console.log("sqlsync: handled dedicated worker connection");
+}
+
 addEventListener("connect", (e: Event) => {
   let evt = e as MessageEvent;
   let port = evt.ports[0];
