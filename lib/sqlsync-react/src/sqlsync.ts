@@ -49,10 +49,6 @@ export class SqlSync {
     };
   }
 
-  subscribeOnce(docId: JournalId, cb: EventListenerOrEventListenerObject) {
-    this.eventTarget.addEventListener(docId, cb, { once: true });
-  }
-
   private onmessage(event: MessageEvent) {
     console.log("sqlsync: received message", event.data);
 
