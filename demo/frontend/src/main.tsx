@@ -8,8 +8,11 @@ import {
   SqlSyncProvider,
 } from "@orbitinghail/sqlsync-react/sqlsync-react.tsx";
 
-import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
+// HACK: switch to the .ts version for nicer local dev
+// import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
 import workerUrl from "@orbitinghail/sqlsync-worker/worker.js?url";
+
+import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
 import App from "./App";
 import { Mutation } from "./mutation";
 

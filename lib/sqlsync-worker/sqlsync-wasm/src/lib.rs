@@ -151,8 +151,17 @@ async fn replication_task_inner(
 ) -> WasmResult<()> {
     let doc_id = { doc.borrow().doc_id() };
     let reducer_digest_b58 = bs58::encode(reducer_digest).into_string();
+
+    // use ws if the coordinator url contains "localhost"
+    let proto = if coordinator_url.contains("localhost") {
+        "ws"
+    } else {
+        "wss"
+    };
+
     let url = format!(
-        "ws://{}/doc/{}?reducer={}",
+        "{}://{}/doc/{}?reducer={}",
+        proto,
         coordinator_url,
         doc_id.to_base58(),
         reducer_digest_b58
