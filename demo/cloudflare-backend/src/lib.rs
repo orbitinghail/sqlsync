@@ -151,6 +151,16 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             console_log!("creating new document with id {}", id);
             Response::ok(id.to_base58())
         })
+        .on_async("/new/:name", |_req, ctx| async move {
+            if let Some(name) = ctx.param("name") {
+                let namespace = ctx.durable_object(DURABLE_OBJECT_NAME)?;
+                let id = namespace.id_from_name(name)?;
+                let id = object_id_to_journal_id(id)?;
+                Response::ok(id.to_base58())
+            } else {
+                Response::error("Bad Request", 400)
+            }
+        })
         .on_async("/doc/:id", |req, ctx| async move {
             if let Some(id) = ctx.param("id") {
                 console_log!("forwarding request to document with id: {}", id);

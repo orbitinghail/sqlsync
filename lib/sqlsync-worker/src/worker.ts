@@ -134,6 +134,22 @@ async function handle_open(msg: Open): Promise<OpenResponse> {
   }
 
   console.log("sqlsync: document already open", msg.docId);
+
+  // send out connected state events to all ports just to make sure everything is in sync
+  // TODO: this is jank, fix it when I redo how events are managed
+  let doc = docs.get(msg.docId);
+  if (!doc) {
+    throw new Error(`no document with id ${msg.docId}`);
+  }
+  let connected = doc.is_connected();
+  connections.forEach((port) =>
+    port.postMessage({
+      tag: "connected",
+      docId: msg.docId,
+      connected,
+    } as ConnectedResponse)
+  );
+
   return { tag: "open", alreadyOpen: true };
 }
 

@@ -63,10 +63,16 @@ export function DocumentProvider<Mutation>({
         sqlsync?.mutateJSON(docId, initMutation);
       }
 
-      return setDoc({
-        docId,
-        changes: 0,
-        connected: false,
+      return setDoc((doc) => {
+        if (doc) {
+          // subscribe already set the doc
+          return doc;
+        }
+        return {
+          docId,
+          changes: 0,
+          connected: false,
+        };
       });
     });
 

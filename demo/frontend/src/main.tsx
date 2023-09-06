@@ -8,6 +8,13 @@ import {
   SqlSyncProvider,
 } from "@orbitinghail/sqlsync-react/sqlsync-react.tsx";
 
+import {
+  RouterProvider,
+  createBrowserRouter,
+  redirect,
+  useParams,
+} from "react-router-dom";
+
 // HACK: switch to the .ts version for nicer local dev
 // import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
 import workerUrl from "@orbitinghail/sqlsync-worker/worker.js?url";
@@ -24,41 +31,27 @@ const DEMO_REDUCER_URL = new URL(
 // const COORDINATOR_URL = "localhost:8787";
 const COORDINATOR_URL = "sqlsync.orbitinghail.workers.dev";
 
-const newDocument = async () => {
-  const response = await fetch(`${location.protocol}//${COORDINATOR_URL}/new`, {
+const newDocument = async (name = "") => {
+  let url = `${location.protocol}//${COORDINATOR_URL}/new`;
+  if (name.trim().length > 0) {
+    url += "/" + encodeURIComponent(name);
+  }
+  const response = await fetch(url, {
     method: "POST",
   });
   return (await response.text()) as JournalId;
 };
 
-// create a component that async loads the document id first
-export const Root = () => {
-  const [docId, setDocId] = React.useState<JournalId | null>(null);
-  React.useEffect(() => {
-    // first try to get a doc ID out of the URL
-    const url = new URL(location.href);
-    const URL_HASH = url.hash.slice(1);
-    if (URL_HASH.trim().length > 0) {
-      setDocId(URL_HASH as JournalId);
-    } else {
-      // otherwise create a new document
-      newDocument()
-        .then((docId) => {
-          // update the URL
-          url.hash = docId;
-          history.replaceState({}, "", url.toString());
-          setDocId(docId);
-        })
-        .catch(console.error);
-    }
-  }, []);
+export const DocRoute = () => {
+  const { docId } = useParams();
 
   if (!docId) {
-    return <div>Loading document...</div>;
+    console.error("doc id not found in params");
   }
+
   return (
     <DocumentProvider<Mutation>
-      docId={docId}
+      docId={docId as JournalId}
       reducerUrl={DEMO_REDUCER_URL}
       initMutation={{ tag: "InitSchema" }}
     >
@@ -67,12 +60,33 @@ export const Root = () => {
   );
 };
 
+const router = createBrowserRouter([
+  {
+    path: "/",
+    loader: async () => {
+      const docId = await newDocument();
+      return redirect("/" + docId);
+    },
+  },
+  {
+    path: "/named/:name",
+    loader: async ({ params }) => {
+      const docId = await newDocument(params.name);
+      return redirect("/" + docId);
+    },
+  },
+  {
+    path: "/:docId",
+    element: <DocRoute />,
+  },
+]);
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <SqlSyncProvider
       config={{ workerUrl, sqlSyncWasmUrl, coordinatorUrl: COORDINATOR_URL }}
     >
-      <Root />
+      <RouterProvider router={router} />
     </SqlSyncProvider>
   </React.StrictMode>
 );
