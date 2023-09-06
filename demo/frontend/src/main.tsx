@@ -1,6 +1,5 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App.tsx";
 import "./index.css";
 
 import {
@@ -11,7 +10,8 @@ import {
 
 import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
 import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
-import { Mutation } from "./mutation.ts";
+import App from "./App";
+import { Mutation } from "./mutation";
 
 const DEMO_REDUCER_URL = new URL(
   "../../../target/wasm32-unknown-unknown/release/demo_reducer.wasm",
@@ -28,26 +28,48 @@ const newDocument = async () => {
   return (await response.text()) as JournalId;
 };
 
-// check if we have a document id in the url (stored in the fragment)
-const url = new URL(location.href);
-const DOC_ID = (url.hash.slice(1) as JournalId) || (await newDocument());
+// create a component that async loads the document id first
+export const Root = () => {
+  const [docId, setDocId] = React.useState<JournalId | null>(null);
+  React.useEffect(() => {
+    // first try to get a doc ID out of the URL
+    const url = new URL(location.href);
+    const URL_HASH = url.hash.slice(1);
+    if (URL_HASH.trim().length > 0) {
+      setDocId(URL_HASH as JournalId);
+    } else {
+      // otherwise create a new document
+      newDocument()
+        .then((docId) => {
+          // update the URL
+          url.hash = docId;
+          history.replaceState({}, "", url.toString());
+          setDocId(docId);
+        })
+        .catch(console.error);
+    }
+  }, []);
 
-// update the url
-url.hash = DOC_ID;
-history.replaceState({}, "", url.toString());
+  if (!docId) {
+    return <div>Loading document...</div>;
+  }
+  return (
+    <DocumentProvider<Mutation>
+      docId={docId}
+      reducerUrl={DEMO_REDUCER_URL}
+      initMutation={{ tag: "InitSchema" }}
+    >
+      <App />
+    </DocumentProvider>
+  );
+};
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <SqlSyncProvider
       config={{ workerUrl, sqlSyncWasmUrl, coordinatorUrl: COORDINATOR_URL }}
     >
-      <DocumentProvider<Mutation>
-        docId={DOC_ID}
-        reducerUrl={DEMO_REDUCER_URL}
-        initMutation={{ tag: "InitSchema" }}
-      >
-        <App />
-      </DocumentProvider>
+      <Root />
     </SqlSyncProvider>
   </React.StrictMode>
 );

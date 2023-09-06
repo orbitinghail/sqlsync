@@ -75,6 +75,9 @@ importers:
       vite:
         specifier: ^4.4.9
         version: 4.4.9(@types/node@20.5.9)
+      wrangler:
+        specifier: ^3.6.0
+        version: 3.7.0
 
   lib/sqlsync-react:
     dependencies:
