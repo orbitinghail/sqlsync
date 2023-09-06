@@ -1,4 +1,5 @@
 packages:
+  - "demo/cloudflare-backend"
   - "demo/frontend"
   - "lib/sqlsync-react"
   - "lib/sqlsync-worker"

@@ -26,9 +26,6 @@ wasm-sqlsync +FLAGS='--dev':
 wasm-sqlsync-reducer-guest:
     cargo build --target wasm32-unknown-unknown --example guest
 
-wasm-worker-test-reducer:
-    cargo build --target wasm32-unknown-unknown --package test-reducer
-
 wasm-demo-reducer *FLAGS:
     cargo build --target wasm32-unknown-unknown --package demo-reducer {{FLAGS}}
 
