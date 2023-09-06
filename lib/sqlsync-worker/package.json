@@ -21,10 +21,14 @@
   "scripts": {
     "build-wasm": "cd sqlsync-wasm && wasm-pack build --target web --dev",
     "build-wasm-release": "cd sqlsync-wasm && wasm-pack build --target web --release",
-    "build": "pnpm run build-wasm && tsc",
-    "build-release": "pnpm run build-wasm-release && tsc"
+    "build": "pnpm run build-wasm && rollup --config",
+    "build-release": "pnpm run build-wasm-release && rollup --config"
   },
   "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.2.1",
+    "@rollup/plugin-typescript": "^11.1.3",
+    "rollup": "^3.29.0",
+    "tslib": "^2.6.2",
     "typescript": "^5.2.2"
   },
   "dependencies": {
