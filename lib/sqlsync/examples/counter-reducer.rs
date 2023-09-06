@@ -10,9 +10,9 @@ enum Mutation {
     Decr,
 }
 
+init_reducer!(reducer);
 async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
     let mutation: Mutation = bincode::deserialize(&mutation)?;
-
     match mutation {
         Mutation::InitSchema => {
             futures::join!(
@@ -25,7 +25,6 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                 execute!("INSERT OR IGNORE INTO counter (id, value) VALUES (0, 0)")
             );
         }
-
         Mutation::Incr => {
             execute!(
                 "INSERT INTO counter (id, value) VALUES (0, 0)
@@ -33,7 +32,6 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
             )
             .await;
         }
-
         Mutation::Decr => {
             execute!(
                 "INSERT INTO counter (id, value) VALUES (0, 0)
@@ -45,5 +43,3 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
 
     Ok(())
 }
-
-init_reducer!(reducer);

@@ -47,3 +47,7 @@ crate-type = ["cdylib"]
 [[example]]
 name = "counter-reducer"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "hello-reducer"
+crate-type = ["cdylib"]
