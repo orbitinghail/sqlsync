@@ -11,6 +11,7 @@
   - Cross-tab sync
   - React library
 
+If you are interested in using or contributing to SQLSync, please [join the Discord community][discord] and let us know what you want to build. We are excited to collaborate with you!
 
 ## Status and Roadmap
 
@@ -56,14 +57,14 @@ Buckle up, this is all pretty rough at this point, but hopefully will result in 
 
 ### Build Wasm artifacts
 
-```bash
+```
 just run-with-prefix 'wasm-'
 just wasm-demo-reducer --release
 just package-sqlsync-worker dev
 ```
 
 ### Local Coordinator
-```bash
+```
 cd demo/cloudflare-backend
 pnpm i
 pnpm dev
@@ -73,7 +74,7 @@ just upload-demo-reducer release local
 ```
 
 ### Local Todo Demo
-```bash
+```
 cd demo/frontend
 pnpm i
 pnpm dev
@@ -83,13 +84,13 @@ Then go to http://localhost:5173
 
 ### Run some tests
 These tests are useful for learning more about how SQLSync works.
-```bash
+```
 just unit-test
 just end-to-end-local
 just end-to-end-local-net
 ```
 
-## Contributing
+## Community & Contributing
 
 If you are interested in contributing to SQLSync, please [join the Discord community][discord] and let us know what you want to build. All contributions will be held to a high standard, and are more likely to be accepted if they are tied to an existing task and agreed upon specification.
 
