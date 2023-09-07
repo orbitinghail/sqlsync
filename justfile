@@ -3,8 +3,14 @@ SQLSYNC_PROD_URL := "https://sqlsync.orbitinghail.workers.dev"
 default:
     @just --choose
 
-build: (run-with-prefix 'wasm-')
-    cargo build
+unit-test:
+    cargo test
+
+build: build-wasm
+    cargo build -p sqlsync
+
+build-wasm:
+    just run-with-prefix 'wasm-'
 
 run-with-prefix prefix:
     #!/usr/bin/env bash
@@ -16,9 +22,6 @@ run-with-prefix prefix:
             just $task
         fi
     done
-
-unit-test:
-    cargo test
 
 wasm-sqlsync +FLAGS='--dev':
     cd lib/sqlsync-worker/sqlsync-wasm && wasm-pack build --target web {{FLAGS}}
