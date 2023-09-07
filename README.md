@@ -1,5 +1,5 @@
 # SQLSync
-![Join the SQLSync Community](https://discordapp.com/api/guilds/1149205110262595634/widget.png?style=shield)
+[![Join the SQLSync Community](https://discordapp.com/api/guilds/1149205110262595634/widget.png?style=shield)][discord]
 
 **SQLSync is a collaborative offline-first wrapper around SQLite.** It is designed to synchronize web application state between users, devices, and the edge.
 
@@ -94,6 +94,6 @@ just end-to-end-local-net
 
 If you are interested in contributing to SQLSync, please [join the Discord community][discord] and let us know what you want to build. All contributions will be held to a high standard, and are more likely to be accepted if they are tied to an existing task and agreed upon specification.
 
-![Join the SQLSync Community](https://discordapp.com/api/guilds/1149205110262595634/widget.png?style=banner2)
+[![Join the SQLSync Community](https://discordapp.com/api/guilds/1149205110262595634/widget.png?style=banner2)][discord]
 
 [discord]: https://discord.gg/etFk2N9nzC
