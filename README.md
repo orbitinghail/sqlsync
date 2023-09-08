@@ -3,6 +3,15 @@
 
 **SQLSync is a collaborative offline-first wrapper around SQLite.** It is designed to synchronize web application state between users, devices, and the edge.
 
+**Example use cases**
+  - A web app with a structured file oriented data model like Figma. Each file could be a SQLSync database, enabling real-time local first collaboration and presense
+  - An embedded systems deployment running SQLSync on the edge with high tolerance for unreliable network conditions
+  - Enabling optimistic mutations on SQLite read replicas
+
+**SQLSync Demo**
+
+The best way to get a feel for how SQLSync behaves is to play with the [Todo list demo](https://sqlsync-todo.pages.dev/). Clicking [this link](https://sqlsync-todo.pages.dev/) will create a unique todo list and redirect you to it's unique URL. You can then share that URL with friends or open it on multiple devices (or browsers) to see the power of offline-first collaborative SQLite.
+
 **Features**
   - Eventually consistent SQLite
   - Optimistic reads and writes
@@ -12,37 +21,6 @@
   - React library
 
 If you are interested in using or contributing to SQLSync, please [join the Discord community][discord] and let us know what you want to build. We are excited to collaborate with you!
-
-## Status and Roadmap
-
-SQLSync is not (yet) ready for production. This section will provide a high level overview of the plan to get it there.
-
-### Core
-  - Schema, Reducer, and Mutation migrations
-  - Presence (Cursors, Connections)
-  - Wasm Component based Reducer
-  - Mutation failure handling
-
-### SQLSync Coordinator
-  - Storage snapshots
-  - Pluggable authentication
-  - Timeline truncation
-  - Document management API
-  - Query API
-
-### SQLSync Browser
-  - Local storage (OPFS & IndexedDB)
-  - Connection management & status
-  - Granular query subscriptions
-  - Rebase performance optimization
-  - Mature React, Next.js, Vue, Svelte, Angular libraries
-
-### SQLSync Library
-  - Embed friendly library for non-js apps
-
-### Dev UX
-  - Language support for Reducers
-  - Coordinator dev server
 
 ## Getting Started
 
@@ -64,6 +42,10 @@ just package-sqlsync-worker dev
 ```
 
 ### Local Coordinator
+
+> [!WARNING]  
+> Currently this seems to require modifying the wrangler.toml config file to point at your own Cloudflare buckets (even though they aren't being used). Work is underway to replace the local coordinator with a wrangler agnostic alternative optimized for local development.
+
 ```
 cd demo/cloudflare-backend
 pnpm i
