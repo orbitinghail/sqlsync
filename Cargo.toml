@@ -37,10 +37,12 @@ wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
 bs58 = "0.5"
 hex = "0.4"
-# specific revision of gloo needed to access `TryFrom<web_sys::Websocket> for WebSocket`
+# specific revision of gloo needed for:
+#  - access `TryFrom<web_sys::Websocket> for WebSocket`
+#  - parse_message receiving a uint8array directly
 # and the cloudflare compatibility fix for writing to a websocket
-gloo = { git = "https://github.com/carlsverre/gloo", rev = "45ae9d6582a67ef2b17569904fbab9818d3a8e82" }
-gloo-net = { git = "https://github.com/carlsverre/gloo", rev = "45ae9d6582a67ef2b17569904fbab9818d3a8e82" }
+gloo = { git = "https://github.com/carlsverre/gloo", rev = "90f88e31daf1a9592c08c09375731166eeb8940e" }
+gloo-net = { git = "https://github.com/carlsverre/gloo", rev = "90f88e31daf1a9592c08c09375731166eeb8940e" }
 wasm-bindgen-futures = "0.4"
 serde-wasm-bindgen = "0.5"
 serde_bytes = "0.11"

@@ -389,7 +389,7 @@ checksum = "6fb8d784f27acf97159b40fc4db5ecd8aa23b9ad5ef69cdd136d3bc80665f0c0"
 [[package]]
 name = "gloo"
 version = "0.10.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "gloo-console",
  "gloo-dialogs",
@@ -407,7 +407,7 @@ dependencies = [
 [[package]]
 name = "gloo-console"
 version = "0.3.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "gloo-utils",
  "js-sys",
@@ -419,7 +419,7 @@ dependencies = [
 [[package]]
 name = "gloo-dialogs"
 version = "0.2.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "wasm-bindgen",
  "web-sys",
@@ -428,7 +428,7 @@ dependencies = [
 [[package]]
 name = "gloo-events"
 version = "0.2.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "wasm-bindgen",
  "web-sys",
@@ -437,7 +437,7 @@ dependencies = [
 [[package]]
 name = "gloo-file"
 version = "0.3.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "futures-channel",
  "gloo-events",
@@ -449,7 +449,7 @@ dependencies = [
 [[package]]
 name = "gloo-history"
 version = "0.2.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "gloo-events",
  "gloo-utils",
@@ -464,7 +464,7 @@ dependencies = [
 [[package]]
 name = "gloo-net"
 version = "0.4.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -484,7 +484,7 @@ dependencies = [
 [[package]]
 name = "gloo-render"
 version = "0.2.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "wasm-bindgen",
  "web-sys",
@@ -493,7 +493,7 @@ dependencies = [
 [[package]]
 name = "gloo-storage"
 version = "0.3.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "gloo-utils",
  "js-sys",
@@ -507,7 +507,7 @@ dependencies = [
 [[package]]
 name = "gloo-timers"
 version = "0.3.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -518,7 +518,7 @@ dependencies = [
 [[package]]
 name = "gloo-utils"
 version = "0.2.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "js-sys",
  "serde",
@@ -530,7 +530,7 @@ dependencies = [
 [[package]]
 name = "gloo-worker"
 version = "0.4.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "bincode",
  "futures",
@@ -548,7 +548,7 @@ dependencies = [
 [[package]]
 name = "gloo-worker-macros"
 version = "0.1.0"
-source = "git+https://github.com/carlsverre/gloo?rev=45ae9d6582a67ef2b17569904fbab9818d3a8e82#45ae9d6582a67ef2b17569904fbab9818d3a8e82"
+source = "git+https://github.com/carlsverre/gloo?rev=90f88e31daf1a9592c08c09375731166eeb8940e#90f88e31daf1a9592c08c09375731166eeb8940e"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
