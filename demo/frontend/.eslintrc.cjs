@@ -12,24 +12,14 @@ module.exports = {
   ignorePatterns: ["dist", ".eslintrc.cjs"],
   parser: "@typescript-eslint/parser",
   parserOptions: {
-    project: [
-      "./tsconfig.json",
-      "./tsconfig.node.json",
-      "./tsconfig.worker.json",
-    ],
+    project: ["./tsconfig.json", "./tsconfig.node.json", "./tsconfig.worker.json"],
     ecmaVersion: "latest",
     sourceType: "module",
     tsconfigRootDir: __dirname,
   },
   plugins: ["react-refresh"],
   rules: {
-    // ignore misused promises since we use async functions in react click handlers
-    "@typescript-eslint/no-misused-promises": "off",
-
-    "react-refresh/only-export-components": [
-      "warn",
-      { allowConstantExport: true },
-    ],
+    "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
   },
   settings: {
     react: { version: "detect" },

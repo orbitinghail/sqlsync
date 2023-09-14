@@ -1,178 +1,306 @@
 import {
-  ChangedResponse,
-  ConnectedResponse,
-  ErrorResponse,
-  JournalId,
-  OpenResponse,
-  Row,
-  SqlSyncRequest,
-  SqlSyncResponse,
+  DocEvent,
+  DocId,
+  DocReply,
   SqlValue,
-  Tags,
-} from "@orbitinghail/sqlsync-worker/api.ts";
+  WorkerRequest,
+  WorkerToHostMsg,
+  journalIdToString,
+  HandlerId,
+  QueryKey,
+  ConnectionStatus,
+} from "@orbitinghail/sqlsync-worker";
+import { NarrowTaggedEnum, OmitUnion, assertUnreachable, initWorker, toRows } from "./util";
+import { ParameterizedQuery, toQueryKey } from "./sql";
 
-const requestId = (() => {
-  let requestId = 0;
-  return () => requestId++;
+export type Row = Record<string, SqlValue>;
+
+export interface DocType<Mutation> {
+  readonly reducerUrl: string | URL;
+  readonly serializeMutation: (mutation: Mutation) => Uint8Array;
+}
+
+type DocReplyTag = DocReply["tag"];
+type SelectDocReply<T> = NarrowTaggedEnum<DocReply, T>;
+
+export interface QuerySubscription {
+  handleRows: (rows: Row[]) => void;
+  handleErr: (err: string) => void;
+}
+
+const nextHandlerId = (() => {
+  let handlerId = 0;
+  return () => handlerId++;
 })();
 
-const UTF8Encoder = new TextEncoder();
+export class SQLSync {
+  #port: MessagePort;
+  #openDocs = new Set<DocId>();
+  #pendingOpens = new Map<DocId, Promise<{ tag: "Ack" }>>();
+  #msgHandlers = new Map<HandlerId, (msg: DocReply) => void>();
+  #querySubscriptions = new Map<QueryKey, QuerySubscription[]>();
+  #connectionStatus: ConnectionStatus = "disconnected";
+  #connectionStatusListeners = new Set<(status: ConnectionStatus) => void>();
 
-export type SubscribeEventDetail =
-  | {
-      tag: "change";
-    }
-  | {
-      tag: "connected";
-      connected: boolean;
+  constructor(workerUrl: string | URL, wasmUrl: string | URL, coordinatorUrl?: string | URL) {
+    this.#msgHandlers = new Map();
+    const port = initWorker(workerUrl);
+    this.#port = port;
+
+    // We use a WeakRef here to avoid a circular reference between this.port and this.
+    // This allows the SQLSync object to be garbage collected when it is no longer needed.
+    const weakThis = new WeakRef(this);
+    this.#port.onmessage = (msg) => {
+      const thisRef = weakThis.deref();
+      if (thisRef) {
+        thisRef.#handleMessage(msg);
+      } else {
+        console.log(
+          "sqlsync: dropping message; sqlsync object has been garbage collected",
+          msg.data
+        );
+        // clean up the port
+        port.postMessage({ tag: "Close", handlerId: 0 });
+        port.onmessage = null;
+        return;
+      }
     };
 
-export class SqlSync {
-  private port: MessagePort;
-  private pending: Map<number, (msg: any) => void> = new Map();
-  private eventTarget: EventTarget;
-
-  constructor(port: MessagePort) {
-    this.pending = new Map();
-    this.port = port;
-    this.port.onmessage = this.onmessage.bind(this);
-    this.eventTarget = new EventTarget();
+    this.#boot(wasmUrl.toString(), coordinatorUrl?.toString()).catch((err) => {
+      // TODO: expose this error to the app in a nicer way
+      // probably through some event handlers on the SQLSync object
+      console.error("sqlsync boot failed", err);
+      throw err;
+    });
   }
 
-  subscribe(
-    docId: JournalId,
-    cb: EventListenerOrEventListenerObject
-  ): () => void {
-    this.eventTarget.addEventListener(docId, cb);
-    return () => {
-      this.eventTarget.removeEventListener(docId, cb);
-    };
+  close() {
+    this.#port.onmessage = null;
+    this.#port.postMessage({ tag: "Close", handlerId: 0 });
   }
 
-  private onmessage(event: MessageEvent) {
-    console.log("sqlsync: received message", event.data);
+  #handleMessage(event: MessageEvent) {
+    const msg = event.data as WorkerToHostMsg;
 
-    let msg = event.data as { id: number; tag: Tags };
-    let handler = this.pending.get(msg.id);
-    if (handler) {
-      handler(msg);
-    } else if (msg.tag === "change") {
-      let msg = event.data as ChangedResponse;
-      let evt = new CustomEvent<SubscribeEventDetail>(msg.docId, {
-        detail: { tag: "change" },
-      });
-      this.eventTarget.dispatchEvent(evt);
-    } else if (msg.tag === "connected") {
-      let msg = event.data as ConnectedResponse;
-      let evt = new CustomEvent<SubscribeEventDetail>(msg.docId, {
-        detail: { tag: "connected", connected: msg.connected },
-      });
-      this.eventTarget.dispatchEvent(evt);
+    if (msg.tag === "Reply") {
+      console.log("sqlsync: received reply", msg.handlerId, msg.reply);
+      const handler = this.#msgHandlers.get(msg.handlerId);
+      if (handler) {
+        handler(msg.reply);
+      } else {
+        console.error("sqlsync: no handler for message", msg);
+        throw new Error("no handler for message");
+      }
+    } else if (msg.tag === "Event") {
+      this.#handleDocEvent(msg.docId, msg.evt);
     } else {
-      console.warn(`received unexpected message`, msg);
+      assertUnreachable("unknown message", msg);
     }
   }
 
-  private send<T extends SqlSyncRequest>(msg: T): Promise<SqlSyncResponse<T>> {
-    return new Promise((resolve, reject) => {
-      let id = requestId();
-      console.log("sqlsync: sending message", { id, ...msg });
+  #handleDocEvent(docId: DocId, evt: DocEvent) {
+    console.log(`sqlsync: doc ${journalIdToString(docId)} received event`, evt);
+    if (evt.tag === "ConnectionStatus") {
+      this.#connectionStatus = evt.status;
+      for (const listener of this.#connectionStatusListeners) {
+        listener(evt.status);
+      }
+    } else if (evt.tag === "SubscriptionChanged") {
+      const subscriptions = this.#querySubscriptions.get(evt.key);
+      if (subscriptions) {
+        for (const subscription of subscriptions) {
+          subscription.handleRows(toRows(evt.columns, evt.rows));
+        }
+      }
+    } else if (evt.tag === "SubscriptionErr") {
+      const subscriptions = this.#querySubscriptions.get(evt.key);
+      if (subscriptions) {
+        for (const subscription of subscriptions) {
+          subscription.handleErr(evt.err);
+        }
+      }
+    } else {
+      assertUnreachable("unknown event", evt);
+    }
+  }
 
-      this.pending.set(id, (msg: SqlSyncResponse<T> | ErrorResponse) => {
-        this.pending.delete(id);
-        if (msg.tag === "error") {
-          reject(msg.error);
+  #send<T extends Exclude<DocReplyTag, "Err">>(
+    expectedReplyTag: T,
+    msg: OmitUnion<WorkerRequest, "handlerId">
+  ): Promise<SelectDocReply<T>> {
+    return new Promise((resolve, reject) => {
+      const handlerId = nextHandlerId();
+      const req: WorkerRequest = { ...msg, handlerId };
+
+      console.log("sqlsync: sending message", req.handlerId, req.tag === "Doc" ? req.req : req);
+
+      this.#msgHandlers.set(handlerId, (msg: DocReply) => {
+        this.#msgHandlers.delete(handlerId);
+        if (msg.tag === "Err") {
+          reject(msg.err);
+        } else if (msg.tag === expectedReplyTag) {
+          // TODO: is it possible to get Typescript to infer this cast?
+          resolve(msg as SelectDocReply<T>);
         } else {
-          resolve(msg);
+          console.warn("sqlsync: unexpected reply", msg);
+          reject(new Error(`expected ${expectedReplyTag} reply; got ${msg.tag}`));
         }
       });
 
-      this.port.postMessage({ id, ...msg });
+      this.#port.postMessage(req);
     });
   }
 
-  async boot(wasmUrl: string, coordinatorUrl?: string): Promise<void> {
-    await this.send({ tag: "boot", wasmUrl, coordinatorUrl });
-  }
-
-  async open(
-    docId: JournalId,
-    reducerUrl: string | URL
-  ): Promise<OpenResponse> {
-    return await this.send({
-      tag: "open",
-      docId,
-      reducerUrl: reducerUrl.toString(),
+  async #boot(wasmUrl: string, coordinatorUrl?: string): Promise<void> {
+    await this.#send("Ack", {
+      tag: "Boot",
+      wasmUrl,
+      coordinatorUrl,
     });
   }
 
-  async query<T = Row>(
-    docId: JournalId,
+  async #open<M>(docId: DocId, docType: DocType<M>): Promise<void> {
+    let openPromise = this.#pendingOpens.get(docId);
+    if (!openPromise) {
+      openPromise = this.#send("Ack", {
+        tag: "Doc",
+        docId,
+        req: {
+          tag: "Open",
+          reducerUrl: docType.reducerUrl.toString(),
+        },
+      });
+      this.#pendingOpens.set(docId, openPromise);
+    }
+    await openPromise;
+    this.#pendingOpens.delete(docId);
+    this.#openDocs.add(docId);
+  }
+
+  async query<M, T extends Row = Row>(
+    docId: DocId,
+    docType: DocType<M>,
     sql: string,
     params: SqlValue[]
   ): Promise<T[]> {
-    let { rows } = await this.send({ tag: "query", docId, sql, params });
-    return rows as T[];
+    if (!this.#openDocs.has(docId)) {
+      await this.#open(docId, docType);
+    }
+
+    const reply = await this.#send("RecordSet", {
+      tag: "Doc",
+      docId: docId,
+      req: { tag: "Query", sql, params },
+    });
+
+    return toRows(reply.columns, reply.rows);
   }
 
-  async mutate(docId: JournalId, mutation: Uint8Array): Promise<void> {
-    await this.send({ tag: "mutate", docId, mutation });
+  async subscribe<M>(
+    docId: DocId,
+    docType: DocType<M>,
+    query: ParameterizedQuery,
+    subscription: QuerySubscription
+  ): Promise<() => void> {
+    if (!this.#openDocs.has(docId)) {
+      await this.#open(docId, docType);
+    }
+    const queryKey = await toQueryKey(query);
+
+    // get or create subscription
+    let subscriptions = this.#querySubscriptions.get(queryKey);
+    if (!subscriptions) {
+      subscriptions = [];
+      this.#querySubscriptions.set(queryKey, subscriptions);
+    }
+    if (subscriptions.indexOf(subscription) === -1) {
+      subscriptions.push(subscription);
+    } else {
+      throw new Error("sqlsync: duplicate subscription");
+    }
+
+    // send subscribe request
+    await this.#send("Ack", {
+      tag: "Doc",
+      docId,
+      req: { tag: "QuerySubscribe", key: queryKey, sql: query.sql, params: query.params },
+    });
+
+    // return unsubscribe function
+    return () => {
+      const subscriptions = this.#querySubscriptions.get(queryKey);
+      if (!subscriptions) {
+        // no subscriptions
+        return;
+      }
+      const idx = subscriptions.indexOf(subscription);
+      if (idx === -1) {
+        // no subscription
+        return;
+      }
+      subscriptions.splice(idx, 1);
+
+      window.setTimeout(() => {
+        // we want to wait a tiny bit before sending finalizing the unsubscribe
+        // to handle the case that React resubscribes to the same query right away
+        this.#unsubscribeIfNeeded(docId, queryKey).catch((err) => {
+          console.error("sqlsync: error unsubscribing", err);
+        });
+      }, 10);
+    };
   }
 
-  async mutateJSON(docId: JournalId, mutation: any): Promise<void> {
-    const serialized = JSON.stringify(mutation);
-    const bytes = UTF8Encoder.encode(serialized);
-    await this.send({ tag: "mutate", docId, mutation: bytes });
+  async #unsubscribeIfNeeded(docId: DocId, queryKey: QueryKey): Promise<void> {
+    const subscriptions = this.#querySubscriptions.get(queryKey);
+    if (subscriptions instanceof Array && subscriptions.length === 0) {
+      // query subscription is still registered but has no subscriptions on our side
+      // inform the worker that we are no longer interested in this query
+      this.#querySubscriptions.delete(queryKey);
+
+      if (this.#openDocs.has(docId)) {
+        await this.#send("Ack", {
+          tag: "Doc",
+          docId,
+          req: { tag: "QueryUnsubscribe", key: queryKey },
+        });
+      }
+    }
   }
 
-  async setReplicationEnabled(
-    docId: JournalId,
-    enabled: boolean
-  ): Promise<void> {
-    await this.send({ tag: "set-replication-enabled", docId, enabled });
-  }
-}
-
-export type SqlSyncConfig = {
-  workerUrl: string | URL;
-  sqlSyncWasmUrl: string | URL;
-  coordinatorUrl?: string | URL;
-};
-
-// queue of concurrent init requests; resolve after init completes
-let initPromise: Promise<SqlSync> | null;
-
-function initShared(config: SqlSyncConfig): SqlSync {
-  let worker = new SharedWorker(config.workerUrl, {
-    type: config.workerUrl.toString().endsWith(".cjs") ? "classic" : "module",
-  });
-  return new SqlSync(worker.port);
-}
-
-function initDedicated(config: SqlSyncConfig): SqlSync {
-  let worker = new Worker(config.workerUrl, {
-    type: config.workerUrl.toString().endsWith(".cjs") ? "classic" : "module",
-  });
-  return new SqlSync(worker as any as MessagePort);
-}
-
-export default function init(config: SqlSyncConfig): Promise<SqlSync> {
-  if (!initPromise) {
-    console.log("sqlsync: initializing");
-    initPromise = new Promise(async (resolve) => {
-      // initialize shared worker if possible
-      const sqlsync =
-        typeof SharedWorker !== "undefined"
-          ? initShared(config)
-          : initDedicated(config);
-
-      await sqlsync.boot(
-        config.sqlSyncWasmUrl.toString(),
-        config.coordinatorUrl?.toString()
-      );
-      console.log("sqlsync: booted worker");
-      resolve(sqlsync);
+  async mutate<M>(docId: DocId, docType: DocType<M>, mutation: M): Promise<void> {
+    if (!this.#openDocs.has(docId)) {
+      await this.#open(docId, docType);
+    }
+    await this.#send("Ack", {
+      tag: "Doc",
+      docId,
+      req: { tag: "Mutate", mutation: docType.serializeMutation(mutation) },
     });
   }
-  return initPromise;
+
+  get connectionStatus(): ConnectionStatus {
+    return this.#connectionStatus;
+  }
+
+  addConnectionStatusListener(listener: (status: ConnectionStatus) => void): () => void {
+    this.#connectionStatusListeners.add(listener);
+    return () => {
+      this.#connectionStatusListeners.delete(listener);
+    };
+  }
+
+  async setConnectionEnabled<M>(
+    docId: DocId,
+    docType: DocType<M>,
+    enabled: boolean
+  ): Promise<void> {
+    if (!this.#openDocs.has(docId)) {
+      await this.#open(docId, docType);
+    }
+    await this.#send("Ack", {
+      tag: "Doc",
+      docId,
+      req: { tag: "SetConnectionEnabled", enabled },
+    });
+  }
 }

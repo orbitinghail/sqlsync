@@ -41,17 +41,14 @@ wasm-task-reducer:
 wasm-sqlsync-react-test-reducer:
     cargo build --target wasm32-unknown-unknown --package sqlsync-react-test-reducer
 
-test-end-to-end-local: wasm-task-reducer
-    RUST_BACKTRACE=1 cargo run --example end-to-end-local
+test-end-to-end-local rng_seed="": wasm-task-reducer
+    RUST_BACKTRACE=1 cargo run --example end-to-end-local {{rng_seed}}
 
-test-end-to-end-local-net: wasm-counter-reducer
-    RUST_BACKTRACE=1 cargo run --example end-to-end-local-net
+test-end-to-end-local-net rng_seed="": wasm-counter-reducer
+    RUST_BACKTRACE=1 cargo run --example end-to-end-local-net {{rng_seed}}
 
 test-sqlsync-reducer: wasm-sqlsync-reducer-guest
     cargo run --example host
-
-dev-sqlsync-worker: wasm-sqlsync
-    cd lib/sqlsync-worker && pnpm dev
 
 node_modules:
     cd lib/sqlsync-worker && pnpm i

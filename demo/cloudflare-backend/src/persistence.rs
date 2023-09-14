@@ -5,12 +5,6 @@ use sqlsync::{replication::ReplicationDestination, JournalId, Lsn, LsnRange};
 use wasm_bindgen::JsValue;
 use worker::*;
 
-// ok we have this thing
-// the goal is to write new lsns from the document into storage
-// and, to help initialize a journal from storage when opening a doc
-
-// notably, storage is private to this object, so we don't have to worry about other docs
-
 const RANGE_KEY: &str = "RANGE";
 
 pub struct Persistence {
@@ -44,7 +38,9 @@ impl Persistence {
         let new_range = self.range.append(lsn);
 
         // convert our range into a jsvalue
-        let range = serde_wasm_bindgen::to_value(&new_range)?;
+        let range = serde_wasm_bindgen::to_value(&new_range)
+            .map_err(|e| Error::RustError(e.to_string()))?;
+
         js_sys::Reflect::set(&obj, &JsValue::from_str(RANGE_KEY), &range)?;
 
         // convert frame into a uint8array

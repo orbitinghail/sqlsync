@@ -6,9 +6,12 @@ use std::{
 
 use crate::{positioned_io::PositionedReader, Serializable};
 
-pub const PAGESIZE: usize = 512;
+// TODO: profile both bandwidth usage and general perf for different page sizes on various workloads
+// TODO: research OPFS block sizes and whether we should use that as a guide for page size
+pub const PAGESIZE: usize = 4096;
 
-pub type PageIdx = u64;
+/// PageIdx is the 1-based index of a page in a SQLite database file
+pub type PageIdx = u32;
 const PAGE_IDX_SIZE: usize = size_of::<PageIdx>();
 
 pub type Page = [u8; PAGESIZE];
@@ -37,6 +40,10 @@ impl SparsePages {
         self.pages.insert(page_idx, page);
     }
 
+    pub fn page_idxs(&self) -> impl Iterator<Item = &PageIdx> {
+        self.pages.keys()
+    }
+
     // returns the max page index of this sparse pages object
     pub fn max_page_idx(&self) -> Option<PageIdx> {
         self.pages.keys().max().copied()
@@ -63,15 +70,13 @@ impl Serializable for SparsePages {
             "cannot serialize empty sparse pages obj"
         );
 
-        // serialize the max page idx
-        let max_page_idx = self
-            .max_page_idx()
-            .expect("cannot serialize empty sparse pages obj");
-        writer.write_all(&max_page_idx.to_be_bytes())?;
+        // serialize the page indexes, sorted desc
+        for page_idx in self.pages.keys().rev() {
+            writer.write_all(&page_idx.to_le_bytes())?;
+        }
 
-        // serialize the pages, sorted by page_idx
-        for (page_idx, page) in self.pages.iter() {
-            writer.write_all(&page_idx.to_be_bytes())?;
+        // serialize the pages, sorted by page_idx desc
+        for page in self.pages.values().rev() {
             writer.write_all(&page[..])?;
         }
 
@@ -79,25 +84,69 @@ impl Serializable for SparsePages {
     }
 }
 
-/// Layout is:
-///    max_page_idx: u64
-///    for each page (sorted by page_idx) [
-///      page_idx: u64
-///      page: [u8; PAGESIZE]
-///    ]
+/// Binary layout of Serialized Page objects is:
+/// for each page_idx (sorted desc) [
+///   page_idx: u32
+/// ]
+/// for each page (sorted by page_idx desc) [
+///   page: [u8; PAGESIZE]
+/// ]
 pub struct SerializedPagesReader<R: PositionedReader>(pub R);
 
 impl<R: PositionedReader> SerializedPagesReader<R> {
     pub fn num_pages(&self) -> io::Result<usize> {
         let file_size = self.0.size()?;
-        let num_pages = (file_size - PAGE_IDX_SIZE) / (PAGE_IDX_SIZE + PAGESIZE);
+        let num_pages = file_size / (PAGE_IDX_SIZE + PAGESIZE);
         Ok(num_pages)
     }
 
     pub fn max_page_idx(&self) -> io::Result<PageIdx> {
         let mut buf = [0; PAGE_IDX_SIZE];
         self.0.read_exact_at(0, &mut buf)?;
-        Ok(PageIdx::from_be_bytes(buf))
+        Ok(PageIdx::from_le_bytes(buf))
+    }
+
+    // returns a list of page indexes contained by this serialized pages object
+    // sorted desc
+    pub fn page_idxs(&self) -> io::Result<Vec<PageIdx>> {
+        let num_pages = self.num_pages()?;
+        let mut buf = vec![0u8; PAGE_IDX_SIZE * num_pages];
+        self.0.read_exact_at(0, &mut buf)?;
+
+        Ok(buf
+            .chunks_exact(PAGE_IDX_SIZE)
+            .map(|chunk| PageIdx::from_le_bytes(chunk.try_into().unwrap()))
+            .collect())
+    }
+
+    // binary searches for the page at the given page_idx, returning the offset
+    // of the page in this file
+    fn find_page_start(&self, page_idx: PageIdx) -> io::Result<Option<usize>> {
+        let num_pages = self.num_pages()?;
+        let mut left: usize = 0;
+        let mut right: usize = num_pages;
+        let mut page_idx_buf = [0; PAGE_IDX_SIZE];
+
+        while left < right {
+            let mid = left + (right - left) / 2;
+            let mid_offset = mid * PAGE_IDX_SIZE;
+            self.0.read_exact_at(mid_offset, &mut page_idx_buf)?;
+
+            let mid_idx = PageIdx::from_le_bytes(page_idx_buf);
+
+            if mid_idx == page_idx {
+                let page_offset = (num_pages * PAGE_IDX_SIZE) + (mid * PAGESIZE);
+                return Ok(Some(page_offset));
+            } else if mid_idx < page_idx {
+                // pages are sorted in descending order, so we need to search left
+                right = mid;
+            } else {
+                // pages are sorted in descending order, so we need to search right
+                left = mid + 1;
+            }
+        }
+
+        Ok(None)
     }
 
     pub fn read(&self, page_idx: PageIdx, page_offset: usize, buf: &mut [u8]) -> io::Result<usize> {
@@ -107,30 +156,12 @@ impl<R: PositionedReader> SerializedPagesReader<R> {
             "refusing to read more than one page"
         );
 
-        let num_pages = self.num_pages()?;
-
-        let mut left: usize = 0;
-        let mut right: usize = num_pages;
-        let mut page_idx_buf = [0; PAGE_IDX_SIZE];
-
-        while left < right {
-            let mid = left + (right - left) / 2;
-            let mid_offset = PAGE_IDX_SIZE + (mid * (PAGE_IDX_SIZE + PAGESIZE));
-            self.0.read_exact_at(mid_offset, &mut page_idx_buf)?;
-
-            let mid_idx = PageIdx::from_be_bytes(page_idx_buf);
-
-            if mid_idx == page_idx {
-                let read_start = mid_offset + PAGE_IDX_SIZE + page_offset;
-                self.0.read_exact_at(read_start, buf)?;
-                return Ok(buf.len());
-            } else if mid_idx < page_idx {
-                left = mid + 1;
-            } else {
-                right = mid;
-            }
+        if let Some(page_start) = self.find_page_start(page_idx)? {
+            let read_start = page_start + page_offset;
+            self.0.read_exact_at(read_start, buf)?;
+            Ok(buf.len())
+        } else {
+            Ok(0)
         }
-
-        Ok(0)
     }
 }

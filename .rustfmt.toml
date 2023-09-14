@@ -1,0 +1,4 @@
+# https://rust-lang.github.io/rustfmt
+overflow_delimited_expr = true
+max_width = 80
+struct_lit_width = 80

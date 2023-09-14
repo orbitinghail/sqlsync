@@ -22,7 +22,9 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                     value INTEGER
                 )"
                 ),
-                execute!("INSERT OR IGNORE INTO counter (id, value) VALUES (0, 0)")
+                execute!(
+                    "INSERT OR IGNORE INTO counter (id, value) VALUES (0, 0)"
+                )
             );
         }
         Mutation::Incr => {

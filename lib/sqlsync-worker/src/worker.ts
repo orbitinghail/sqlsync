@@ -1,229 +1,83 @@
-import init, {
-  SqlSyncDocument,
-  open,
-} from "../sqlsync-wasm/pkg/sqlsync_wasm.js";
+import { PortId, PortRouter } from "./port";
+import init, { DocReply, HandlerId, WorkerApi } from "../sqlsync-wasm/pkg/sqlsync_wasm.js";
+import { WorkerRequest } from "./index";
+import { assertUnreachable } from "./util";
 
-import {
-  Boot,
-  ChangedResponse,
-  ConnectedResponse,
-  ErrorResponse,
-  JournalId,
-  Mutate,
-  MutateResponse,
-  Open,
-  OpenResponse,
-  Query,
-  QueryResponse,
-  SetReplicationEnabled,
-  SetReplicationEnabledResponse,
-  SqlSyncRequest,
-  SqlSyncResponse,
-  journalIdToBytes,
-  randomJournalId,
-} from "./api.js";
+const ports = new PortRouter();
+let workerApi: WorkerApi | null = null;
 
-type WithId<T> = T & { id: number };
+function reply(portId: PortId, handlerId: HandlerId, reply: DocReply) {
+  ports.sendOne(portId, { tag: "Reply", handlerId, reply });
+}
 
-// queue of concurrent boot requests; resolve after boot completes
-let booting = false;
-let bootQueue: (() => void)[] = [];
+interface Message {
+  portId: PortId;
+  req: WorkerRequest;
+}
 
-let booted = false;
-let coordinatorUrl: string | undefined; // set by boot
-const docs = new Map<JournalId, SqlSyncDocument>();
-
-// TODO: connections is a memory leak since there is no reliable way to detect closed ports
-let connections: MessagePort[] = [];
+const MessageQueue = (() => {
+  let queue = Promise.resolve();
+  return {
+    push: (m: Message) => {
+      queue = queue.then(
+        () => handleMessage(m),
+        (e) => {
+          const err = e instanceof Error ? e.message : `error: ${JSON.stringify(e)}`;
+          reply(m.portId, m.req.handlerId, { tag: "Err", err });
+        }
+      );
+    },
+  };
+})();
 
 // if we are running in a dedicated worker, shim a Port
 // we have to make this check inverted because
 // WorkerGlobalScope extends SharedWorkerGlobalScope
-if (
-  typeof SharedWorkerGlobalScope === "undefined" ||
-  !(self instanceof SharedWorkerGlobalScope)
-) {
-  let port = self as any as MessagePort;
-  connections.push(port);
-  port.addEventListener("message", (e) => handle_message(port, e.data));
-  console.log("sqlsync: handled dedicated worker connection");
+if (typeof SharedWorkerGlobalScope === "undefined" || !(self instanceof SharedWorkerGlobalScope)) {
+  const port = self as any as MessagePort; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const portId = ports.register(port);
+  port.addEventListener("message", (e) =>
+    MessageQueue.push({ portId, req: e.data as WorkerRequest })
+  );
+  console.log("sqlsync: handled dedicated worker connection; portId", portId);
 }
 
 addEventListener("connect", (e: Event) => {
-  let evt = e as MessageEvent;
-  let port = evt.ports[0];
-
-  connections.push(port);
-
-  port.addEventListener("message", (e) => handle_message(port, e.data));
+  const evt = e as MessageEvent;
+  const port = evt.ports[0];
+  const portId = ports.register(port);
+  port.addEventListener("message", (e) =>
+    MessageQueue.push({ portId, req: e.data as WorkerRequest })
+  );
   port.start();
-
-  console.log("sqlsync: received connection from tab");
+  console.log("sqlsync: received connection from tab; portId", portId);
 });
 
-const responseToError = (r: Response): Error => {
-  let msg = `${r.status}: ${r.statusText}`;
-  return new Error(msg);
-};
+// MessageQueue ensures that this async function is never run concurrently
+async function handleMessage({ portId, req }: Message) {
+  console.log("sqlsync: received message", req);
 
-const fetchBytes = async (url: string) =>
-  fetch(url)
-    .then((r) => (r.ok ? r : Promise.reject(responseToError(r))))
-    .then((r) => r.arrayBuffer())
-    .then((b) => new Uint8Array(b));
-
-async function handle_boot(msg: Boot) {
-  if (booting) {
-    // put a promise resolve in the queue
-    await new Promise<void>((resolve) => bootQueue.push(resolve));
-  } else {
-    booting = true;
-    console.log("sqlsync: initializing wasm");
-    coordinatorUrl = msg.coordinatorUrl;
-    await init(msg.wasmUrl);
-    booted = true;
-    booting = false;
-    // clear boot queue
-    bootQueue.forEach((resolve) => resolve());
-  }
-  console.log("sqlsync: wasm initialized");
-}
-
-async function handle_open(msg: Open): Promise<OpenResponse> {
-  if (!docs.has(msg.docId)) {
-    console.log("sqlsync: opening document", msg.docId);
-    let reducerWasmBytes = await fetchBytes(msg.reducerUrl);
-    let reducerDigest = new Uint8Array(
-      await crypto.subtle.digest("SHA-256", reducerWasmBytes)
-    );
-
-    // TODO: use persisted timeline id when we start persisting the journal to OPFS
-    const timelineId = randomJournalId();
-
-    const eventTarget = new EventTarget();
-    eventTarget.addEventListener("change", () => {
-      connections.forEach((port) =>
-        port.postMessage({ tag: "change", docId: msg.docId } as ChangedResponse)
-      );
-    });
-    eventTarget.addEventListener("connected", (e: Event) => {
-      let evt = e as CustomEvent;
-      let connected = evt.detail;
-
-      console.log("sqlsync: connected", connected);
-
-      connections.forEach((port) =>
-        port.postMessage({
-          tag: "connected",
-          docId: msg.docId,
-          connected,
-        } as ConnectedResponse)
-      );
-    });
-
-    let doc = open(
-      journalIdToBytes(msg.docId),
-      journalIdToBytes(timelineId),
-      reducerWasmBytes,
-      reducerDigest,
-      coordinatorUrl,
-      eventTarget
-    );
-    docs.set(msg.docId, doc);
-    return { tag: "open", alreadyOpen: false };
-  }
-
-  console.log("sqlsync: document already open", msg.docId);
-
-  // send out connected state events to all ports just to make sure everything is in sync
-  // TODO: this is jank, fix it when I redo how events are managed
-  let doc = docs.get(msg.docId);
-  if (!doc) {
-    throw new Error(`no document with id ${msg.docId}`);
-  }
-  let connected = doc.is_connected();
-  connections.forEach((port) =>
-    port.postMessage({
-      tag: "connected",
-      docId: msg.docId,
-      connected,
-    } as ConnectedResponse)
-  );
-
-  return { tag: "open", alreadyOpen: true };
-}
-
-function handle_query(msg: Query): QueryResponse {
-  let doc = docs.get(msg.docId);
-  if (!doc) {
-    throw new Error(`no document with id ${msg.docId}`);
-  }
-
-  let rows = doc.query(msg.sql, msg.params);
-  return { tag: "query", rows };
-}
-
-function handle_set_replication_enabled(
-  msg: SetReplicationEnabled
-): SetReplicationEnabledResponse {
-  let doc = docs.get(msg.docId);
-  if (!doc) {
-    throw new Error(`no document with id ${msg.docId}`);
-  }
-
-  doc.set_replication_enabled(msg.enabled);
-  return { tag: "set-replication-enabled" };
-}
-
-function handle_mutate(msg: Mutate): MutateResponse {
-  let doc = docs.get(msg.docId);
-  if (!doc) {
-    throw new Error(`no document with id ${msg.docId}`);
-  }
-
-  console.time("mutate");
-  doc.mutate(msg.mutation);
-  console.timeEnd("mutate");
-  return { tag: "mutate" };
-}
-
-async function handle_message(port: MessagePort, msg: WithId<SqlSyncRequest>) {
-  let response: SqlSyncResponse<SqlSyncRequest> | ErrorResponse;
-
-  console.log("sqlsync: received message", msg);
-  try {
-    if (!booted) {
-      if (msg.tag === "boot") {
-        await handle_boot(msg);
-        response = { tag: "boot" };
-      } else {
-        response = {
-          tag: "error",
-          error: new Error(`received unexpected message`),
-        };
-      }
+  if (req.tag === "Boot") {
+    if (!workerApi) {
+      console.log("sqlsync: initializing wasm");
+      await init(req.wasmUrl);
+      workerApi = new WorkerApi(ports, req.coordinatorUrl);
+      console.log("sqlsync: wasm initialized");
     } else {
-      if (msg.tag === "boot") {
-        response = { tag: "boot" };
-      } else if (msg.tag === "open") {
-        response = await handle_open(msg);
-      } else if (msg.tag === "query") {
-        response = handle_query(msg);
-      } else if (msg.tag === "set-replication-enabled") {
-        response = handle_set_replication_enabled(msg);
-      } else if (msg.tag === "mutate") {
-        response = handle_mutate(msg);
-      } else {
-        response = {
-          tag: "error",
-          error: new Error(`received unknown message`),
-        };
-      }
+      // TODO(UPGRADE): if a new boot request comes in with different params we
+      // should trigger a worker upgrade
+      console.warn("sqlsync: ignoring duplicate boot request");
     }
-  } catch (e) {
-    let error = e instanceof Error ? e : new Error(`error: ${e}`);
-    response = { tag: "error", error };
+    reply(portId, req.handlerId, { tag: "Ack" });
+  } else if (req.tag === "Doc") {
+    if (!workerApi) {
+      throw new Error("not booted");
+    }
+    await workerApi.handle({ portId, ...req });
+  } else if (req.tag === "Close") {
+    console.log("sqlsync: Received close request from port", portId);
+    ports.unregister(portId);
+  } else {
+    assertUnreachable("unknown message", req);
   }
-
-  port.postMessage({ id: msg.id, ...response });
 }

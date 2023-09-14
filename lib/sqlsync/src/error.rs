@@ -2,16 +2,13 @@ use thiserror::Error;
 
 use crate::{
     reducer::ReducerError, replication::ReplicationError, timeline::TimelineError, JournalError,
-    JournalIdParseError, ScanError,
+    JournalIdParseError,
 };
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     ReplicationError(#[from] ReplicationError),
-
-    #[error(transparent)]
-    ScanError(#[from] ScanError),
 
     #[error(transparent)]
     JournalError(#[from] JournalError),

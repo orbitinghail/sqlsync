@@ -48,14 +48,8 @@ impl Coordinator {
             .map_err(|e| Error::RustError(e.to_string()))?;
 
         Ok((
-            Self {
-                accept_queue: accept_queue_tx,
-            },
-            CoordinatorTask {
-                accept_queue: accept_queue_rx,
-                persistence,
-                doc,
-            },
+            Self { accept_queue: accept_queue_tx },
+            CoordinatorTask { accept_queue: accept_queue_rx, persistence, doc },
         ))
     }
 
@@ -79,6 +73,19 @@ impl CoordinatorTask {
 
         const STEP_MIN_MS: u32 = 100;
         let mut step_trigger = TimeoutFuture::new(STEP_MIN_MS).fuse();
+
+        // NOTE TO CODE REVIEWERS:
+        // `select_biased!` is full of foot guns (see: [1] and [2])
+        // It's only safe if each branch follows these rules:
+        //  - if ready, return value without awaiting
+        //  - if not ready, await precisely once and then return value
+        //
+        // Critically: if it's possible to await twice during the execution of a
+        // single future handled by select! - then it's possible for the future
+        // to be dropped in an intermediate state.
+        //
+        // [1]: https://tomaka.medium.com/a-look-back-at-asynchronous-rust-d54d63934a1c
+        // [2]: https://blog.yoshuawuyts.com/futures-concurrency-3/
 
         loop {
             select_biased! {

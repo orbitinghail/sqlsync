@@ -1,11 +1,10 @@
 mod cursor;
-mod id;
 mod journal;
+mod journalid;
 mod memory;
-pub mod replication;
 
-pub use cursor::{Cursor, ScanError, Scannable};
-pub use id::{JournalId, JournalIdParseError};
+pub use cursor::{Cursor, Scannable};
 pub use journal::*;
+pub use journalid::{JournalId, JournalIdParseError};
 
 pub use memory::{MemoryJournal, MemoryJournalFactory};

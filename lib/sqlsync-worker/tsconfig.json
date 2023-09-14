@@ -4,7 +4,7 @@
     "module": "esnext",
     "moduleResolution": "Bundler",
     "baseUrl": ".",
-    "lib": ["ES6", "WebWorker"],
+    "lib": ["ES6", "WebWorker", "ES2021.WeakRef"],
 
     /* Compiling */
     "allowJs": true,

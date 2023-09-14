@@ -1,0 +1,17 @@
+root = true
+
+[*]
+end_of_line = lf
+max_line_length = 100
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{js,ts,jsx,tsx,json}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+indent_style = tab
+indent_size = 2
+max_line_length = 100

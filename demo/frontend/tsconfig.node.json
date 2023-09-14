@@ -6,10 +6,11 @@
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "strict": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
   "include": [
-    // "./node_modules/sqlsync-wasm/sqlsync_wasm.d.ts",
     "vite.config.ts",
     "tailwind.config.js",
     "vite-plugin-wasm.d.ts",

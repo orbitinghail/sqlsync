@@ -15,17 +15,33 @@ anyhow.workspace = true
 bincode.workspace = true
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
+serde-wasm-bindgen.workspace = true
 console_error_panic_hook.workspace = true
-gloo = { workspace = true, features = ["futures"] }
+gloo = { workspace = true, features = ["futures", "net"] }
 wasm-bindgen-futures.workspace = true
 futures.workspace = true
 bs58.workspace = true
+tsify = { workspace = true, features = ["js"] }
+serde_bytes.workspace = true
+rand.workspace = true
+async-watch.workspace = true
+async-lock.workspace = true
+event-listener.workspace = true
+sha2.workspace = true
 
 sqlsync = { path = "../../sqlsync" }
 
 [dependencies.web-sys]
 workspace = true
-features = ["console", "EventTarget", "Event", "CustomEvent", "CustomEventInit"]
+features = [
+    "console",
+    "EventTarget",
+    "Event",
+    "CustomEvent",
+    "CustomEventInit",
+    "Crypto",
+    "SubtleCrypto",
+]
 
 [package.metadata.wasm-pack.profile.dev]
 wasm-opt = false

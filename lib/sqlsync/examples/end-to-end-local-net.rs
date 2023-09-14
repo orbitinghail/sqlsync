@@ -7,14 +7,18 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use bincode::ErrorKind;
+use rand::rngs::StdRng;
 use rand::thread_rng;
 use rand::Rng;
+use rand::SeedableRng;
 use sqlsync::local::LocalDocument;
+use sqlsync::local::NoopSignal;
 use sqlsync::replication::ReplicationMsg;
 use sqlsync::replication::ReplicationProtocol;
 use sqlsync::JournalId;
 use sqlsync::Lsn;
 use sqlsync::MemoryJournalFactory;
+use sqlsync::Reducer;
 
 use serde::{Deserialize, Serialize};
 use sqlsync::{coordinator::CoordinatorDocument, MemoryJournal};
@@ -74,8 +78,11 @@ fn start_server<'a>(
 
     // build a ServerDocument and protect it with a mutex since multiple threads will be accessing it
     let storage_journal = MemoryJournal::open(doc_id)?;
-    let coordinator =
-        CoordinatorDocument::open(storage_journal, MemoryJournalFactory, &wasm_bytes[..])?;
+    let coordinator = CoordinatorDocument::open(
+        storage_journal,
+        MemoryJournalFactory,
+        &wasm_bytes[..],
+    )?;
     let coordinator = Arc::new(Mutex::new(coordinator));
 
     for _ in 0..expected_clients {
@@ -138,7 +145,9 @@ fn handle_client(
         let msg = receive_msg(&mut socket_reader)?;
         log::info!("server: received {:?}", msg);
 
-        if let Some(resp) = unlock!(|doc| protocol.handle(doc, msg, &mut socket_reader)?) {
+        if let Some(resp) =
+            unlock!(|doc| protocol.handle(doc, msg, &mut socket_reader)?)
+        {
             log::info!("server: sending {:?}", resp);
             send_msg(socket_writer, &resp)?;
         }
@@ -168,6 +177,7 @@ fn handle_client(
 }
 
 fn start_client(
+    mut rng: impl Rng,
     addr: impl ToSocketAddrs,
     num_clients: usize,
     doc_id: JournalId,
@@ -181,10 +191,17 @@ fn start_client(
     );
 
     // generate random timeline id and open doc
-    let timeline_id = JournalId::new128();
+    let timeline_id = JournalId::new128(&mut rng);
     let timeline_journal = MemoryJournal::open(timeline_id)?;
     let storage_journal = MemoryJournal::open(doc_id)?;
-    let mut doc = LocalDocument::open(storage_journal, timeline_journal, &wasm_bytes[..])?;
+    let mut doc = LocalDocument::open(
+        storage_journal,
+        timeline_journal,
+        Reducer::new(wasm_bytes.as_slice())?,
+        NoopSignal,
+        NoopSignal,
+        NoopSignal,
+    )?;
 
     // initialize schema
     doc.mutate(&bincode::serialize(&Mutation::InitSchema)?)?;
@@ -206,7 +223,9 @@ fn start_client(
         let msg = receive_msg(&mut socket_reader)?;
         log::info!("client({}): received {:?}", timeline_id, msg);
 
-        if let Some(resp) = protocol.handle(&mut doc, msg, &mut socket_reader)? {
+        if let Some(resp) =
+            protocol.handle(&mut doc, msg, &mut socket_reader)?
+        {
             log::info!("client({}): sending {:?}", timeline_id, resp);
             send_msg(socket_writer, &resp)?;
         }
@@ -229,10 +248,14 @@ fn start_client(
         }
 
         log::info!("client({}): QUERYING STATE", timeline_id);
-        doc.query(|tx| {
-            tx.query_row("select value from counter", [], |row| {
+        doc.query(|conn| {
+            conn.query_row("select value from counter", [], |row| {
                 let value: Option<i32> = row.get(0)?;
-                log::info!("client({}): counter value: {:?}", timeline_id, value);
+                log::info!(
+                    "client({}): counter value: {:?}",
+                    timeline_id,
+                    value
+                );
                 Ok(())
             })?;
 
@@ -255,10 +278,14 @@ fn start_client(
     }
 
     // final query, value should be total_mutations * num_clients
-    doc.query(|tx| {
-        tx.query_row_and_then("select value from counter", [], |row| {
+    doc.query(|conn| {
+        conn.query_row_and_then("select value from counter", [], |row| {
             let value: Option<usize> = row.get(0)?;
-            log::info!("client({}): FINAL counter value: {:?}", timeline_id, value);
+            log::info!(
+                "client({}): FINAL counter value: {:?}",
+                timeline_id,
+                value
+            );
             if value != Some(total_mutations * num_clients) {
                 return Err(anyhow::anyhow!(
                     "client({}): counter value is incorrect: {:?}, expected {}",
@@ -278,6 +305,16 @@ fn start_client(
 }
 
 fn main() -> anyhow::Result<()> {
+    // seed a random number generater from the command line
+    // or use a random seed
+    let mut rng = std::env::args()
+        .nth(1)
+        .map(|seed| {
+            let seed = seed.parse::<u64>().unwrap();
+            StdRng::seed_from_u64(seed)
+        })
+        .unwrap_or_else(|| StdRng::from_entropy());
+
     simple_logger::SimpleLogger::new()
         .with_level(log::LevelFilter::Debug)
         .env()
@@ -285,18 +322,23 @@ fn main() -> anyhow::Result<()> {
 
     let addr = "127.0.0.1:8080";
     let listener = TcpListener::bind(addr)?;
-    let doc_id = JournalId::new256();
+    let doc_id = JournalId::new256(&mut rng);
 
     thread::scope(|s| {
-        let server_scope = s.clone();
         let num_clients = 2;
 
         s.spawn(move || {
-            start_server(listener, doc_id, num_clients, server_scope).expect("server failed")
+            start_server(listener, doc_id, num_clients, s)
+                .expect("server failed")
         });
 
         for _ in 0..num_clients {
-            s.spawn(move || start_client(addr, num_clients, doc_id).expect("client failed"));
+            // create separate rngs for each client seeded by the root rng
+            let client_rng = StdRng::seed_from_u64(rng.gen());
+            s.spawn(move || {
+                start_client(client_rng, addr, num_clients, doc_id)
+                    .expect("client failed")
+            });
         }
     });
 

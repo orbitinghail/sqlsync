@@ -1,30 +1,43 @@
 use std::{fmt::Debug, io};
 
-use rusqlite::{Connection, Transaction};
+use rusqlite::Connection;
 
 use crate::{
-    db::{open_with_vfs, readonly_query},
+    db::{open_with_vfs, ConnectionPair},
     error::Result,
     journal::{Journal, JournalId},
     lsn::LsnRange,
     reducer::Reducer,
-    replication::{ReplicationDestination, ReplicationError, ReplicationSource},
-    storage::Storage,
+    replication::{
+        ReplicationDestination, ReplicationError, ReplicationSource,
+    },
+    storage::{Storage, StorageChange},
     timeline::{apply_mutation, rebase_timeline, run_timeline_migration},
     Lsn,
 };
 
-pub struct LocalDocument<J> {
+pub trait Signal {
+    fn emit(&mut self);
+}
+
+pub struct NoopSignal;
+impl Signal for NoopSignal {
+    fn emit(&mut self) {}
+}
+
+pub struct LocalDocument<J, S> {
     reducer: Reducer,
     timeline: J,
     storage: Box<Storage<J>>,
-    sqlite: Connection,
+    sqlite: ConnectionPair,
 
-    // TODO: build a better subscription system
-    on_storage_change: Option<Box<dyn FnMut()>>,
+    // signals
+    storage_changed: S,
+    timeline_changed: S,
+    rebase_available: S,
 }
 
-impl<J: Journal> Debug for LocalDocument<J> {
+impl<J: Journal, S> Debug for LocalDocument<J, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("LocalDocument")
             .field(&("timeline", &self.timeline))
@@ -33,37 +46,38 @@ impl<J: Journal> Debug for LocalDocument<J> {
     }
 }
 
-impl<J: Journal + ReplicationSource> LocalDocument<J> {
-    pub fn open(storage: J, timeline: J, reducer_wasm_bytes: &[u8]) -> Result<Self> {
+impl<J, S> LocalDocument<J, S>
+where
+    J: Journal + ReplicationSource,
+    S: Signal,
+{
+    pub fn open(
+        storage: J,
+        timeline: J,
+        reducer: Reducer,
+        storage_changed: S,
+        timeline_changed: S,
+        rebase_available: S,
+    ) -> Result<Self> {
         let (mut sqlite, storage) = open_with_vfs(storage)?;
 
         // TODO: this feels awkward here
-        run_timeline_migration(&mut sqlite)?;
+        run_timeline_migration(&mut sqlite.readwrite)?;
 
         Ok(Self {
-            reducer: Reducer::new(reducer_wasm_bytes)?,
+            reducer,
             timeline,
             storage,
             sqlite,
-            on_storage_change: None,
+            storage_changed,
+            timeline_changed,
+            rebase_available,
         })
     }
 
-    pub fn subscribe(&mut self, f: impl FnMut() + 'static) {
-        // panic if already set
-        if self.on_storage_change.is_some() {
-            panic!("LocalDocument can't have more than one subscriber");
-        }
-        self.on_storage_change = Some(Box::new(f));
-    }
-
-    pub fn unsubscribe(&mut self) {
-        self.on_storage_change = None;
-    }
-
-    fn notify_subscription(&mut self) {
-        if let Some(f) = self.on_storage_change.as_mut() {
-            f();
+    fn signal_storage_change(&mut self) {
+        if self.storage.has_changes() {
+            self.storage_changed.emit()
         }
     }
 
@@ -71,27 +85,48 @@ impl<J: Journal + ReplicationSource> LocalDocument<J> {
         self.storage.source_id()
     }
 
-    pub fn query<F, O, E>(&mut self, f: F) -> std::result::Result<O, E>
+    pub fn query<F, O, E>(&self, f: F) -> std::result::Result<O, E>
     where
-        F: FnOnce(Transaction) -> std::result::Result<O, E>,
+        F: FnOnce(&Connection) -> std::result::Result<O, E>,
         E: std::convert::From<rusqlite::Error>,
     {
-        readonly_query(&mut self.sqlite, f)
+        f(&self.sqlite.readonly)
+    }
+
+    #[inline]
+    pub fn sqlite_readonly(&self) -> &Connection {
+        &self.sqlite.readonly
     }
 
     pub fn mutate(&mut self, m: &[u8]) -> Result<()> {
-        apply_mutation(&mut self.timeline, &mut self.sqlite, &mut self.reducer, m)?;
-        self.notify_subscription();
+        apply_mutation(
+            &mut self.timeline,
+            &mut self.sqlite.readwrite,
+            &mut self.reducer,
+            m,
+        )?;
+        self.timeline_changed.emit();
+        self.signal_storage_change();
         Ok(())
     }
 
     pub fn rebase(&mut self) -> Result<()> {
-        if self.storage.has_committed_pages() && self.storage.has_invisible_pages() {
-            self.storage.revert();
-            rebase_timeline(&mut self.timeline, &mut self.sqlite, &mut self.reducer)?;
-            self.notify_subscription();
+        if self.storage.has_committed_pages()
+            && self.storage.has_invisible_pages()
+        {
+            self.storage.reset()?;
+            rebase_timeline(
+                &mut self.timeline,
+                &mut self.sqlite.readwrite,
+                &mut self.reducer,
+            )?;
+            self.signal_storage_change();
         }
         Ok(())
+    }
+
+    pub fn storage_changes(&mut self) -> Result<StorageChange> {
+        Ok(self.storage.changes()?)
     }
 
     pub fn storage_lsn(&mut self) -> Option<Lsn> {
@@ -100,7 +135,7 @@ impl<J: Journal + ReplicationSource> LocalDocument<J> {
 }
 
 /// LocalDocument knows how to send it's timeline journal elsewhere
-impl<J: ReplicationSource> ReplicationSource for LocalDocument<J> {
+impl<J: ReplicationSource, S> ReplicationSource for LocalDocument<J, S> {
     type Reader<'a> = <J as ReplicationSource>::Reader<'a>
     where
         Self: 'a;
@@ -113,14 +148,22 @@ impl<J: ReplicationSource> ReplicationSource for LocalDocument<J> {
         self.timeline.source_range()
     }
 
-    fn read_lsn<'a>(&'a self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'a>>> {
+    fn read_lsn<'a>(
+        &'a self,
+        lsn: crate::Lsn,
+    ) -> io::Result<Option<Self::Reader<'a>>> {
         self.timeline.read_lsn(lsn)
     }
 }
 
 /// LocalDocument knows how to receive a storage journal from elsewhere
-impl<J: ReplicationDestination> ReplicationDestination for LocalDocument<J> {
-    fn range(&mut self, id: JournalId) -> std::result::Result<LsnRange, ReplicationError> {
+impl<J: ReplicationDestination, S: Signal> ReplicationDestination
+    for LocalDocument<J, S>
+{
+    fn range(
+        &mut self,
+        id: JournalId,
+    ) -> std::result::Result<LsnRange, ReplicationError> {
         self.storage.range(id)
     }
 
@@ -133,6 +176,8 @@ impl<J: ReplicationDestination> ReplicationDestination for LocalDocument<J> {
     where
         R: io::Read,
     {
-        self.storage.write_lsn(id, lsn, reader)
+        let out = self.storage.write_lsn(id, lsn, reader);
+        self.rebase_available.emit();
+        out
     }
 }

@@ -4,10 +4,14 @@
 ///
 use std::{collections::BTreeMap, format, io};
 
+use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use sqlsync::{
-    coordinator::CoordinatorDocument, local::LocalDocument, replication::ReplicationProtocol,
-    sqlite::Transaction, JournalId, MemoryJournal, MemoryJournalFactory,
+    coordinator::CoordinatorDocument,
+    local::{LocalDocument, NoopSignal},
+    replication::ReplicationProtocol,
+    sqlite::Connection,
+    JournalId, MemoryJournal, MemoryJournalFactory, Reducer,
 };
 
 #[derive(Debug)]
@@ -20,9 +24,9 @@ struct Task {
     created_at: String,
 }
 
-fn query_tasks(tx: Transaction) -> anyhow::Result<Vec<Task>> {
-    let mut stmt =
-        tx.prepare("select id, sort, description, completed, created_at from tasks order by sort")?;
+fn query_tasks(conn: &Connection) -> anyhow::Result<Vec<Task>> {
+    let mut stmt = conn
+        .prepare("select id, sort, description, completed, created_at from tasks order by sort")?;
     let rows = stmt.query_map([], |row| {
         Ok(Task {
             id: row.get(0)?,
@@ -67,25 +71,42 @@ enum Mutation {
 }
 
 fn main() -> anyhow::Result<()> {
+    // seed a random number generater from the command line
+    // or use a random seed
+    let mut rng = std::env::args()
+        .nth(1)
+        .map(|seed| {
+            let seed = seed.parse::<u64>().unwrap();
+            StdRng::seed_from_u64(seed)
+        })
+        .unwrap_or_else(|| StdRng::from_entropy());
+
     simple_logger::SimpleLogger::new()
         .with_level(log::LevelFilter::Debug)
+        .without_timestamps()
         .env()
         .init()?;
 
-    let doc_id = JournalId::new128();
+    let doc_id = JournalId::new128(&mut rng);
     // build task_reducer.wasm using: `cargo build --target wasm32-unknown-unknown --example task-reducer`
     let wasm_bytes =
         include_bytes!("../../../target/wasm32-unknown-unknown/debug/examples/task_reducer.wasm");
 
     let mut local = LocalDocument::open(
         MemoryJournal::open(doc_id)?,
-        MemoryJournal::open(JournalId::new128())?,
-        &wasm_bytes[..],
+        MemoryJournal::open(JournalId::new128(&mut rng))?,
+        Reducer::new(wasm_bytes.as_slice())?,
+        NoopSignal,
+        NoopSignal,
+        NoopSignal,
     )?;
     let mut local2 = LocalDocument::open(
         MemoryJournal::open(doc_id)?,
-        MemoryJournal::open(JournalId::new128())?,
-        &wasm_bytes[..],
+        MemoryJournal::open(JournalId::new128(&mut rng))?,
+        Reducer::new(wasm_bytes.as_slice())?,
+        NoopSignal,
+        NoopSignal,
+        NoopSignal,
     )?;
     let mut remote = CoordinatorDocument::open(
         MemoryJournal::open(doc_id)?,
@@ -129,7 +150,11 @@ fn main() -> anyhow::Result<()> {
         ($client:ident) => {
             $client.query(|conn| {
                 let tasks = query_tasks(conn)?;
-                log::info!("{} has {} tasks:", std::stringify!($client), tasks.len());
+                log::info!(
+                    "{} has {} tasks:",
+                    std::stringify!($client),
+                    tasks.len()
+                );
                 for task in tasks {
                     log::info!("  {:?}", task);
                 }
@@ -151,7 +176,7 @@ fn main() -> anyhow::Result<()> {
             log::info!("{}: initializing schema", std::stringify!($client));
             mutate!($client, Mutation::InitSchema)?
         };
-        ($client:ident, AppendTask $id:literal, $description:expr) => {
+        ($client:ident, AppendTask $id:expr, $description:expr) => {
             log::info!(
                 "{}: appending task {} {}",
                 std::stringify!($client),
@@ -162,7 +187,7 @@ fn main() -> anyhow::Result<()> {
                 $client,
                 Mutation::AppendTask {
                     id: $id,
-                    description: $description.into(),
+                    description: $description.into()
                 }
             )?
         };
@@ -177,7 +202,7 @@ fn main() -> anyhow::Result<()> {
                 Mutation::UpdateTask {
                     id: $id,
                     description: $description,
-                    completed: $completed,
+                    completed: $completed
                 }
             )?
         };
@@ -188,13 +213,7 @@ fn main() -> anyhow::Result<()> {
                 $id,
                 $after
             );
-            mutate!(
-                $client,
-                Mutation::MoveTask {
-                    id: $id,
-                    after: $after,
-                }
-            )?
+            mutate!($client, Mutation::MoveTask { id: $id, after: $after })?
         };
         ($client:ident, $mutation:expr) => {
             $client.mutate(&bincode::serialize(&$mutation)?)

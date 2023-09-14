@@ -3,9 +3,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::io;
 
-use rusqlite::Connection;
-
-use crate::db::open_with_vfs;
+use crate::db::{open_with_vfs, ConnectionPair};
 use crate::error::Result;
 use crate::reducer::Reducer;
 use crate::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
@@ -25,7 +23,7 @@ struct ReceiveQueueEntry {
 pub struct CoordinatorDocument<J: Journal> {
     reducer: Reducer,
     storage: Box<Storage<J>>,
-    sqlite: Connection,
+    sqlite: ConnectionPair,
     timeline_factory: J::Factory,
     timelines: HashMap<JournalId, J>,
     timeline_receive_queue: VecDeque<ReceiveQueueEntry>,
@@ -49,7 +47,7 @@ impl<J: Journal> CoordinatorDocument<J> {
         let (mut sqlite, storage) = open_with_vfs(storage)?;
 
         // TODO: this feels awkward here
-        run_timeline_migration(&mut sqlite)?;
+        run_timeline_migration(&mut sqlite.readwrite)?;
 
         Ok(Self {
             reducer: Reducer::new(reducer_wasm_bytes)?,
@@ -105,7 +103,12 @@ impl<J: Journal> CoordinatorDocument<J> {
                 .expect("timeline missing in timelines but present in the receive queue");
 
             // apply part of the timeline (per the receive queue entry) to the db
-            apply_timeline_range(timeline, &mut self.sqlite, &mut self.reducer, entry.range)?;
+            apply_timeline_range(
+                timeline,
+                &mut self.sqlite.readwrite,
+                &mut self.reducer,
+                entry.range,
+            )?;
 
             // commit changes
             self.storage.commit()?;

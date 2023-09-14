@@ -21,35 +21,38 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
 
     match mutation {
         Mutation::InitSchema => {
-            futures::join!(execute!(
+            execute!(
                 "CREATE TABLE IF NOT EXISTS tasks (
                     id TEXT PRIMARY KEY,
                     description TEXT NOT NULL,
                     completed BOOLEAN NOT NULL,
                     created_at TEXT NOT NULL
                 )"
-            ));
+            )
+            .await;
         }
 
         Mutation::CreateTask { id, description } => {
             log::debug!("appending task({}): {}", id, description);
-            futures::join!(execute!(
+            execute!(
                 "insert into tasks (id, description, completed, created_at)
                     values (?, ?, false, datetime('now'))",
                 id,
                 description
-            ));
+            )
+            .await;
         }
 
         Mutation::DeleteTask { id } => {
-            futures::join!(execute!("delete from tasks where id = ?", id));
+            execute!("delete from tasks where id = ?", id).await;
         }
 
         Mutation::ToggleCompleted { id } => {
-            futures::join!(execute!(
+            execute!(
                 "update tasks set completed = not completed where id = ?",
                 id
-            ));
+            )
+            .await;
         }
     }
 

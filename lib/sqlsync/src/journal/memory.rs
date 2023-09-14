@@ -1,12 +1,11 @@
 use std::fmt::{Debug, Formatter};
 use std::io;
 
-use crate::lsn::{Lsn, LsnRange};
-use crate::positioned_io::PositionedReader;
-use crate::{JournalError, JournalFactory, ScanError, Serializable};
+use crate::lsn::{Lsn, LsnIter, LsnRange};
+use crate::{JournalError, JournalFactory, Serializable};
 
-use super::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 use super::{Cursor, Journal, JournalId, JournalResult, Scannable};
+use crate::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 
 pub struct MemoryJournal {
     id: JournalId,
@@ -74,92 +73,25 @@ impl Journal for MemoryJournal {
     }
 }
 
-pub struct MemoryScanCursor<'a> {
-    slice: &'a [Vec<u8>],
-    started: bool,
-    rev: bool,
-}
-
-impl<'a> MemoryScanCursor<'a> {
-    fn new(slice: &'a [Vec<u8>]) -> Self {
-        Self {
-            slice,
-            started: false,
-            rev: false,
-        }
-    }
-
-    fn reverse(mut self) -> Self {
-        self.rev = !self.rev;
-        self
-    }
-
-    fn get(&self) -> Option<&Vec<u8>> {
-        if self.started {
-            if self.rev {
-                self.slice.last()
-            } else {
-                self.slice.first()
-            }
-        } else {
-            None
-        }
-    }
-}
-
-impl<'a> Cursor for MemoryScanCursor<'a> {
-    fn advance(&mut self) -> std::result::Result<bool, ScanError> {
-        if !self.started {
-            self.started = true;
-        } else {
-            if self.rev {
-                // remove the last element
-                self.slice = &self.slice[..self.slice.len() - 1];
-            } else {
-                // remove the first element
-                self.slice = &self.slice[1..];
-            }
-        }
-        Ok(!self.slice.is_empty())
-    }
-
-    fn remaining(&self) -> usize {
-        self.slice.len()
-    }
-
-    fn into_rev(self) -> Self {
-        self.reverse()
-    }
-}
-
-impl<'a> PositionedReader for MemoryScanCursor<'a> {
-    fn read_at(&self, pos: usize, buf: &mut [u8]) -> io::Result<usize> {
-        match self.get() {
-            None => Ok(0),
-            Some(data) => data.read_at(pos, buf),
-        }
-    }
-
-    fn size(&self) -> io::Result<usize> {
-        match self.get() {
-            None => Ok(0),
-            Some(data) => Ok(data.len()),
-        }
-    }
-}
-
 impl Scannable for MemoryJournal {
-    type Cursor<'a> = MemoryScanCursor<'a>
+    type Reader<'a> = &'a [u8]
     where
         Self: 'a;
 
-    fn scan<'a>(&'a self) -> Self::Cursor<'a> {
-        MemoryScanCursor::new(&self.data)
+    fn scan<'a>(&'a self) -> Cursor<'a, Self, LsnIter> {
+        Cursor::new(self, self.range.iter())
     }
 
-    fn scan_range<'a>(&'a self, range: LsnRange) -> Self::Cursor<'a> {
-        let offsets = self.range.intersection_offsets(&range);
-        MemoryScanCursor::new(&self.data[offsets])
+    fn scan_range<'a>(&'a self, range: LsnRange) -> Cursor<'a, Self, LsnIter> {
+        let intersection = self.range.intersect(&range);
+        Cursor::new(self, intersection.iter())
+    }
+
+    fn get<'a>(&'a self, lsn: Lsn) -> io::Result<Option<Self::Reader<'a>>> {
+        Ok(self
+            .range
+            .offset(lsn)
+            .map(|offset| self.data[offset].as_slice()))
     }
 }
 

@@ -50,19 +50,20 @@ pub struct ReplicationProtocol {
 
 impl ReplicationProtocol {
     pub fn new() -> Self {
-        Self {
-            outstanding_range: None,
-        }
+        Self { outstanding_range: None }
     }
 
     /// start replication, must be called on both sides of the connection
     pub fn start<D: ReplicationSource>(&self, doc: &D) -> ReplicationMsg {
         // before we can start sending frames to the destination, we need to know
         // what frames the destination already has
-        ReplicationMsg::RangeRequest {
-            id: doc.source_id(),
-            source_range: doc.source_range(),
-        }
+        ReplicationMsg::RangeRequest { id: doc.source_id(), source_range: doc.source_range() }
+    }
+
+    /// initialized returns true if we have received a response to our initial range request
+    /// and thus can start replicating data
+    pub fn initialized(&self) -> bool {
+        self.outstanding_range.is_some()
     }
 
     /// sync a frame from the source journal to the destination
@@ -85,11 +86,7 @@ impl ReplicationProtocol {
 
                 // send frame
                 return Ok(Some((
-                    ReplicationMsg::Frame {
-                        id: doc.source_id(),
-                        lsn,
-                        len: data.size()? as u64,
-                    },
+                    ReplicationMsg::Frame { id: doc.source_id(), lsn, len: data.size()? as u64 },
                     data,
                 )));
             }
@@ -133,14 +130,9 @@ impl ReplicationProtocol {
                 Ok(None)
             }
             ReplicationMsg::Frame { id, lsn, len } => {
-                let mut reader = LimitedReader {
-                    limit: len,
-                    inner: connection,
-                };
+                let mut reader = LimitedReader { limit: len, inner: connection };
                 doc.write_lsn(id, lsn, &mut reader)?;
-                Ok(Some(ReplicationMsg::Range {
-                    range: doc.range(id)?,
-                }))
+                Ok(Some(ReplicationMsg::Range { range: doc.range(id)? }))
             }
         }
     }

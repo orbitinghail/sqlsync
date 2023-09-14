@@ -173,6 +173,36 @@ impl LsnRange {
         }
     }
 
+    /// advance_first increments first
+    /// returns self if already empty
+    fn advance_first(&self) -> LsnRange {
+        match self {
+            LsnRange::Empty { .. } => *self,
+            &LsnRange::NonEmpty { first, last } => {
+                if first == last {
+                    LsnRange::Empty { nextlsn: last + 1 }
+                } else {
+                    LsnRange::new(first + 1, last)
+                }
+            }
+        }
+    }
+
+    /// remove_last decrements last
+    /// returns self if already empty
+    fn remove_last(&self) -> LsnRange {
+        match self {
+            LsnRange::Empty { .. } => *self,
+            &LsnRange::NonEmpty { first, last } => {
+                if first == last {
+                    LsnRange::Empty { nextlsn: last + 1 }
+                } else {
+                    LsnRange::new(first, last - 1)
+                }
+            }
+        }
+    }
+
     pub fn extend_by(&self, len: u64) -> LsnRange {
         assert!(len > 0, "len must be > 0");
         match self {
@@ -196,8 +226,8 @@ impl LsnRange {
     }
 
     /// intersect returns the intersection between two ranges
-    /// if the result is empty, nextlsn will be set to self.last + 1
-    pub fn intersect(&self, other: &Self) -> LsnRange {
+    /// if the result is empty, its nextlsn will immediately follow self
+    pub fn intersect(&self, other: &Self) -> Self {
         match (self, other) {
             (LsnRange::Empty { .. }, _) => *self,
             (LsnRange::NonEmpty { last, .. }, LsnRange::Empty { .. }) => {
@@ -221,6 +251,52 @@ impl LsnRange {
             }
         }
     }
+
+    /// difference returns the difference between self and other
+    /// represents self - other
+    /// if the result is empty, its nextlsn will immediately follow self
+    pub fn difference(&self, other: &Self) -> Self {
+        match (self, other) {
+            // if either is empty return self
+            (LsnRange::Empty { .. }, _) => *self,
+            (_, LsnRange::Empty { .. }) => *self,
+
+            (
+                &LsnRange::NonEmpty { first, last },
+                &LsnRange::NonEmpty {
+                    first: ofirst,
+                    last: olast,
+                },
+            ) => {
+                // No overlap: other is entirely before or entirely after self.
+                if olast < first || ofirst > last {
+                    *self
+                } else if ofirst <= first && olast >= last {
+                    // other completely covers self.
+                    LsnRange::Empty { nextlsn: last + 1 }
+                } else if ofirst <= first {
+                    // other overlaps start of self.
+                    LsnRange::NonEmpty {
+                        first: olast + 1,
+                        last,
+                    }
+                } else if olast >= last {
+                    // other overlaps end of self.
+                    LsnRange::NonEmpty {
+                        first,
+                        last: ofirst - 1,
+                    }
+                } else {
+                    // other is entirely within self.
+                    panic!("difference resulted in disjointed lsnrange")
+                }
+            }
+        }
+    }
+
+    pub fn iter(&self) -> LsnIter {
+        LsnIter { range: *self }
+    }
 }
 
 impl Debug for LsnRange {
@@ -237,6 +313,34 @@ impl Debug for LsnRange {
 impl Display for LsnRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(self, f)
+    }
+}
+
+pub struct LsnIter {
+    range: LsnRange,
+}
+
+impl Iterator for LsnIter {
+    type Item = Lsn;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let lsn = match self.range {
+            LsnRange::Empty { .. } => None,
+            LsnRange::NonEmpty { first, .. } => Some(first),
+        };
+        self.range = self.range.advance_first();
+        lsn
+    }
+}
+
+impl DoubleEndedIterator for LsnIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let lsn = match self.range {
+            LsnRange::Empty { .. } => None,
+            LsnRange::NonEmpty { last, .. } => Some(last),
+        };
+        self.range = self.range.remove_last();
+        lsn
     }
 }
 
@@ -414,5 +518,123 @@ mod tests {
         assert_eq!(range.append(0), LsnRange::new(0, 0));
         let range = LsnRange::Empty { nextlsn: 3 };
         assert_eq!(range.append(3), LsnRange::new(3, 3));
+    }
+
+    #[test]
+    fn lsnrange_difference() {
+        macro_rules! t {
+            ($self:expr, $other:expr, $difference:expr) => {
+                assert_eq!(
+                    $self.difference(&$other),
+                    $difference,
+                    "checking difference: {:?}, {:?}",
+                    $self,
+                    $other
+                );
+            };
+        }
+
+        macro_rules! r {
+            ($first:expr, $last:expr) => {
+                LsnRange::new($first, $last)
+            };
+            (empty $nextlsn:expr) => {
+                LsnRange::Empty { nextlsn: $nextlsn }
+            };
+        }
+
+        // check either empty
+        t!(r!(empty 0), r!(empty 0), r!(empty 0));
+        t!(r!(empty 1), r!(empty 0), r!(empty 1));
+        t!(r!(empty 1), r!(0, 10), r!(empty 1));
+        t!(r!(5, 10), r!(empty 1), r!(5, 10));
+
+        // check no overlap
+        t!(r!(0, 4), r!(5, 10), r!(0, 4));
+        t!(r!(5, 10), r!(0, 4), r!(5, 10));
+
+        // check other completely covers self
+        t!(r!(0, 4), r!(0, 10), r!(empty 5));
+        t!(r!(0, 10), r!(0, 10), r!(empty 11));
+        t!(r!(3, 7), r!(0, 11), r!(empty 8));
+
+        // check other overlaps start of self
+        t!(r!(0, 4), r!(0, 3), r!(4, 4));
+        t!(r!(5, 10), r!(0, 6), r!(7, 10));
+
+        // check other overlaps end of self
+        t!(r!(0, 4), r!(3, 4), r!(0, 2));
+        t!(r!(0, 4), r!(4, 4), r!(0, 3));
+        t!(r!(5, 10), r!(8, 10), r!(5, 7));
+    }
+
+    #[test]
+    #[should_panic(expected = "difference resulted in disjointed lsnrange")]
+    fn lsnrange_difference_disjoint_panics() {
+        let _ = LsnRange::new(5, 10).difference(&LsnRange::new(6, 9));
+    }
+
+    #[test]
+    fn lsnrange_advance_first() {
+        assert_eq!(
+            LsnRange::new(5, 5).advance_first(),
+            LsnRange::Empty { nextlsn: 6 }
+        );
+        assert_eq!(LsnRange::new(5, 6).advance_first(), LsnRange::new(6, 6));
+        assert_eq!(LsnRange::new(5, 10).advance_first(), LsnRange::new(6, 10));
+        assert_eq!(
+            LsnRange::empty().advance_first(),
+            LsnRange::Empty { nextlsn: 0 }
+        );
+        assert_eq!(
+            LsnRange::Empty { nextlsn: 5 }.advance_first(),
+            LsnRange::Empty { nextlsn: 5 }
+        );
+    }
+
+    #[test]
+    fn lsnrange_remove_last() {
+        assert_eq!(
+            LsnRange::new(5, 5).remove_last(),
+            LsnRange::Empty { nextlsn: 6 }
+        );
+        assert_eq!(LsnRange::new(5, 6).remove_last(), LsnRange::new(5, 5));
+        assert_eq!(LsnRange::new(5, 10).remove_last(), LsnRange::new(5, 9));
+        assert_eq!(
+            LsnRange::empty().remove_last(),
+            LsnRange::Empty { nextlsn: 0 }
+        );
+        assert_eq!(
+            LsnRange::Empty { nextlsn: 5 }.remove_last(),
+            LsnRange::Empty { nextlsn: 5 }
+        );
+    }
+
+    #[test]
+    fn lsnrange_iter() {
+        let range = LsnRange::new(5, 10);
+        let mut iter = range.iter();
+        assert_eq!(iter.next(), Some(5));
+        assert_eq!(iter.next(), Some(6));
+        assert_eq!(iter.next(), Some(7));
+        assert_eq!(iter.next(), Some(8));
+        assert_eq!(iter.next(), Some(9));
+        assert_eq!(iter.next(), Some(10));
+        assert_eq!(iter.next(), None);
+
+        let mut iter = range.iter().rev();
+        assert_eq!(iter.next(), Some(10));
+        assert_eq!(iter.next(), Some(9));
+        assert_eq!(iter.next(), Some(8));
+        assert_eq!(iter.next(), Some(7));
+        assert_eq!(iter.next(), Some(6));
+        assert_eq!(iter.next(), Some(5));
+        assert_eq!(iter.next(), None);
+
+        let range = LsnRange::empty();
+        let mut iter = range.iter();
+        assert_eq!(iter.next(), None);
+        let mut iter = range.iter().rev();
+        assert_eq!(iter.next(), None);
     }
 }

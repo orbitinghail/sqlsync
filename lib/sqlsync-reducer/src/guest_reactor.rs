@@ -43,12 +43,7 @@ pub struct Reactor {
 
 impl Reactor {
     pub fn new() -> Self {
-        Self {
-            task: None,
-            request_id_generator: 0,
-            requests: None,
-            responses: None,
-        }
+        Self { task: None, request_id_generator: 0, requests: None, responses: None }
     }
 
     fn queue_request(&mut self, request: Request) -> RequestId {
@@ -77,7 +72,7 @@ impl Reactor {
     pub fn step(&mut self, responses: Responses) -> Result<Requests, ReducerError> {
         if let Some(ref mut previous) = self.responses {
             // if we still have previous responses, merge new responses in
-            // note, this replaces keys in previous with those in next - as long
+            // this replaces keys in previous with those in next - as long
             // as the host respects the request indexes this is safe
             if let Some(mut next) = responses {
                 previous.append(&mut next);
@@ -108,10 +103,7 @@ pub struct ResponseFuture<T: DeserializeOwned> {
 
 impl<T: DeserializeOwned> ResponseFuture<T> {
     fn new(id: RequestId) -> Self {
-        Self {
-            id,
-            _marker: std::marker::PhantomData,
-        }
+        Self { id, _marker: std::marker::PhantomData }
     }
 }
 

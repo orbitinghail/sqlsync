@@ -4,18 +4,18 @@ use rusqlite::{named_params, Connection, Transaction};
 use thiserror::Error;
 
 use crate::{
-    journal::{Cursor, Journal},
+    journal::Journal,
     lsn::{Lsn, LsnRange},
     positioned_io::PositionedReader,
     reducer::{Reducer, ReducerError},
-    JournalError, ScanError,
+    JournalError,
 };
 
 const TIMELINES_TABLE_SQL: &str = "
     CREATE TABLE IF NOT EXISTS __sqlsync_timelines (
-        id BLOB PRIMARY KEY,
+        id BLOB PRIMARY KEY NOT NULL,
         lsn INTEGER NOT NULL
-    )
+    ) STRICT
 ";
 
 const TIMELINES_READ_LSN_SQL: &str = "
@@ -40,9 +40,6 @@ pub enum TimelineError {
 
     #[error(transparent)]
     JournalError(#[from] JournalError),
-
-    #[error(transparent)]
-    ScanError(#[from] ScanError),
 
     #[error(transparent)]
     ReducerError(#[from] ReducerError),
@@ -92,7 +89,7 @@ pub fn rebase_timeline<J: Journal>(
             err => Err(err),
         })?;
 
-    log::debug!("rebase timeline ({:?}) to lsn {:?}", timeline, applied_lsn);
+    log::info!("rebase timeline ({:?}) to lsn {:?}", timeline, applied_lsn);
 
     // remove mutations from the journal that have already been applied
     if let Some(applied_lsn) = applied_lsn {

@@ -36,7 +36,7 @@ pub struct Reducer {
 }
 
 impl Reducer {
-    pub fn new(wasm_bytes: &[u8]) -> Result<Self> {
+    pub fn new(wasm_bytes: impl std::io::Read) -> Result<Self> {
         let engine = Engine::default();
         let module = Module::new(&engine, wasm_bytes)?;
 
@@ -44,7 +44,8 @@ impl Reducer {
         register_log_handler(&mut linker)?;
 
         let mut store = Store::new(&engine, WasmFFI::uninitialized());
-        let instance = linker.instantiate(&mut store, &module)?.start(&mut store)?;
+        let instance =
+            linker.instantiate(&mut store, &module)?.start(&mut store)?;
 
         // initialize the FFI
         let ffi = WasmFFI::initialized(&store, &instance)?;
@@ -56,7 +57,11 @@ impl Reducer {
         Ok(Self { store })
     }
 
-    pub fn apply(&mut self, tx: &mut Transaction, mutation: &[u8]) -> Result<()> {
+    pub fn apply(
+        &mut self,
+        tx: &mut Transaction,
+        mutation: &[u8],
+    ) -> Result<()> {
         let ffi = self.store.data().to_owned();
 
         // start the reducer
@@ -69,7 +74,9 @@ impl Reducer {
                 match req {
                     Request::Query { sql, params } => {
                         log::info!("received query req: {}, {:?}", sql, params);
-                        let params = params_from_iter(params.into_iter().map(from_sqlite_value));
+                        let params = params_from_iter(
+                            params.into_iter().map(from_sqlite_value),
+                        );
                         let mut stmt = tx.prepare(&sql)?;
 
                         let columns: Vec<String> = stmt
@@ -92,7 +99,10 @@ impl Reducer {
                         let end = unix_timestamp_milliseconds();
                         log::info!("query took {}ms", end - start);
 
-                        let ptr = ffi.encode(&mut self.store, &QueryResponse { columns, rows })?;
+                        let ptr = ffi.encode(
+                            &mut self.store,
+                            &QueryResponse { columns, rows },
+                        )?;
 
                         responses.insert(id, ptr);
                     }
@@ -101,13 +111,18 @@ impl Reducer {
 
                         let start = unix_timestamp_milliseconds();
 
-                        let params = params_from_iter(params.into_iter().map(from_sqlite_value));
+                        let params = params_from_iter(
+                            params.into_iter().map(from_sqlite_value),
+                        );
                         let changes = tx.execute(&sql, params)?;
 
                         let end = unix_timestamp_milliseconds();
                         log::info!("exec took {}ms", end - start);
 
-                        let ptr = ffi.encode(&mut self.store, &ExecResponse { changes })?;
+                        let ptr = ffi.encode(
+                            &mut self.store,
+                            &ExecResponse { changes },
+                        )?;
                         responses.insert(id, ptr);
                     }
                 }
@@ -138,7 +153,9 @@ fn to_sqlite_value(v: ValueRef) -> SqliteValue {
         ValueRef::Null => SqliteValue::Null,
         ValueRef::Integer(i) => SqliteValue::Integer(i),
         ValueRef::Real(f) => SqliteValue::Real(f),
-        r @ ValueRef::Text(_) => SqliteValue::Text(r.as_str().unwrap().to_owned()),
+        r @ ValueRef::Text(_) => {
+            SqliteValue::Text(r.as_str().unwrap().to_owned())
+        }
         ValueRef::Blob(b) => SqliteValue::Blob(b.to_vec()),
     }
 }

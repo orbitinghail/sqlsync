@@ -63,12 +63,7 @@ impl WasmFFI {
     ) -> Result<FFIBuf, WasmFFIError> {
         match self {
             Self::Uninitialized => Err(WasmFFIError::Uninitialized),
-            Self::Initialized {
-                memory,
-                ffi_buf_deallocate,
-                ffi_buf_len,
-                ..
-            } => {
+            Self::Initialized { memory, ffi_buf_deallocate, ffi_buf_len, .. } => {
                 let len = ffi_buf_len.call(&mut store, ptr)?;
                 let mem = memory.data(&store);
                 let buf = mem[ptr as usize..(ptr + len) as usize].to_vec();
@@ -81,11 +76,7 @@ impl WasmFFI {
     fn persist(&self, mut store: impl AsContextMut, buf: &[u8]) -> Result<FFIBufPtr, WasmFFIError> {
         match self {
             Self::Uninitialized => Err(WasmFFIError::Uninitialized),
-            Self::Initialized {
-                memory,
-                ffi_buf_allocate,
-                ..
-            } => {
+            Self::Initialized { memory, ffi_buf_allocate, .. } => {
                 let len = buf.len() as FFIBufLen;
                 let ptr = ffi_buf_allocate.call(&mut store, len)?;
                 let mem = memory.data_mut(&mut store);
@@ -116,9 +107,7 @@ impl WasmFFI {
     pub fn init_reducer(&self, mut ctx: impl AsContextMut) -> Result<(), WasmFFIError> {
         match self {
             Self::Uninitialized => Err(WasmFFIError::Uninitialized),
-            Self::Initialized {
-                ffi_init_reducer, ..
-            } => Ok(ffi_init_reducer.call(&mut ctx, ())?),
+            Self::Initialized { ffi_init_reducer, .. } => Ok(ffi_init_reducer.call(&mut ctx, ())?),
         }
     }
 
@@ -146,9 +135,7 @@ impl WasmFFI {
     ) -> Result<Requests, WasmFFIError> {
         match self {
             Self::Uninitialized => Err(WasmFFIError::Uninitialized),
-            Self::Initialized {
-                ffi_reactor_step, ..
-            } => {
+            Self::Initialized { ffi_reactor_step, .. } => {
                 let responses_ptr = self.encode(&mut ctx, responses)?;
                 let requests_ptr = ffi_reactor_step.call(&mut ctx, responses_ptr)?;
                 let requests: Result<Requests, ReducerError> =
