@@ -12,7 +12,7 @@
 
 The best way to get a feel for how SQLSync behaves is to play with the [Todo list demo](https://sqlsync-todo.pages.dev/). Clicking [this link](https://sqlsync-todo.pages.dev/) will create a unique todo list and redirect you to it's unique URL. You can then share that URL with friends or open it on multiple devices (or browsers) to see the power of offline-first collaborative SQLite.
 
-You can also learn more about SQLSync and it's goals by watching Carl's WasmCon 2023 talk. [The recording can be found here](https://www.youtube.com/watch?v=UM7M4NpVIHk&t=3449s).
+You can also learn more about SQLSync and it's goals by watching Carl's WasmCon 2023 talk. [The recording can be found here](https://youtu.be/oLYda9jmNpk?si=7BBBdLxEj9ZQ4OvS).
 
 **Features**
   - Eventually consistent SQLite
