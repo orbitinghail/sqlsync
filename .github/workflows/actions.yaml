@@ -16,6 +16,11 @@ jobs:
       - uses: extractions/setup-just@v1
       - name: install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      # clang is needed to compile sqlite
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1.9.0
+        with:
+          version: 11
       # node setup
       - uses: actions/setup-node@v3
         with:
