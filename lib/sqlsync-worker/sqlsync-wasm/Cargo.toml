@@ -24,8 +24,6 @@ bs58.workspace = true
 tsify = { workspace = true, features = ["js"] }
 serde_bytes.workspace = true
 rand.workspace = true
-async-watch.workspace = true
-async-lock.workspace = true
 event-listener.workspace = true
 sha2.workspace = true
 

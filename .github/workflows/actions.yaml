@@ -1,5 +1,8 @@
 name: build & test
-on: [push]
+on:
+  push:
+    paths-ignore:
+      - "**.md"
 jobs:
   build:
     runs-on: ubuntu-latest
