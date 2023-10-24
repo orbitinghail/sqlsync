@@ -1,6 +1,6 @@
 # SQLSync
 
-[![github actions](https://github.com/orbitinghail/sqlsync/actions/workflows/actions.yml/badge.svg)](https://github.com/orbitinghail/sqlsync/actions)
+[![github actions](https://github.com/orbitinghail/sqlsync/actions/workflows/actions.yaml/badge.svg)](https://github.com/orbitinghail/sqlsync/actions)
 [![Join the SQLSync Community](https://discordapp.com/api/guilds/1149205110262595634/widget.png?style=shield)][discord]
 
 **SQLSync is a collaborative offline-first wrapper around SQLite** designed to synchronize web
