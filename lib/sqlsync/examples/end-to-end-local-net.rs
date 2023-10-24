@@ -305,20 +305,22 @@ fn start_client(
 }
 
 fn main() -> anyhow::Result<()> {
-    // seed a random number generater from the command line
-    // or use a random seed
-    let mut rng = std::env::args()
-        .nth(1)
-        .map(|seed| {
-            let seed = seed.parse::<u64>().unwrap();
-            StdRng::seed_from_u64(seed)
-        })
-        .unwrap_or_else(|| StdRng::from_entropy());
-
     simple_logger::SimpleLogger::new()
         .with_level(log::LevelFilter::Debug)
+        .without_timestamps()
         .env()
         .init()?;
+
+    // seed a random number generater from the command line
+    // or use a random seed
+    let rng_seed: u64 = std::env::args()
+        .nth(1)
+        .map(|seed| seed.parse().unwrap())
+        .unwrap_or_else(|| rand::thread_rng().gen());
+
+    log::info!("using rng seed: {}", rng_seed);
+
+    let mut rng = StdRng::seed_from_u64(rng_seed);
 
     let addr = "127.0.0.1:8080";
     let listener = TcpListener::bind(addr)?;

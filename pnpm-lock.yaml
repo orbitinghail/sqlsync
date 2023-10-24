@@ -26,9 +26,6 @@ importers:
       '@mantine/hooks':
         specifier: ^7.1.5
         version: 7.1.5(react@18.2.0)
-      '@mantine/vanilla-extract':
-        specifier: ^7.1.5
-        version: 7.1.5(@mantine/core@7.1.5)
       '@orbitinghail/sqlsync-react':
         specifier: workspace:*
         version: link:../../lib/sqlsync-react
@@ -1087,14 +1084,6 @@ packages:
       react: ^18.2.0
     dependencies:
       react: 18.2.0
-    dev: false
-
-  /@mantine/vanilla-extract@7.1.5(@mantine/core@7.1.5):
-    resolution: {integrity: sha512-sOPnzUbnJCNPQTN/kTIkxBsgxh5Ws8hThSVFqNz96xs0j7G6iSiS+wrHdcz94Y+msMlERuW+3h1GI6hrqYuNUQ==}
-    peerDependencies:
-      '@mantine/core': 7.1.5
-    dependencies:
-      '@mantine/core': 7.1.5(@mantine/hooks@7.1.5)(@types/react@18.2.21)(react-dom@18.2.0)(react@18.2.0)
     dev: false
 
   /@microsoft/api-extractor-model@7.27.6(@types/node@20.5.9):

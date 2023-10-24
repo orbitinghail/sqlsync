@@ -15,7 +15,6 @@
     "@mantine/core": "^7.1.5",
     "@mantine/form": "^7.1.5",
     "@mantine/hooks": "^7.1.5",
-    "@mantine/vanilla-extract": "^7.1.5",
     "@orbitinghail/sqlsync-react": "workspace:*",
     "@orbitinghail/sqlsync-worker": "workspace:*",
     "@tabler/icons-react": "^2.39.0",

@@ -4,7 +4,7 @@
 ///
 use std::{collections::BTreeMap, format, io};
 
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use sqlsync::{
     coordinator::CoordinatorDocument,
@@ -14,7 +14,7 @@ use sqlsync::{
     JournalId, MemoryJournal, MemoryJournalFactory, Reducer,
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[allow(dead_code)]
 struct Task {
     id: i64,
@@ -71,21 +71,22 @@ enum Mutation {
 }
 
 fn main() -> anyhow::Result<()> {
-    // seed a random number generater from the command line
-    // or use a random seed
-    let mut rng = std::env::args()
-        .nth(1)
-        .map(|seed| {
-            let seed = seed.parse::<u64>().unwrap();
-            StdRng::seed_from_u64(seed)
-        })
-        .unwrap_or_else(|| StdRng::from_entropy());
-
     simple_logger::SimpleLogger::new()
         .with_level(log::LevelFilter::Debug)
         .without_timestamps()
         .env()
         .init()?;
+
+    // seed a random number generater from the command line
+    // or use a random seed
+    let rng_seed: u64 = std::env::args()
+        .nth(1)
+        .map(|seed| seed.parse().unwrap())
+        .unwrap_or_else(|| rand::thread_rng().gen());
+
+    log::info!("using rng seed: {}", rng_seed);
+
+    let mut rng = StdRng::seed_from_u64(rng_seed);
 
     let doc_id = JournalId::new128(&mut rng);
     // build task_reducer.wasm using: `cargo build --target wasm32-unknown-unknown --example task-reducer`
@@ -332,6 +333,16 @@ fn main() -> anyhow::Result<()> {
 
     print_tasks!(local)?;
     print_tasks!(local2)?;
+
+    // get both sets of tasks and make sure they are the same
+    let tasks1 = local.query(|conn| query_tasks(conn))?;
+    let tasks2 = local2.query(|conn| query_tasks(conn))?;
+
+    // compare the two Vec<Task> objects
+    assert_eq!(tasks1.len(), tasks2.len(), "different number of tasks",);
+    for (i, task) in tasks1.iter().enumerate() {
+        assert_eq!(task, &tasks2[i], "tasks differ at index {}", i);
+    }
 
     log::info!("DONE");
 
