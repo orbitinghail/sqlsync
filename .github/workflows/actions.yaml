@@ -1,0 +1,39 @@
+name: build & test
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # checkout repo
+      - uses: actions/checkout@v4
+      # rust setup
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@v1
+      - name: install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      # node setup
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+      - uses: pnpm/action-setup@v2
+        with:
+          version: "8"
+          run_install: true
+      # build, test, and package sqlsync
+      - name: Build all
+        run: just build
+      - name: Unit tests
+        run: just unit-test
+      - name: end-to-end-local
+        run: just test-end-to-end-local
+      - name: end-to-end-local-net
+        run: just test-end-to-end-local-net
+      - name: test sqlsync-reducer
+        run: just test-sqlsync-reducer
+      - name: build sqlsync react and worker packages
+        run: just package-sqlsync-react package-sqlsync-worker

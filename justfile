@@ -90,11 +90,11 @@ upload-demo-reducer mode='release' target='local':
         echo
     fi
 
-publish-sqlsync-worker: (package-sqlsync-worker release)
+publish-sqlsync-worker: (package-sqlsync-worker "release")
     cd lib/sqlsync-worker && pnpm publish --access public
 
 publish-sqlsync-react: package-sqlsync-react
     cd lib/sqlsync-react && pnpm publish --access public
 
-publish-sqlsyncs-reducer:
+publish-sqlsync-reducer:
     cd lib/sqlsync-reducer && cargo publish
