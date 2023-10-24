@@ -1,7 +1,14 @@
 [package]
 name = "sqlsync-reducer"
+resolver = "2"
 version = "0.1.0"
-edition = "2021"
+description = "SQLSync is a collaborative offline-first wrapper around SQLite. A SQLSync Reducer is responsible for executing mutations on the database both locally and on the server."
+
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license-file.workspace = true
+repository.workspace = true
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }

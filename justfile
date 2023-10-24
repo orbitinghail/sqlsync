@@ -54,6 +54,9 @@ node_modules:
     cd lib/sqlsync-worker && pnpm i
     cd demo/frontend && pnpm i
 
+package-sqlsync-react:
+    cd lib/sqlsync-react && pnpm build
+
 package-sqlsync-worker target='release':
     #!/usr/bin/env bash
     if [[ '{{target}}' = 'release' ]]; then
@@ -86,3 +89,12 @@ upload-demo-reducer mode='release' target='local':
         curl -X PUT --data-binary @$REDUCER_PATH http://localhost:8787/reducer
         echo
     fi
+
+publish-sqlsync-worker: (package-sqlsync-worker release)
+    cd lib/sqlsync-worker && pnpm publish --access public
+
+publish-sqlsync-react: package-sqlsync-react
+    cd lib/sqlsync-react && pnpm publish --access public
+
+publish-sqlsyncs-reducer:
+    cd lib/sqlsync-reducer && cargo publish

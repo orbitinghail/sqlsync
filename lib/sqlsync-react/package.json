@@ -1,6 +1,21 @@
 {
   "name": "@orbitinghail/sqlsync-react",
-  "version": "0.0.1",
+  "version": "0.1.0",
+  "description": "SQLSync is a collaborative offline-first wrapper around SQLite. It is designed to synchronize web application state between users, devices, and the edge.",
+  "homepage": "https://sqlsync.dev",
+  "license": "Apache-2.0",
+  "keywords": [
+    "sqlsync",
+    "sql",
+    "database",
+    "sqlite",
+    "offline-first",
+    "local-first"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/orbitinghail/sqlsync"
+  },
   "files": [
     "dist",
     "src"

@@ -13,6 +13,13 @@ members = [
     "demo/cloudflare-backend",
 ]
 
+[workspace.package]
+authors = ["Carl Sverre", "orbitinghail"]
+edition = "2021"
+homepage = "https://sqlsync.dev"
+license-file = "LICENSE"
+repository = "https://github.com/orbitinghail/sqlsync"
+
 [profile.release]
 lto = true
 strip = "debuginfo"
