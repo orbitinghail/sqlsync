@@ -1,6 +1,7 @@
 # The SQLSync Guide
 
-> [!IMPORTANT] SQLSync is in active development and thus is changing quickly.
+> [!IMPORTANT]
+> SQLSync is in active development and thus is changing quickly.
 > Currently, do not use it in a production application as there is no backwards
 > compatibility or stability promise.
 
