@@ -21,7 +21,8 @@ just package-sqlsync-worker dev
 
 ### Local Coordinator
 
-> [!WARNING] Currently this seems to require modifying the wrangler.toml config
+> [!WARNING]
+> Currently this seems to require modifying the wrangler.toml config
 > file to point at your own Cloudflare buckets (even though they aren't being
 > used). Work is underway to replace the local coordinator with a wrangler
 > agnostic alternative optimized for local development.
