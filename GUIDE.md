@@ -1,9 +1,11 @@
 # The SQLSync Guide
 
+<!-- prettier-ignore-start -->
 > [!IMPORTANT]
 > SQLSync is in active development and thus is changing quickly.
 > Currently, do not use it in a production application as there is no backwards
 > compatibility or stability promise.
+<!-- prettier-ignore-end -->
 
 SQLSync is distributed as a Javascript package as well as a Rust Crate.
 Currently both are required to use SQLSync. Also, React is the only supported
@@ -65,36 +67,36 @@ use sqlsync_reducer::{execute, init_reducer, types::ReducerError};
 #[derive(Deserialize, Debug)]
 #[serde(tag = "tag")]
 enum Mutation {
-	InitSchema,
-	AddMessage { id: String, msg: String },
+  InitSchema,
+  AddMessage { id: String, msg: String },
 }
 
 init_reducer!(reducer);
 async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
-	let mutation: Mutation = serde_json::from_slice(&mutation[..])?;
+  let mutation: Mutation = serde_json::from_slice(&mutation[..])?;
 
-	match mutation {
-		Mutation::InitSchema => {
-			execute!(
-				"CREATE TABLE IF NOT EXISTS messages (
-					id TEXT PRIMARY KEY,
-					msg TEXT NOT NULL,
-					created_at TEXT NOT NULL
-				)"
-			).await;
-		}
+  match mutation {
+    Mutation::InitSchema => {
+      execute!(
+        "CREATE TABLE IF NOT EXISTS messages (
+          id TEXT PRIMARY KEY,
+          msg TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )"
+      ).await;
+    }
 
-		Mutation::AddMessage { id, msg } => {
-			log::info!("appending message({}): {}", id, msg);
-			execute!(
-				"insert into messages (id, msg, created_at)
-					values (?, ?, datetime('now'))",
-				id, msg
-			).await;
-		}
-	}
+    Mutation::AddMessage { id, msg } => {
+      log::info!("appending message({}): {}", id, msg);
+      execute!(
+        "insert into messages (id, msg, created_at)
+          values (?, ?, datetime('now'))",
+        id, msg
+      ).await;
+    }
+  }
 
-	Ok(())
+  Ok(())
 }
 ```
 
@@ -124,36 +126,36 @@ should look something like this:
 
 ```typescript
 import {
-	DocType,
-	createDocHooks,
-	serializeMutationAsJSON,
+  DocType,
+  createDocHooks,
+  serializeMutationAsJSON,
 } from "@orbitinghail/sqlsync-react";
 
 // Path to your compiled reducer artifact, your js bundler should handle making
 // this a working URL that resolves during development and in production.
 const REDUCER_URL = new URL(
-	"../reducer/target/wasm32-unknown-unknown/release/reducer.wasm",
-	import.meta.url
+  "../reducer/target/wasm32-unknown-unknown/release/reducer.wasm",
+  import.meta.url
 );
 
 // Must match the Mutation type in the Rust Reducer code
 export type Mutation =
-	| {
-			tag: "InitSchema";
-	  }
-	| {
-			tag: "AddMessage";
-			id: string;
-			msg: string;
-	  };
+  | {
+      tag: "InitSchema";
+    }
+  | {
+      tag: "AddMessage";
+      id: string;
+      msg: string;
+    };
 
 export const TaskDocType: DocType<Mutation> = {
-	reducerUrl: REDUCER_URL,
-	serializeMutation: serializeMutationAsJSON,
+  reducerUrl: REDUCER_URL,
+  serializeMutation: serializeMutationAsJSON,
 };
 
 export const { useMutate, useQuery, useSetConnectionEnabled } =
-	createDocHooks(TaskDocType);
+  createDocHooks(TaskDocType);
 ```
 
 ## Step 3: Hooking it up to your app
@@ -188,79 +190,79 @@ const DOC_ID = journalIdFromString("VM7fC4gKxa52pbdtrgd9G9");
 
 // Configure the SQLSync provider near the top of the React tree
 ReactDOM.createRoot(document.getElementById("root")!).render(
-	<SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
-		<App />
-	</SQLSyncProvider>
+  <SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
+    <App />
+  </SQLSyncProvider>
 );
 
 // Use SQLSync hooks in your app
 export function App() {
-	// we will use the standard useState hook to handle the message input box
-	const [msg, setMsg] = React.useState("");
+  // we will use the standard useState hook to handle the message input box
+  const [msg, setMsg] = React.useState("");
 
-	// create a mutate function for our document
-	const mutate = useMutate(DOC_ID);
+  // create a mutate function for our document
+  const mutate = useMutate(DOC_ID);
 
-	// initialize the schema; eventually this will be handled by SQLSync automatically
-	useEffect(() => {
-		mutate({ tag: "InitSchema" }).catch((err) => {
-			console.error("Failed to init schema", err);
-		});
-	}, [mutate]);
+  // initialize the schema; eventually this will be handled by SQLSync automatically
+  useEffect(() => {
+    mutate({ tag: "InitSchema" }).catch((err) => {
+      console.error("Failed to init schema", err);
+    });
+  }, [mutate]);
 
-	// create a callback which knows how to trigger the add message mutation
-	const handleSubmit = React.useCallback(
-		(e: FormEvent<HTMLFormElement>) => {
-			// Prevent the browser from reloading the page
-			e.preventDefault();
+  // create a callback which knows how to trigger the add message mutation
+  const handleSubmit = React.useCallback(
+    (e: FormEvent<HTMLFormElement>) => {
+      // Prevent the browser from reloading the page
+      e.preventDefault();
 
-			// create a unique message id
-			const id = crypto.randomUUID ? crypto.randomUUID() : uuidv4();
+      // create a unique message id
+      const id = crypto.randomUUID ? crypto.randomUUID() : uuidv4();
 
-			// don't add empty messages
-			if (msg.trim() !== "") {
-				mutate({ tag: "AddMessage", id, msg }).catch((err) => {
-					console.error("Failed to add message", err);
-				});
-				// clear the message
-				setMsg("");
-			}
-		},
-		[mutate, msg]
-	);
+      // don't add empty messages
+      if (msg.trim() !== "") {
+        mutate({ tag: "AddMessage", id, msg }).catch((err) => {
+          console.error("Failed to add message", err);
+        });
+        // clear the message
+        setMsg("");
+      }
+    },
+    [mutate, msg]
+  );
 
-	// finally, query SQLSync for all the messages, sorted by created_at
-	const { rows } = useQuery<{ id: string; msg: string }>(
-		DOC_ID,
-		sql`
+  // finally, query SQLSync for all the messages, sorted by created_at
+  const { rows } = useQuery<{ id: string; msg: string }>(
+    DOC_ID,
+    sql`
       select id, msg from messages
       order by created_at
     `
-	);
+  );
 
-	return (
-		<div>
-			<h1>Guestbook:</h1>
-			<ul>
-				{(rows ?? []).map(({ id, msg }) => (
-					<li key={id}>{msg}</li>
-				))}
-			</ul>
-			<h3>Leave a message:</h3>
-			<form onSubmit={handleSubmit}>
-				<label>
-					Msg:
-					<input
-						type="text"
-						name="msg"
-						value={msg}
-						onChange={(e) => setMsg(e.target.value)}
-					/>
-				</label>
-				<input type="submit" value="Submit" />
-			</form>
-		</div>
-	);
+  return (
+    <div>
+      <h1>Guestbook:</h1>
+      <ul>
+        {(rows ?? []).map(({ id, msg }) => (
+          <li key={id}>{msg}</li>
+        ))}
+      </ul>
+      <h3>Leave a message:</h3>
+      <form onSubmit={handleSubmit}>
+        <label>
+          Msg:
+          <input
+            type="text"
+            name="msg"
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+          />
+        </label>
+        <input type="submit" value="Submit" />
+      </form>
+    </div>
+  );
 }
 ```
 
