@@ -1102,8 +1102,9 @@ dependencies = [
 
 [[package]]
 name = "serde-wasm-bindgen"
-version = "0.6.0"
-source = "git+https://github.com/carlsverre/serde-wasm-bindgen?rev=638e36ea6c6334a709c582961cf457ed712d84b3#638e36ea6c6334a709c582961cf457ed712d84b3"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17ba92964781421b6cef36bf0d7da26d201e96d84e1b10e7ae6ed416e516906d"
 dependencies = [
  "js-sys",
  "serde",
@@ -1261,7 +1262,7 @@ dependencies = [
  "gloo",
  "gloo-net",
  "js-sys",
- "serde-wasm-bindgen 0.6.0",
+ "serde-wasm-bindgen 0.6.1",
  "serde_bytes",
  "sqlsync",
  "wasm-bindgen",
@@ -1309,7 +1310,7 @@ dependencies = [
  "log",
  "rand",
  "serde",
- "serde-wasm-bindgen 0.6.0",
+ "serde-wasm-bindgen 0.6.1",
  "serde_bytes",
  "sha2",
  "sqlsync",
