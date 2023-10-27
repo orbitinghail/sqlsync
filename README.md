@@ -32,6 +32,7 @@ You can also learn more about SQLSync and it's goals by watching Carl's WasmCon
 
 - Eventually consistent SQLite
 - Optimistic reads and writes
+- Reactive query subscriptions
 - Real-time collaboration
 - Offline-first
 - Cross-tab sync
