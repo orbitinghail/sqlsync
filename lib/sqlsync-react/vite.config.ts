@@ -1,6 +1,6 @@
+import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
-import react from "@vitejs/plugin-react";
 import dts from "vite-plugin-dts";
 
 export default defineConfig({

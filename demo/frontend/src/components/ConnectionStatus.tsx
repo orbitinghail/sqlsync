@@ -1,9 +1,9 @@
-import { rem, Button } from "@mantine/core";
+import { Button, rem } from "@mantine/core";
 import { useConnectionStatus } from "@orbitinghail/sqlsync-react";
 import { JournalId } from "@orbitinghail/sqlsync-worker";
+import { IconWifi, IconWifiOff } from "@tabler/icons-react";
 import { useCallback } from "react";
 import { useSetConnectionEnabled } from "../doctype";
-import { IconWifi, IconWifiOff } from "@tabler/icons-react";
 
 export const ConnectionStatus = ({ docId }: { docId: JournalId }) => {
   const status = useConnectionStatus();

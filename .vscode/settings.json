@@ -4,5 +4,23 @@
   "lldb.consoleMode": "commands",
   // this allows rust-analyzer to compile sqlsync_reducer::host_ffi
   "rust-analyzer.cargo.features": ["host"],
-  "rust-analyzer.showUnlinkedFileNotification": false
+  "rust-analyzer.showUnlinkedFileNotification": false,
+  "[typescriptreact][typescript][javascript][javascriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": false,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "never",
+      "quickfix.biome": "always",
+      "source.addMissingImports": "always",
+      "source.formatDocument": "always",
+      "source.organizeImports": "always"
+    },
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+  "[json][jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  }
 }

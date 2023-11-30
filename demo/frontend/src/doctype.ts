@@ -2,7 +2,7 @@ import { DocType, createDocHooks, serializeMutationAsJSON } from "@orbitinghail/
 
 const REDUCER_URL = new URL(
   "../../../target/wasm32-unknown-unknown/release/demo_reducer.wasm",
-  import.meta.url
+  import.meta.url,
 );
 
 // matches the Mutation type in demo/demo-reducer

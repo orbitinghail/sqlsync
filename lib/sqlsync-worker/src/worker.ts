@@ -1,6 +1,6 @@
-import { PortId, PortRouter } from "./port";
 import init, { DocReply, HandlerId, WorkerApi } from "../sqlsync-wasm/pkg/sqlsync_wasm.js";
 import { WorkerRequest } from "./index";
+import { PortId, PortRouter } from "./port";
 import { assertUnreachable } from "./util";
 
 const ports = new PortRouter();
@@ -24,7 +24,7 @@ const MessageQueue = (() => {
         (e) => {
           const err = e instanceof Error ? e.message : `error: ${JSON.stringify(e)}`;
           reply(m.portId, m.req.handlerId, { tag: "Err", err });
-        }
+        },
       );
     },
   };
@@ -34,10 +34,11 @@ const MessageQueue = (() => {
 // we have to make this check inverted because
 // WorkerGlobalScope extends SharedWorkerGlobalScope
 if (typeof SharedWorkerGlobalScope === "undefined" || !(self instanceof SharedWorkerGlobalScope)) {
-  const port = self as any as MessagePort; // eslint-disable-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: self extends messageport if we are not a shared worker
+  const port = self as any as MessagePort;
   const portId = ports.register(port);
   port.addEventListener("message", (e) =>
-    MessageQueue.push({ portId, req: e.data as WorkerRequest })
+    MessageQueue.push({ portId, req: e.data as WorkerRequest }),
   );
   console.log("sqlsync: handled dedicated worker connection; portId", portId);
 }
@@ -47,7 +48,7 @@ addEventListener("connect", (e: Event) => {
   const port = evt.ports[0];
   const portId = ports.register(port);
   port.addEventListener("message", (e) =>
-    MessageQueue.push({ portId, req: e.data as WorkerRequest })
+    MessageQueue.push({ portId, req: e.data as WorkerRequest }),
   );
   port.start();
   console.log("sqlsync: received connection from tab; portId", portId);

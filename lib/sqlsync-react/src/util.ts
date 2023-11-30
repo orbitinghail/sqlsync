@@ -1,10 +1,10 @@
 import { SqlValue } from "@orbitinghail/sqlsync-worker";
-import { Row } from "./sqlsync";
 import * as sha256 from "fast-sha256";
+import { Row } from "./sqlsync";
 
 // omits the given keys from each member of the union
 // https://stackoverflow.com/a/57103940/65872
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: any is required for this type magic to work
 export type OmitUnion<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
 export type NarrowTaggedEnum<E, T> = E extends { tag: T } ? E : never;
@@ -19,11 +19,11 @@ export function initWorker(workerUrl: string | URL): MessagePort {
   if (typeof SharedWorker !== "undefined") {
     const worker = new SharedWorker(workerUrl, { type });
     return worker.port;
-  } else {
-    const worker = new Worker(workerUrl, { type });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return worker as any as MessagePort;
   }
+
+  const worker = new Worker(workerUrl, { type });
+  // biome-ignore lint/suspicious/noExplicitAny: WebWorker extends MessagePort via duck typing
+  return worker as any as MessagePort;
 }
 
 const UTF8Encoder = new TextEncoder();
@@ -45,11 +45,11 @@ export function toRows<R extends Row = Row>(columns: string[], rows: SqlValue[][
 }
 
 export const pendingPromise = <T = undefined>(): [Promise<T>, (v: T) => void] => {
-  let resolve: (v: T) => void | undefined;
+  let resolve: (v: T) => void;
   const promise = new Promise<T>((r) => {
     resolve = r;
   });
-  // we know resolve is defined because the promise constructor runs syncronously
+  // biome-ignore lint/style/noNonNullAssertion: we know resolve is defined because the promise constructor runs syncronously
   return [promise, resolve!];
 };
 

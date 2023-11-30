@@ -3,3 +3,4 @@ packages:
   - "demo/frontend"
   - "lib/sqlsync-react"
   - "lib/sqlsync-worker"
+  - "docs"

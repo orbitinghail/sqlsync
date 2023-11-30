@@ -1,15 +1,15 @@
 import { Center, Flex, Paper, Stack, Title } from "@mantine/core";
 import { sql } from "@orbitinghail/sqlsync-react";
 import { JournalId } from "@orbitinghail/sqlsync-worker";
-import { ConnectionStatus } from "./ConnectionStatus";
 import { useMutate, useQuery } from "../doctype";
-import { Task, TaskItem } from "./TaskItem";
+import { ConnectionStatus } from "./ConnectionStatus";
 import { TaskForm } from "./TaskForm";
+import { Task, TaskItem } from "./TaskItem";
 
 export const TaskList = ({ docId }: { docId: JournalId }) => {
   const { rows: tasks } = useQuery<Task>(
     docId,
-    sql`select id, description, completed from tasks order by description`
+    sql`select id, description, completed from tasks order by description`,
   );
   const mutate = useMutate(docId);
 

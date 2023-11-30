@@ -1,8 +1,10 @@
 import { SQLSyncProvider } from "./context";
-import { DocType, Row } from "./sqlsync";
 import { createDocHooks, useConnectionStatus } from "./hooks";
-import { serializeMutationAsJSON } from "./util";
 import { sql } from "./sql";
+import { DocType, Row } from "./sqlsync";
+import { serializeMutationAsJSON } from "./util";
 
-export type { DocType, Row };
 export { SQLSyncProvider, createDocHooks, serializeMutationAsJSON, sql, useConnectionStatus };
+export type { DocType, Row };
+
+// eof: this file only exports

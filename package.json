@@ -1,0 +1,6 @@
+{
+	"devDependencies": {
+		"@biomejs/biome": "1.4.0",
+		"astro": "^3.4.0"
+	}
+}

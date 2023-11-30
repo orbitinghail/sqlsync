@@ -22,7 +22,6 @@ export function journalIdFromString(s: string): JournalId {
   const bytes = base58.decode(s);
   if (bytes.length === 16 || bytes.length === 32) {
     return bytes as JournalId;
-  } else {
-    throw new Error(`invalid journal id: ${s}; must be either 16 or 32 bytes`);
   }
+  throw new Error(`invalid journal id: ${s}; must be either 16 or 32 bytes`);
 }

@@ -10,9 +10,10 @@ export function useSQLSync(): SQLSync {
   const value = useContext(SQLSyncContext);
   if (import.meta.env.DEV && !value) {
     throw new Error(
-      "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
+      "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>",
     );
   }
+  // biome-ignore lint/style/noNonNullAssertion: asserts in dev
   return value!;
 }
 
@@ -33,7 +34,10 @@ export interface DocHooks<M> {
 export function createDocHooks<M>(docType: DocType<M>): DocHooks<M> {
   const useMutate = (docId: DocId): MutateFn<M> => {
     const sqlsync = useSQLSync();
-    return useCallback((mutation: M) => sqlsync.mutate(docId, docType, mutation), [sqlsync, docId]);
+    return useCallback(
+      (mutation: M) => sqlsync.mutate(docId, docType, mutation),
+      [sqlsync, docId, docType],
+    );
   };
 
   const useQueryWrapper = <R = Row>(docId: DocId, query: ParameterizedQuery | string) => {
@@ -44,7 +48,7 @@ export function createDocHooks<M>(docType: DocType<M>): DocHooks<M> {
     const sqlsync = useSQLSync();
     return useCallback(
       (enabled: boolean) => sqlsync.setConnectionEnabled(docId, docType, enabled),
-      [sqlsync, docId]
+      [sqlsync, docId, docType],
     );
   };
 
@@ -63,7 +67,7 @@ export type QueryState<R> =
 export function useQuery<M, R = Row>(
   docType: DocType<M>,
   docId: DocId,
-  rawQuery: ParameterizedQuery | string
+  rawQuery: ParameterizedQuery | string,
 ): QueryState<R> {
   const sqlsync = useSQLSync();
   const [state, setState] = useState<QueryState<R>>({ state: "pending" });

@@ -1,8 +1,8 @@
 import { Button, Flex, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useCallback } from "react";
-import { Mutation } from "../doctype";
 import { v4 as uuidv4 } from "uuid";
+import { Mutation } from "../doctype";
 
 interface TaskFormProps {
   mutate: (m: Mutation) => Promise<void>;
@@ -30,8 +30,8 @@ export const TaskForm = ({ mutate }: TaskFormProps) => {
             console.error("Failed to create task", err);
           });
       },
-      [mutate, form]
-    )
+      [mutate, form],
+    ),
   );
 
   return (

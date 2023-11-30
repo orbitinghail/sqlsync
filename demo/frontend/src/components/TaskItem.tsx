@@ -1,7 +1,7 @@
-import { Text, ActionIcon, Checkbox, Flex } from "@mantine/core";
+import { ActionIcon, Checkbox, Flex, Text } from "@mantine/core";
+import { IconX } from "@tabler/icons-react";
 import { useCallback } from "react";
 import { Mutation } from "../doctype";
-import { IconX } from "@tabler/icons-react";
 
 export interface Task {
   id: string;

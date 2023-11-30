@@ -1,0 +1,38 @@
+{
+  "$schema": "https://biomejs.dev/schemas/1.4.0/schema.json",
+  "organizeImports": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": {
+        "useSingleVarDeclarator": "off"
+      }
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "json": {
+    "parser": {
+      "allowComments": true
+    }
+  },
+  "files": {
+    "ignore": [
+      "lib/sqlsync-worker/sqlsync-wasm",
+      "lib/sqlsync-worker/dist",
+      "lib/sqlsync-react/dist",
+      "demo/cloudflare-backend/build",
+      "demo/cloudflare-backend/dist",
+      "demo/frontend/dist",
+      "target"
+    ]
+  }
+}

@@ -47,9 +47,6 @@
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-typescript": "^11.1.5",
-    "@typescript-eslint/eslint-plugin": "^6.9.0",
-    "@typescript-eslint/parser": "^6.9.0",
-    "eslint": "^8.52.0",
     "rollup": "^3.29.4",
     "tslib": "^2.6.2",
     "typescript": "^5.2.2"

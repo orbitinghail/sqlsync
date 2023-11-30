@@ -1,20 +1,18 @@
-/* eslint-disable react-refresh/only-export-components */
-
 import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 
+import { JournalId, journalIdFromString } from "@orbitinghail/sqlsync-worker";
 import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
 import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
-import { JournalId, journalIdFromString } from "@orbitinghail/sqlsync-worker";
 import { SQLSyncProvider } from "../src/context";
-import { DocType } from "../src/sqlsync";
 import { createDocHooks } from "../src/hooks";
-import { serializeMutationAsJSON } from "../src/util";
 import { sql } from "../src/sql";
+import { DocType } from "../src/sqlsync";
+import { serializeMutationAsJSON } from "../src/util";
 
 const DEMO_REDUCER_URL = new URL(
   "../../../target/wasm32-unknown-unknown/debug/sqlsync_react_test_reducer.wasm",
-  import.meta.url
+  import.meta.url,
 );
 
 const DOC_ID = journalIdFromString("VM7fC4gKxa52pbdtrgd9G9");
@@ -39,12 +37,13 @@ const CounterDocType: DocType<CounterOps> = {
 
 const { useMutate, useQuery } = createDocHooks(CounterDocType);
 
+// biome-ignore lint/style/noNonNullAssertion: root is defined
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
       <App docId={DOC_ID} />
     </SQLSyncProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 );
 
 function App({ docId }: { docId: JournalId }) {
@@ -70,7 +69,7 @@ function App({ docId }: { docId: JournalId }) {
 
   const query = useQuery<{ value: number }>(
     docId,
-    sql`select value, 'hi', 1.23, ${"foo"} as s from counter`
+    sql`select value, 'hi', 1.23, ${"foo"} as s from counter`,
   );
 
   return (
@@ -82,8 +81,12 @@ function App({ docId }: { docId: JournalId }) {
       </p>
       <p>The counter is stored in a SQL database, and the state is managed by sqlsync-react.</p>
       <p>
-        <button onClick={handleIncr}>Incr</button>
-        <button onClick={handleDecr}>Decr</button>
+        <button type="button" onClick={handleIncr}>
+          Incr
+        </button>
+        <button type="button" onClick={handleDecr}>
+          Decr
+        </button>
       </p>
       {query.state === "pending" ? (
         <pre>Loading...</pre>

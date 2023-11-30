@@ -1,25 +1,15 @@
 # The SQLSync Guide
 
-<!-- prettier-ignore-start -->
 > [!IMPORTANT]
-> SQLSync is in active development and thus is changing quickly.
-> Currently, do not use it in a production application as there is no backwards
-> compatibility or stability promise.
-<!-- prettier-ignore-end -->
+> SQLSync is in active development and thus is changing quickly. Currently, do not use it in a production application as there is no backwards compatibility or stability promise.
 
-SQLSync is distributed as a Javascript package as well as a Rust Crate.
-Currently both are required to use SQLSync. Also, React is the only supported
-framework at the moment.
+SQLSync is distributed as a JavaScript package as well as a Rust Crate.  Currently, both are required to use SQLSync. Also, React is the only supported framework at the moment.
 
-If you want to jump ahead to a working demo, check out the finished product at:
-https://github.com/orbitinghail/sqlsync-demo-guestbook
+If you want to jump ahead to a working demo, check out the finished product at: https://github.com/orbitinghail/sqlsync-demo-guestbook
 
 ## Step 1: Creating the Reducer
 
-SQLSync requires that all mutations are handled by a piece of code called "The
-Reducer". Currently this code has to be written in Rust, however we have plans
-to make it possible to write Reducers using JS or other languages. The fastest
-way to create a reducer is to initialize a new Rust project like so:
+SQLSync requires that all mutations are handled by a piece of code called "The Reducer". Currently, this code has to be written in Rust, however we have plans to make it possible to write Reducers using JS or other languages. The fastest way to create a reducer is to initialize a new Rust project like so:
 
 1. Make sure you have Rust installed; if not install using [rustup].
 2. Install support for the `wasm32-unknown-unknown` target:
@@ -112,17 +102,11 @@ cargo build --target wasm32-unknown-unknown --release
 npm install @orbitinghail/sqlsync-react @orbitinghail/sqlsync-worker
 ```
 
-The following examples will be using Typescript to make everything a bit more
-precise. If you are not using Typescript you can still use SQLSync, just skip
-the type descriptions and annotations.
+The following examples will be using Typescript to make everything a bit more precise. If you are not using Typescript you can still use SQLSync, just skip the type descriptions and annotations.
 
-Also, make sure your JS bundling tool supports importing assets from the
-filesystem, as will need that to easily get access to the Reducer we compiled
-earlier in this guide. If in doubt, [Vite] is highly recommended.
+Also, make sure your JS bundling tool supports importing assets from the file system, as will need that to easily get access to the Reducer we compiled earlier in this guide. If in doubt, [Vite] is highly recommended.
 
-Create a file which will contain type information for your Mutations, the
-reducer URL, and export some useful React hooks for your app to consume. It
-should look something like this:
+Create a file which will contain type information for your Mutations, the reducer URL, and export some useful React hooks for your app to consume. It should look something like this:
 
 ```typescript
 import {
@@ -160,12 +144,9 @@ export const { useMutate, useQuery, useSetConnectionEnabled } =
 
 ## Step 3: Hooking it up to your app
 
-Using the hooks exported from the file in
-[Step 2](#step-2-install-and-configure-the-react-library) we can easily hook
-SQLSync up to our application.
+Using the hooks exported from the file in [Step 2](#step-2-install-and-configure-the-react-library) we can easily hook SQLSync up to our application.
 
-Here is a complete example of a very trivial guestbook application which uses
-the reducer we created above. If
+Here is a complete example of a very trivial guestbook application which uses the reducer we created above.
 
 ```tsx
 import React, { FormEvent, useEffect } from "react";
@@ -268,8 +249,7 @@ export function App() {
 
 ## Step 4: Connect to the coordinator (COMING SOON)
 
-This step still requires using SQLSync from source. For now you'll have to
-follow the directions in the [Contribution Guide] to setup a Local Coordinator.
+This step still requires using SQLSync from source. For now, you'll have to follow the directions in the [Contribution Guide] to set up a Local Coordinator.
 
 [rustup]: https://rustup.rs/
 [Vite]: https://vitejs.dev/

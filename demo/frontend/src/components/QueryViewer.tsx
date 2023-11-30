@@ -22,10 +22,9 @@ export const QueryViewerInner = ({ docId }: Props) => {
         if (typeof value === "bigint") {
           return value.toString();
         }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return value;
       },
-      2
+      2,
     );
   }, [result.rows]);
 
