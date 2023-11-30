@@ -62,6 +62,12 @@ pub struct ExecResponse {
     pub changes: usize,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SqliteError {
+    pub code: Option<i32>,
+    pub message: String,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct LogRecord {
     level: String,
@@ -139,7 +145,10 @@ impl Row {
         T::try_from(self.get_value(idx))
     }
 
-    pub fn maybe_get<'a, T>(&'a self, idx: usize) -> Result<Option<T>, ReducerError>
+    pub fn maybe_get<'a, T>(
+        &'a self,
+        idx: usize,
+    ) -> Result<Option<T>, ReducerError>
     where
         T: TryFrom<&'a SqliteValue, Error = ReducerError>,
     {

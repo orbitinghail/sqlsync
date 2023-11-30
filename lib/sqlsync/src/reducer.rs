@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::format};
 
 use rusqlite::{
     params_from_iter,
@@ -7,7 +7,9 @@ use rusqlite::{
 };
 use sqlsync_reducer::{
     host_ffi::{register_log_handler, WasmFFI, WasmFFIError},
-    types::{ExecResponse, QueryResponse, Request, Row, SqliteValue},
+    types::{
+        ExecResponse, QueryResponse, Request, Row, SqliteError, SqliteValue,
+    },
 };
 use thiserror::Error;
 use wasmi::{errors::LinkerError, Engine, Linker, Module, Store};
@@ -101,7 +103,10 @@ impl Reducer {
 
                         let ptr = ffi.encode(
                             &mut self.store,
-                            &QueryResponse { columns, rows },
+                            &Ok::<_, SqliteError>(QueryResponse {
+                                columns,
+                                rows,
+                            }),
                         )?;
 
                         responses.insert(id, ptr);
@@ -114,15 +119,23 @@ impl Reducer {
                         let params = params_from_iter(
                             params.into_iter().map(from_sqlite_value),
                         );
-                        let changes = tx.execute(&sql, params)?;
+                        let result = tx
+                            .execute(&sql, params)
+                            .map(|changes| ExecResponse { changes })
+                            .map_err(|e| SqliteError {
+                                code: match e {
+                                    rusqlite::Error::SqliteFailure(e, _) => {
+                                        Some(e.extended_code)
+                                    }
+                                    _ => None,
+                                },
+                                message: format!("{}", e),
+                            });
 
                         let end = unix_timestamp_milliseconds();
                         log::info!("exec took {}ms", end - start);
 
-                        let ptr = ffi.encode(
-                            &mut self.store,
-                            &ExecResponse { changes },
-                        )?;
+                        let ptr = ffi.encode(&mut self.store, &result)?;
                         responses.insert(id, ptr);
                     }
                 }
@@ -133,6 +146,38 @@ impl Reducer {
         }
 
         Ok(())
+    }
+
+    fn run_query(
+        &mut self,
+        tx: &mut Transaction,
+        sql: &str,
+        params: &[SqliteValue],
+    ) -> std::result::Result<QueryResponse, SqliteError> {
+        log::info!("received query req: {}, {:?}", sql, params);
+        let params =
+            params_from_iter(params.into_iter().map(from_sqlite_value));
+        let mut stmt = tx.prepare(&sql)?;
+
+        let columns: Vec<String> = stmt
+            .column_names()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+        let num_columns = columns.len();
+
+        let start = unix_timestamp_milliseconds();
+
+        let rows = stmt
+            .query_and_then(params, move |row| {
+                (0..num_columns)
+                    .map(|i| Ok(to_sqlite_value(row.get_ref(i)?)))
+                    .collect::<std::result::Result<Row, rusqlite::Error>>()
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        let end = unix_timestamp_milliseconds();
+        log::info!("query took {}ms", end - start);
     }
 }
 

@@ -12,8 +12,8 @@ use serde::de::DeserializeOwned;
 use crate::{
     guest_ffi::{fbm, FFIBufPtr},
     types::{
-        ExecResponse, QueryResponse, ReducerError, Request, RequestId, Requests, Responses,
-        SqliteValue,
+        ExecResponse, QueryResponse, ReducerError, Request, RequestId,
+        Requests, Responses, SqliteError, SqliteValue,
     },
 };
 
@@ -43,7 +43,12 @@ pub struct Reactor {
 
 impl Reactor {
     pub fn new() -> Self {
-        Self { task: None, request_id_generator: 0, requests: None, responses: None }
+        Self {
+            task: None,
+            request_id_generator: 0,
+            requests: None,
+            responses: None,
+        }
     }
 
     fn queue_request(&mut self, request: Request) -> RequestId {
@@ -55,7 +60,10 @@ impl Reactor {
         id
     }
 
-    fn get_response<T: DeserializeOwned>(&mut self, id: RequestId) -> Option<T> {
+    fn get_response<T: DeserializeOwned>(
+        &mut self,
+        id: RequestId,
+    ) -> Option<T> {
         self.responses
             .as_mut()
             .and_then(|b| b.remove(&id))
@@ -69,7 +77,10 @@ impl Reactor {
         self.task = Some(task);
     }
 
-    pub fn step(&mut self, responses: Responses) -> Result<Requests, ReducerError> {
+    pub fn step(
+        &mut self,
+        responses: Responses,
+    ) -> Result<Requests, ReducerError> {
         if let Some(ref mut previous) = self.responses {
             // if we still have previous responses, merge new responses in
             // this replaces keys in previous with those in next - as long
@@ -118,13 +129,19 @@ impl<T: DeserializeOwned> Future for ResponseFuture<T> {
     }
 }
 
-pub fn raw_query(sql: String, params: Vec<SqliteValue>) -> ResponseFuture<QueryResponse> {
+pub fn raw_query(
+    sql: String,
+    params: Vec<SqliteValue>,
+) -> ResponseFuture<Result<QueryResponse, SqliteError>> {
     let request = Request::Query { sql, params };
     let id = reactor().queue_request(request);
     ResponseFuture::new(id)
 }
 
-pub fn raw_execute(sql: String, params: Vec<SqliteValue>) -> ResponseFuture<ExecResponse> {
+pub fn raw_execute(
+    sql: String,
+    params: Vec<SqliteValue>,
+) -> ResponseFuture<Result<ExecResponse, SqliteError>> {
     let request = Request::Exec { sql, params };
     let id = reactor().queue_request(request);
     ResponseFuture::new(id)

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use sqlsync_reducer::{
     host_ffi::{register_log_handler, WasmFFI},
-    types::{ExecResponse, QueryResponse, Request},
+    types::{ExecResponse, QueryResponse, Request, SqliteError},
 };
 use wasmi::{Engine, Linker, Module, Store};
 
@@ -22,8 +22,9 @@ fn main() -> anyhow::Result<()> {
         .init()?;
 
     // build guest.wasm using: `cargo build --target wasm32-unknown-unknown --example guest`
-    let wasm_bytes =
-        include_bytes!("../../../target/wasm32-unknown-unknown/debug/examples/guest.wasm");
+    let wasm_bytes = include_bytes!(
+        "../../../target/wasm32-unknown-unknown/debug/examples/guest.wasm"
+    );
 
     let engine = Engine::default();
     let module = Module::new(&engine, &wasm_bytes[..])?;
@@ -32,7 +33,8 @@ fn main() -> anyhow::Result<()> {
     register_log_handler(&mut linker)?;
 
     let mut store = Store::new(&engine, WasmFFI::uninitialized());
-    let instance = linker.instantiate(&mut store, &module)?.start(&mut store)?;
+    let instance =
+        linker.instantiate(&mut store, &module)?.start(&mut store)?;
 
     // initialize the FFI
     let ffi = WasmFFI::initialized(&store, &instance)?;
@@ -52,21 +54,35 @@ fn main() -> anyhow::Result<()> {
         let mut responses = BTreeMap::new();
         for (id, req) in requests_inner {
             match req {
-                Request::Query { .. } => {
-                    log::info!("received query request: {:?}", req);
+                Request::Query { sql, params } => {
+                    log::info!("received query request: {} {:?}", sql, params);
                     let ptr = ffi.encode(
                         &mut store,
-                        &QueryResponse {
+                        &Ok::<_, SqliteError>(QueryResponse {
                             columns: vec!["foo".into(), "bar".into()],
                             rows: vec![vec!["baz".into(), "qux".into()].into()],
-                        },
+                        }),
                     )?;
                     responses.insert(id, ptr);
                 }
-                Request::Exec { .. } => {
-                    log::info!("received exec request: {:?}", req);
-                    let ptr = ffi.encode(&mut store, &ExecResponse { changes: 1 })?;
-                    responses.insert(id, ptr);
+                Request::Exec { sql, params } => {
+                    log::info!("received exec request: {} {:?}", sql, params);
+                    if sql == "FAIL" {
+                        let ptr = ffi.encode(
+                            &mut store,
+                            &Err::<ExecResponse, _>(SqliteError {
+                                code: Some(1),
+                                message: "error".to_string(),
+                            }),
+                        )?;
+                        responses.insert(id, ptr);
+                    } else {
+                        let ptr = ffi.encode(
+                            &mut store,
+                            &Ok::<_, SqliteError>(ExecResponse { changes: 1 }),
+                        )?;
+                        responses.insert(id, ptr);
+                    }
                 }
             }
         }
