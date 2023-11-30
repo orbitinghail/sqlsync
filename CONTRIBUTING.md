@@ -1,7 +1,6 @@
 # Contributing to SQLSync
 
-This document attempts to explain how to work on SQLSync itself. Buckle up, it's
-pretty rough and is changing fast.
+This document attempts to explain how to work on SQLSync itself. Buckle up, it's pretty rough and is changing fast.
 
 ### Dependencies
 
@@ -21,13 +20,8 @@ just package-sqlsync-worker dev
 
 ### Local Coordinator
 
-<!-- prettier-ignore-start -->
 > [!WARNING]
-> Currently this seems to require modifying the wrangler.toml config
-> file to point at your own Cloudflare buckets (even though they aren't being
-> used). Work is underway to replace the local coordinator with a wrangler
-> agnostic alternative optimized for local development.
-<!-- prettier-ignore-end -->
+> Currently this seems to require modifying the wrangler.toml config file to point at your own Cloudflare buckets (even though they aren't being used). Work is underway to replace the local coordinator with a wrangler agnostic alternative optimized for local development.
 
 ```bash
 cd demo/cloudflare-backend
@@ -60,10 +54,7 @@ just test-end-to-end-local-net
 
 ## Community & Contributing
 
-If you are interested in contributing to SQLSync, please [join the Discord
-community][discord] and let us know what you want to build. All contributions
-will be held to a high standard, and are more likely to be accepted if they are
-tied to an existing task and agreed upon specification.
+If you are interested in contributing to SQLSync, please [join the Discord community][discord] and let us know what you want to build. All contributions will be held to a high standard, and are more likely to be accepted if they are tied to an existing task and agreed upon specification.
 
 [![Join the SQLSync Community](https://discordapp.com/api/guilds/1149205110262595634/widget.png?style=banner2)][discord]
 
