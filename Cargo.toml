@@ -19,6 +19,7 @@ edition = "2021"
 homepage = "https://sqlsync.dev"
 license-file = "LICENSE"
 repository = "https://github.com/orbitinghail/sqlsync"
+version = "0.2.0"
 
 [profile.release]
 lto = true
