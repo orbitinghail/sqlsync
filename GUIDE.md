@@ -79,7 +79,7 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
           msg TEXT NOT NULL,
           created_at TEXT NOT NULL
         )"
-      ).await;
+      ).await?;
     }
 
     Mutation::AddMessage { id, msg } => {
@@ -88,7 +88,7 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
         "insert into messages (id, msg, created_at)
           values (?, ?, datetime('now'))",
         id, msg
-      ).await;
+      ).await?;
     }
   }
 
