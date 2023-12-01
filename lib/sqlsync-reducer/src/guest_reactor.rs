@@ -12,8 +12,8 @@ use serde::de::DeserializeOwned;
 use crate::{
     guest_ffi::{fbm, FFIBufPtr},
     types::{
-        ExecResponse, QueryResponse, ReducerError, Request, RequestId,
-        Requests, Responses, SqliteError, SqliteValue,
+        ErrorResponse, ExecResponse, QueryResponse, ReducerError, Request,
+        RequestId, Requests, Responses, SqliteValue,
     },
 };
 
@@ -107,6 +107,7 @@ impl Reactor {
     }
 }
 
+#[must_use]
 pub struct ResponseFuture<T: DeserializeOwned> {
     id: RequestId,
     _marker: std::marker::PhantomData<T>,
@@ -132,7 +133,7 @@ impl<T: DeserializeOwned> Future for ResponseFuture<T> {
 pub fn raw_query(
     sql: String,
     params: Vec<SqliteValue>,
-) -> ResponseFuture<Result<QueryResponse, SqliteError>> {
+) -> ResponseFuture<Result<QueryResponse, ErrorResponse>> {
     let request = Request::Query { sql, params };
     let id = reactor().queue_request(request);
     ResponseFuture::new(id)
@@ -141,7 +142,7 @@ pub fn raw_query(
 pub fn raw_execute(
     sql: String,
     params: Vec<SqliteValue>,
-) -> ResponseFuture<Result<ExecResponse, SqliteError>> {
+) -> ResponseFuture<Result<ExecResponse, ErrorResponse>> {
     let request = Request::Exec { sql, params };
     let id = reactor().queue_request(request);
     ResponseFuture::new(id)

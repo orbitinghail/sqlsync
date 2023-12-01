@@ -29,7 +29,7 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                     created_at TEXT NOT NULL
                 )"
             )
-            .await;
+            .await?;
         }
 
         Mutation::CreateTask { id, description } => {
@@ -40,11 +40,11 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                 id,
                 description
             )
-            .await;
+            .await?;
         }
 
         Mutation::DeleteTask { id } => {
-            execute!("delete from tasks where id = ?", id).await;
+            execute!("delete from tasks where id = ?", id).await?;
         }
 
         Mutation::ToggleCompleted { id } => {
@@ -52,7 +52,7 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                 "update tasks set completed = not completed where id = ?",
                 id
             )
-            .await;
+            .await?;
         }
     }
 

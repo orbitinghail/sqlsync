@@ -29,7 +29,7 @@ enum Mutation {
 }
 
 async fn query_max_sort() -> Result<f64, ReducerError> {
-    let response = query!("select max(sort) from tasks").await;
+    let response = query!("select max(sort) from tasks").await?;
     assert!(response.rows.len() == 1, "expected 1 row");
     Ok(response.rows[0].maybe_get(0)?.unwrap_or(0.0))
 }
@@ -45,7 +45,7 @@ async fn query_sort_after(id: i64) -> Result<f64, ReducerError> {
         ",
         id
     )
-    .await;
+    .await?;
 
     if response.rows.len() == 0 {
         query_max_sort().await
@@ -73,7 +73,7 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                     created_at TEXT NOT NULL
                 )"
             )
-            .await;
+            .await?;
         }
 
         Mutation::AppendTask { id, description } => {
@@ -86,18 +86,14 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                 max_sort + 1.,
                 description
             )
-            .await;
+            .await?;
         }
 
         Mutation::RemoveTask { id } => {
-            execute!("delete from tasks where id = ?", id).await;
+            execute!("delete from tasks where id = ?", id).await?;
         }
 
-        Mutation::UpdateTask {
-            id,
-            description,
-            completed,
-        } => {
+        Mutation::UpdateTask { id, description, completed } => {
             execute!(
                 "update tasks set
                     description = IFNULL(?, description),
@@ -107,12 +103,13 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                 description,
                 completed
             )
-            .await;
+            .await?;
         }
 
         Mutation::MoveTask { id, after } => {
             let new_sort = query_sort_after(after).await?;
-            execute!("update tasks set sort = ? where id = ?", new_sort, id);
+            execute!("update tasks set sort = ? where id = ?", new_sort, id)
+                .await?;
         }
     }
 

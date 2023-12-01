@@ -18,10 +18,10 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                 key,
                 value
             )
-            .await;
+            .await?;
         }
         Mutation::Delete(key) => {
-            execute!("DELETE FROM kv WHERE key = ?", key).await;
+            execute!("DELETE FROM kv WHERE key = ?", key).await?;
         }
     }
 

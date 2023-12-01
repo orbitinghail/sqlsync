@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use sqlsync_reducer::{
     host_ffi::{register_log_handler, WasmFFI},
-    types::{ExecResponse, QueryResponse, Request, SqliteError},
+    types::{ErrorResponse, ExecResponse, QueryResponse, Request},
 };
 use wasmi::{Engine, Linker, Module, Store};
 
@@ -58,7 +58,7 @@ fn main() -> anyhow::Result<()> {
                     log::info!("received query request: {} {:?}", sql, params);
                     let ptr = ffi.encode(
                         &mut store,
-                        &Ok::<_, SqliteError>(QueryResponse {
+                        &Ok::<_, ErrorResponse>(QueryResponse {
                             columns: vec!["foo".into(), "bar".into()],
                             rows: vec![vec!["baz".into(), "qux".into()].into()],
                         }),
@@ -70,16 +70,20 @@ fn main() -> anyhow::Result<()> {
                     if sql == "FAIL" {
                         let ptr = ffi.encode(
                             &mut store,
-                            &Err::<ExecResponse, _>(SqliteError {
-                                code: Some(1),
-                                message: "error".to_string(),
-                            }),
+                            &Err::<ExecResponse, _>(
+                                ErrorResponse::SqliteError {
+                                    code: 1,
+                                    message: "error".to_string(),
+                                },
+                            ),
                         )?;
                         responses.insert(id, ptr);
                     } else {
                         let ptr = ffi.encode(
                             &mut store,
-                            &Ok::<_, SqliteError>(ExecResponse { changes: 1 }),
+                            &Ok::<_, ErrorResponse>(ExecResponse {
+                                changes: 1,
+                            }),
                         )?;
                         responses.insert(id, ptr);
                     }

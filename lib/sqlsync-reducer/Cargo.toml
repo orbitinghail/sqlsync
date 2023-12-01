@@ -15,13 +15,13 @@ serde = { workspace = true, features = ["derive"] }
 bincode.workspace = true
 futures.workspace = true
 log.workspace = true
+thiserror.workspace = true
 
 wasmi = { workspace = true, optional = true }
-thiserror = { workspace = true, optional = true }
 
 [features]
 default = ["guest"]
-host = ["wasmi", "thiserror"]
+host = ["wasmi"]
 guest = []
 
 [dev-dependencies]
