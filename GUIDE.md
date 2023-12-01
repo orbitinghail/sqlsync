@@ -11,7 +11,13 @@ If you want to jump ahead to a working demo, check out the finished product at: 
 
 SQLSync requires that all mutations are handled by a piece of code called "The Reducer". Currently, this code has to be written in Rust, however we have plans to make it possible to write Reducers using JS or other languages. The fastest way to create a reducer is to initialize a new Rust project like so:
 
-1. Make sure you have Rust installed; if not install using [rustup].
+1. Make sure you have Rust stable installed; if not install using [rustup]:
+
+```bash
+rustup toolchain install stable
+rustup default stable
+```
+
 2. Install support for the `wasm32-unknown-unknown` target:
 
 ```bash
@@ -95,6 +101,9 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
 ```bash
 cargo build --target wasm32-unknown-unknown --release
 ```
+
+> [!IMPORTANT]
+> Currently Rust nightly will fail to build reducers to Wasm. Please make sure you are using Rust stable. You can use it as a one-off with the command `rustup run stable cargo build...`
 
 ## Step 2: Install and configure the React library
 
