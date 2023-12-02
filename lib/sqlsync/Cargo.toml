@@ -1,9 +1,9 @@
 [package]
 name = "sqlsync"
 resolver = "2"
-version = "0.1.0"
 description = "SQLSync is a collaborative offline-first wrapper around SQLite. It is designed to synchronize web application state between users, devices, and the edge."
 
+version.workspace = true
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true

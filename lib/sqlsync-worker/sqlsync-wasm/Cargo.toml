@@ -1,8 +1,12 @@
 [package]
 name = "sqlsync-wasm"
-version = "0.1.0"
-authors = ["Carl Sverre <carl@orbitinghail.dev>"]
-edition = "2018"
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license-file.workspace = true
+repository.workspace = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]
