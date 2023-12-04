@@ -98,3 +98,9 @@ publish-sqlsync-react: package-sqlsync-react
 
 publish-sqlsync-reducer:
     cd lib/sqlsync-reducer && cargo publish
+
+publish-demo-backend:
+    cd demo/cloudflare-backend && pnpm wrangler-deploy
+
+publish-demo-frontend: (package-sqlsync-worker "release") package-sqlsync-react
+    cd demo/frontend && pnpm release
