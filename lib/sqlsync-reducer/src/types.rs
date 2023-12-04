@@ -9,6 +9,7 @@ use std::{
 
 use log::Level;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 pub type RequestId = u32;
 
@@ -60,6 +61,14 @@ pub struct QueryResponse {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ExecResponse {
     pub changes: usize,
+}
+
+#[derive(Serialize, Deserialize, Debug, Error)]
+pub enum ErrorResponse {
+    #[error("SQLite Error({code}): {message}")]
+    SqliteError { code: i32, message: String },
+    #[error("Unknown: {0}")]
+    Unknown(String),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -139,7 +148,10 @@ impl Row {
         T::try_from(self.get_value(idx))
     }
 
-    pub fn maybe_get<'a, T>(&'a self, idx: usize) -> Result<Option<T>, ReducerError>
+    pub fn maybe_get<'a, T>(
+        &'a self,
+        idx: usize,
+    ) -> Result<Option<T>, ReducerError>
     where
         T: TryFrom<&'a SqliteValue, Error = ReducerError>,
     {

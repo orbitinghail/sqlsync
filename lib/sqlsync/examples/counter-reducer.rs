@@ -15,31 +15,32 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
     let mutation: Mutation = bincode::deserialize(&mutation)?;
     match mutation {
         Mutation::InitSchema => {
-            futures::join!(
-                execute!(
-                    "CREATE TABLE IF NOT EXISTS counter (
+            let create_table = execute!(
+                "CREATE TABLE IF NOT EXISTS counter (
                     id INTEGER PRIMARY KEY,
                     value INTEGER
                 )"
-                ),
-                execute!(
-                    "INSERT OR IGNORE INTO counter (id, value) VALUES (0, 0)"
-                )
             );
+            let init_counter = execute!(
+                "INSERT OR IGNORE INTO counter (id, value) VALUES (0, 0)"
+            );
+
+            create_table.await?;
+            init_counter.await?;
         }
         Mutation::Incr => {
             execute!(
                 "INSERT INTO counter (id, value) VALUES (0, 0)
                 ON CONFLICT (id) DO UPDATE SET value = value + 1"
             )
-            .await;
+            .await?;
         }
         Mutation::Decr => {
             execute!(
                 "INSERT INTO counter (id, value) VALUES (0, 0)
                 ON CONFLICT (id) DO UPDATE SET value = value - 1"
             )
-            .await;
+            .await?;
         }
     }
 

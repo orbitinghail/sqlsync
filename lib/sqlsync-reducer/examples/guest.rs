@@ -17,7 +17,8 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
     log::info!("running query and execute at the same time");
 
     let x: Option<i64> = None;
-    let query_future = query!("SELECT * FROM foo WHERE bar = ?", "baz", 1, 1.23, x);
+    let query_future =
+        query!("SELECT * FROM foo WHERE bar = ?", "baz", 1, 1.23, x);
     let exec_future = execute!("SELECT * FROM foo WHERE bar = ?", "baz");
 
     let (result, result2) = futures::join!(query_future, exec_future);
@@ -34,6 +35,17 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
 
     let result = query_future.await;
     log::info!("final query result: {:?}", result);
+
+    log::info!("testing errors");
+    if let Err(err) = execute!("FAIL").await {
+        log::error!("error: {:?}", err);
+    } else {
+        panic!("expected error");
+    }
+
+    log::info!("make sure we can resume queries after an error");
+    let result = execute!("SELECT * FROM foo WHERE bar = ?", "baz").await;
+    log::info!("result: {:?}", result);
 
     Ok(())
 }
