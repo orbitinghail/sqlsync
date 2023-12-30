@@ -1,27 +1,42 @@
 import { ConnectionStatus, DocId } from "@orbitinghail/sqlsync-worker";
-import { deepEqual } from "fast-equals";
 // import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { createContext, createMemo } from "solid-js";
+import { Accessor, createEffect, createSignal, onCleanup, useContext } from "solid-js";
 import { SQLSyncContext } from "./context";
 import { ParameterizedQuery, normalizeQuery } from "./sql";
 import { DocType, QuerySubscription, Row, SQLSync } from "./sqlsync";
 import { pendingPromise } from "./util";
 
-export function useSQLSync(): SQLSync {
-  const value = createContext(SQLSyncContext);
-  if (import.meta.env.DEV && !value) {
+export function useSQLSync(): Accessor<SQLSync> {
+  const [value] = useContext(SQLSyncContext);
+  if (import.meta.env.DEV && !value()) {
     throw new Error(
       "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
     );
   }
+
   // biome-ignore lint/style/noNonNullAssertion: asserts in dev
-  return value!;
+  return () => {
+    const sqlsync = value();
+    if (import.meta.env.DEV && !sqlsync) {
+      throw new Error(
+        "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
+      );
+    } else if (!sqlsync) {
+      console.error(
+        "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
+      );
+    }
+    return sqlsync!;
+  };
 }
 
 type MutateFn<M> = (mutation: M) => Promise<void>;
 type UseMutateFn<M> = (docId: DocId) => MutateFn<M>;
 
-type UseQueryFn = <R = Row>(docId: DocId, query: ParameterizedQuery | string) => QueryState<R>;
+type UseQueryFn = <R = Row>(
+  docId: Accessor<DocId>,
+  query: Accessor<ParameterizedQuery | string>
+) => Accessor<QueryState<R>>;
 
 type SetConnectionEnabledFn = (enabled: boolean) => Promise<void>;
 type UseSetConnectionEnabledFn = (docId: DocId) => SetConnectionEnabledFn;
@@ -32,22 +47,22 @@ export interface DocHooks<M> {
   useSetConnectionEnabled: UseSetConnectionEnabledFn;
 }
 
-export function createDocHooks<M>(docType: DocType<M>): DocHooks<M> {
+export function createDocHooks<M>(docType: Accessor<DocType<M>>): DocHooks<M> {
   const useMutate = (docId: DocId): MutateFn<M> => {
     const sqlsync = useSQLSync();
-    return createMemo((mutation: M) => sqlsync.mutate(docId, docType, mutation));
+    return (mutation: M) => sqlsync().mutate(docId, docType(), mutation);
   };
 
-  const useQueryWrapper = <R = Row>(docId: DocId, query: ParameterizedQuery | string) => {
+  const useQueryWrapper = <R = Row>(
+    docId: Accessor<DocId>,
+    query: Accessor<ParameterizedQuery | string>
+  ) => {
     return useQuery<M, R>(docType, docId, query);
   };
 
   const useSetConnectionEnabledWrapper = (docId: DocId) => {
     const sqlsync = useSQLSync();
-    return useCallback(
-      (enabled: boolean) => sqlsync.setConnectionEnabled(docId, docType, enabled),
-      [sqlsync, docId, docType]
-    );
+    return (enabled: boolean) => sqlsync().setConnectionEnabled(docId, docType(), enabled);
   };
 
   return {
@@ -63,22 +78,16 @@ export type QueryState<R> =
   | { state: "error"; error: Error; rows?: R[] };
 
 export function useQuery<M, R = Row>(
-  docType: DocType<M>,
-  docId: DocId,
-  rawQuery: ParameterizedQuery | string
-): QueryState<R> {
+  docType: Accessor<DocType<M>>,
+  docId: Accessor<DocId>,
+  rawQuery: Accessor<ParameterizedQuery | string>
+): Accessor<QueryState<R>> {
   const sqlsync = useSQLSync();
-  const [state, setState] = useState<QueryState<R>>({ state: "pending" });
+  const [state, setState] = createSignal<QueryState<R>>({ state: "pending" });
 
-  // memoize query based on deep equality
-  let query = normalizeQuery(rawQuery);
-  const queryRef = useRef<ParameterizedQuery>(query);
-  if (!deepEqual(queryRef.current, query)) {
-    queryRef.current = query;
-  }
-  query = queryRef.current;
+  createEffect(() => {
+    let query = normalizeQuery(rawQuery());
 
-  useEffect(() => {
     const [unsubPromise, unsubResolve] = pendingPromise<() => void>();
 
     const subscription: QuerySubscription = {
@@ -91,29 +100,32 @@ export function useQuery<M, R = Row>(
         })),
     };
 
-    sqlsync
-      .subscribe(docId, docType, query, subscription)
+    sqlsync()
+      .subscribe(docId(), docType(), query, subscription)
       .then(unsubResolve)
       .catch((err: Error) => {
         console.error("sqlsync: error subscribing", err);
         setState({ state: "error", error: err });
       });
 
-    return () => {
+    onCleanup(() => {
       unsubPromise
         .then((unsub) => unsub())
         .catch((err) => {
           console.error("sqlsync: error unsubscribing", err);
         });
-    };
-  }, [sqlsync, docId, docType, query]);
+    });
+  });
 
   return state;
 }
 
-export const useConnectionStatus = (): ConnectionStatus => {
+export const useConnectionStatus = (): Accessor<ConnectionStatus> => {
   const sqlsync = useSQLSync();
-  const [status, setStatus] = useState<ConnectionStatus>(sqlsync.connectionStatus);
-  useEffect(() => sqlsync.addConnectionStatusListener(setStatus), [sqlsync]);
+  const [status, setStatus] = createSignal<ConnectionStatus>(sqlsync().connectionStatus);
+  createEffect(() => {
+    const cleanup = sqlsync().addConnectionStatusListener(setStatus);
+    onCleanup(cleanup);
+  });
   return status;
 };

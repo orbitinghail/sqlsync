@@ -57,7 +57,7 @@ export class SQLSync {
       } else {
         console.log(
           "sqlsync: dropping message; sqlsync object has been garbage collected",
-          msg.data,
+          msg.data
         );
         // clean up the port
         port.postMessage({ tag: "Close", handlerId: 0 });
@@ -94,7 +94,7 @@ export class SQLSync {
     } else if (msg.tag === "Event") {
       this.#handleDocEvent(msg.docId, msg.evt);
     } else {
-      assertUnreachable("unknown message", msg);
+      assertUnreachable("unknown message", msg as never);
     }
   }
 
@@ -120,13 +120,13 @@ export class SQLSync {
         }
       }
     } else {
-      assertUnreachable("unknown event", evt);
+      assertUnreachable("unknown event", evt as never);
     }
   }
 
   #send<T extends Exclude<DocReplyTag, "Err">>(
     expectedReplyTag: T,
-    msg: OmitUnion<WorkerRequest, "handlerId">,
+    msg: OmitUnion<WorkerRequest, "handlerId">
   ): Promise<SelectDocReply<T>> {
     return new Promise((resolve, reject) => {
       const handlerId = nextHandlerId();
@@ -181,7 +181,7 @@ export class SQLSync {
     docId: DocId,
     docType: DocType<M>,
     sql: string,
-    params: SqlValue[],
+    params: SqlValue[]
   ): Promise<T[]> {
     if (!this.#openDocs.has(docId)) {
       await this.#open(docId, docType);
@@ -200,7 +200,7 @@ export class SQLSync {
     docId: DocId,
     docType: DocType<M>,
     query: ParameterizedQuery,
-    subscription: QuerySubscription,
+    subscription: QuerySubscription
   ): Promise<() => void> {
     if (!this.#openDocs.has(docId)) {
       await this.#open(docId, docType);
@@ -292,7 +292,7 @@ export class SQLSync {
   async setConnectionEnabled<M>(
     docId: DocId,
     docType: DocType<M>,
-    enabled: boolean,
+    enabled: boolean
   ): Promise<void> {
     if (!this.#openDocs.has(docId)) {
       await this.#open(docId, docType);

@@ -1,6 +1,9 @@
-import React, { useEffect } from "react";
+// import React, { useEffect } from "react";
 
 import { JournalId, journalIdFromString } from "@orbitinghail/sqlsync-worker";
+import { Match, Switch, createEffect } from "solid-js";
+import { createSignal } from "solid-js/types/server/reactive.js";
+import { SQLSyncProvider } from "../src";
 import { createDocHooks } from "../src/hooks";
 import { sql } from "../src/sql";
 import { DocType } from "../src/sqlsync";
@@ -31,42 +34,43 @@ const CounterDocType: DocType<CounterOps> = {
   serializeMutation: serializeMutationAsJSON,
 };
 
-const { useMutate, useQuery } = createDocHooks(CounterDocType);
+const [counterDocType, _setCounterDocType] = createSignal(CounterDocType);
+
+const { useMutate, useQuery } = createDocHooks(counterDocType);
 
 // biome-ignore lint/style/noNonNullAssertion: root is defined
-// ReactDOM.createRoot(document.getElementById("root")!).render(
-//   <React.StrictMode>
-//     <SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
-//       <App docId={DOC_ID} />
-//     </SQLSyncProvider>
-//   </React.StrictMode>,
-// );
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
+      <App docId={DOC_ID} />
+    </SQLSyncProvider>
+  </React.StrictMode>
+);
 
 function App({ docId }: { docId: JournalId }) {
   const mutate = useMutate(docId);
 
-  useEffect(() => {
+  createEffect(() => {
     mutate({ tag: "InitSchema" }).catch((err) => {
       console.error("Failed to init schema", err);
     });
-  }, [mutate]);
+  });
 
-  const handleIncr = React.useCallback(() => {
+  const handleIncr = () => {
     mutate({ tag: "Incr", value: 1 }).catch((err) => {
       console.error("Failed to incr", err);
     });
-  }, [mutate]);
+  };
 
-  const handleDecr = React.useCallback(() => {
+  const handleDecr = () => {
     mutate({ tag: "Decr", value: 1 }).catch((err) => {
       console.error("Failed to decr", err);
     });
-  }, [mutate]);
+  };
 
-  const query = useQuery<{ value: number }>(
-    docId,
-    sql`select value, 'hi', 1.23, ${"foo"} as s from counter`
-  );
+
+  const query = useQuery<{ value: number }>(() => docId, () =>
+    sql`select value, 'hi', 1.23, ${"foo"} as s from counter`);
 
   return (
     <>
@@ -84,12 +88,22 @@ function App({ docId }: { docId: JournalId }) {
           Decr
         </button>
       </p>
-      {query.state === "pending" ? (
+      <Switch >
+        <Match when={query().state === "pending"}>
+
         <pre>Loading...</pre>
+          </Match>
+        <Match when={query().state === "pending"}>
+
+        <pre>Loading...</pre>
+          </Match>
+
+      </Switch>
+      {query().state === "pending" ? (
       ) : query.state === "error" ? (
-        <pre style={{ color: "red" }}>{query.error.message}</pre>
+        <pre style={{ color: "red" }}>{query().error.message}</pre>
       ) : (
-        <pre>{query.rows[0]?.value.toString()}</pre>
+        <pre>{query().rows?.[0]?.value.toString()}</pre>
       )}
     </>
   );
