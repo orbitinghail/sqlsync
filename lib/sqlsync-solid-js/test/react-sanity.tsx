@@ -1,9 +1,8 @@
 // import React, { useEffect } from "react";
 
-import { JournalId, journalIdFromString } from "@orbitinghail/sqlsync-worker";
+import { JournalId } from "@orbitinghail/sqlsync-worker";
 import { Match, Switch, createEffect } from "solid-js";
 import { createSignal } from "solid-js/types/server/reactive.js";
-import { SQLSyncProvider } from "../src";
 import { createDocHooks } from "../src/hooks";
 import { sql } from "../src/sql";
 import { DocType } from "../src/sqlsync";
@@ -14,7 +13,7 @@ const DEMO_REDUCER_URL = new URL(
   import.meta.url
 );
 
-const DOC_ID = journalIdFromString("VM7fC4gKxa52pbdtrgd9G9");
+// const DOC_ID = journalIdFromString("VM7fC4gKxa52pbdtrgd9G9");
 
 type CounterOps =
   | {
@@ -39,14 +38,15 @@ const [counterDocType, _setCounterDocType] = createSignal(CounterDocType);
 const { useMutate, useQuery } = createDocHooks(counterDocType);
 
 // biome-ignore lint/style/noNonNullAssertion: root is defined
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
-      <App docId={DOC_ID} />
-    </SQLSyncProvider>
-  </React.StrictMode>
-);
+// ReactDOM.createRoot(document.getElementById("root")!).render(
+//   <React.StrictMode>
+//     <SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
+//       <App docId={DOC_ID} />
+//     </SQLSyncProvider>
+//   </React.StrictMode>
+// );
 
+// @ts-ignore
 function App({ docId }: { docId: JournalId }) {
   const mutate = useMutate(docId);
 
@@ -68,9 +68,10 @@ function App({ docId }: { docId: JournalId }) {
     });
   };
 
-
-  const query = useQuery<{ value: number }>(() => docId, () =>
-    sql`select value, 'hi', 1.23, ${"foo"} as s from counter`);
+  const query = useQuery<{ value: number }>(
+    () => docId,
+    () => sql`select value, 'hi', 1.23, ${"foo"} as s from counter`
+  );
 
   return (
     <>
@@ -88,23 +89,17 @@ function App({ docId }: { docId: JournalId }) {
           Decr
         </button>
       </p>
-      <Switch >
+      <Switch>
         <Match when={query().state === "pending"}>
-
-        <pre>Loading...</pre>
-          </Match>
-        <Match when={query().state === "pending"}>
-
-        <pre>Loading...</pre>
-          </Match>
-
+          <pre>Loading...</pre>
+        </Match>
+        <Match when={query().state === "error"}>
+          <pre style={{ color: "red" }}>{(query() as any).error.message}</pre>
+        </Match>
+        <Match when={query().state === "success"}>
+          <pre>{query().rows?.[0]?.value.toString()}</pre>
+        </Match>
       </Switch>
-      {query().state === "pending" ? (
-      ) : query.state === "error" ? (
-        <pre style={{ color: "red" }}>{query().error.message}</pre>
-      ) : (
-        <pre>{query().rows?.[0]?.value.toString()}</pre>
-      )}
     </>
   );
 }

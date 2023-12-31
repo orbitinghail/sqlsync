@@ -59,6 +59,9 @@ node_modules:
 package-sqlsync-react:
     cd lib/sqlsync-react && pnpm build
 
+package-sqlsync-solid-js:
+    cd lib/sqlsync-solid-js && pnpm build
+
 package-sqlsync-worker target='release':
     #!/usr/bin/env bash
     if [[ '{{target}}' = 'release' ]]; then

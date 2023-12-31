@@ -1,13 +1,19 @@
 import { ConnectionStatus, DocId } from "@orbitinghail/sqlsync-worker";
 // import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Accessor, createEffect, createSignal, onCleanup, useContext } from "solid-js";
-import { SQLSyncContext } from "./context";
+import { SQLSyncContext } from "./context_utils";
 import { ParameterizedQuery, normalizeQuery } from "./sql";
 import { DocType, QuerySubscription, Row, SQLSync } from "./sqlsync";
 import { pendingPromise } from "./util";
 
+export const useSqlContext = () => {
+  return [useContext(SQLSyncContext)!, SQLSyncContext, useContext];
+};
+
 export function useSQLSync(): Accessor<SQLSync> {
-  const [value] = useContext(SQLSyncContext);
+  console.log("context", SQLSyncContext.id.toString());
+  const [value] = useContext(SQLSyncContext)!;
+  console.log("sqlsync: useSQLSync", value, JSON.stringify(value));
   if (import.meta.env.DEV && !value()) {
     throw new Error(
       "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"

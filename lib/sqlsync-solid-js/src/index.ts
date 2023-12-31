@@ -1,10 +1,24 @@
-import { SQLSyncProvider } from "./context";
-import { createDocHooks, useConnectionStatus } from "./hooks";
+import { createSignal } from "solid-js";
+import { SQLSyncProvider, createSqlSync } from "./context";
+import { SQLSyncContext } from "./context_utils";
+import { createDocHooks, useConnectionStatus, useSQLSync, useSqlContext } from "./hooks";
 import { sql } from "./sql";
-import { DocType, Row } from "./sqlsync";
+import { DocType, Row, SQLSync } from "./sqlsync";
 import { serializeMutationAsJSON } from "./util";
 
-export { SQLSyncProvider, createDocHooks, serializeMutationAsJSON, sql, useConnectionStatus };
+export {
+  SQLSync,
+  SQLSyncContext,
+  SQLSyncProvider,
+  createDocHooks,
+  createSignal,
+  createSqlSync,
+  serializeMutationAsJSON,
+  sql,
+  useConnectionStatus,
+  useSQLSync,
+  useSqlContext,
+};
 export type { DocType, Row };
 
 // eof: this file only exports

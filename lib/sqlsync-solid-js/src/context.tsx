@@ -1,15 +1,7 @@
 // import { ReactNode, createContext, useEffect, useState } from "react";
-import {
-  Accessor,
-  ParentComponent,
-  createContext,
-  createEffect,
-  createSignal,
-  onCleanup,
-} from "solid-js";
+import { ParentComponent, createSignal } from "solid-js";
+import { SQLSyncContext } from ".";
 import { SQLSync } from "./sqlsync";
-
-export const SQLSyncContext = createContext<[Accessor<SQLSync | null>]>([() => null]);
 
 interface Props {
   workerUrl: string | URL;
@@ -17,20 +9,28 @@ interface Props {
   coordinatorUrl?: string | URL;
 }
 
-const createSqlSync = (props: Props): SQLSync => {
+export const createSqlSync = (props: Props): SQLSync => {
   return new SQLSync(props.workerUrl, props.wasmUrl, props.coordinatorUrl);
 };
 
 export const SQLSyncProvider: ParentComponent<Props> = (props) => {
-  const [sqlSync, setSQLSync] = createSignal<SQLSync | null>(null);
+  const [sqlSync, setSQLSync] = createSignal<SQLSync>(createSqlSync(props));
+  // console.log("sqlSync in provider:", sqlSync(), JSON.stringify(sqlSync(), null, 2));
 
-  createEffect(() => {
-    const sqlSync = createSqlSync(props);
-    setSQLSync(sqlSync);
-    onCleanup(() => {
-      sqlSync.close();
-    });
-  });
+  // const sqlSyncValue: [Accessor<SQLSync | null>] = [sqlSync];
 
-  return <SQLSyncContext.Provider value={[sqlSync]}>{props.children}</SQLSyncContext.Provider>;
+  // createEffect(() => {
+  //   const sqlSync = createSqlSync(props);
+  //   console.log("sqlSync in effect:", sqlSync, JSON.stringify(sqlSync, null, 2));
+  //   setSQLSync(sqlSync);
+  //   onCleanup(() => {
+  //     sqlSync.close();
+  //   });
+  // });
+
+  return (
+    <SQLSyncContext.Provider value={[sqlSync, setSQLSync]}>
+      {props.children}
+    </SQLSyncContext.Provider>
+  );
 };
