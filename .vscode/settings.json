@@ -22,5 +22,19 @@
     "editor.defaultFormatter": "biomejs.biome",
     "editor.tabSize": 2,
     "editor.insertSpaces": true
+  },
+  "workbench.colorCustomizations": {
+    "[Monokai Pro]": {
+      "editorInlayHint.background": "#f8f8f200",
+      "editorInlayHint.foreground": "#f8f8f280"
+    },
+    "editorCursor.foreground": "#fea726",
+    "editorCursor.background": "#000000",
+    "editor.wordHighlightBackground": "#3fea9a11",
+    "editor.selectionBackground": "#25a76a55",
+    "editor.findMatchBackground": "#34c78279",
+    "activityBar.background": "#2E2C35",
+    "titleBar.activeBackground": "#413E4B",
+    "titleBar.activeForeground": "#FAFAFB"
   }
 }

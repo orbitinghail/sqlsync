@@ -1,6 +1,5 @@
 import { createSignal } from "solid-js";
-import { SQLSyncProvider, createSqlSync } from "./context";
-import { SQLSyncContext } from "./context_utils";
+import { SQLSyncContext, SQLSyncProvider, createSqlSync } from "./context";
 import { createDocHooks, useConnectionStatus, useSQLSync, useSqlContext } from "./hooks";
 import { sql } from "./sql";
 import { DocType, Row, SQLSync } from "./sqlsync";

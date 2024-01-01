@@ -18,7 +18,7 @@ export default defineConfig({
     },
     sourcemap: true,
     rollupOptions: {
-      external: ["react"],
+      external: ["solid-js"],
       output: {
         exports: "named",
         globals: {

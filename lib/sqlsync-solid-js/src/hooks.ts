@@ -1,7 +1,7 @@
 import { ConnectionStatus, DocId } from "@orbitinghail/sqlsync-worker";
 // import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Accessor, createEffect, createSignal, onCleanup, useContext } from "solid-js";
-import { SQLSyncContext } from "./context_utils";
+import { SQLSyncContext } from "./context";
 import { ParameterizedQuery, normalizeQuery } from "./sql";
 import { DocType, QuerySubscription, Row, SQLSync } from "./sqlsync";
 import { pendingPromise } from "./util";

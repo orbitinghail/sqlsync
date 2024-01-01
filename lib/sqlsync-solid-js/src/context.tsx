@@ -1,7 +1,8 @@
 // import { ReactNode, createContext, useEffect, useState } from "react";
-import { ParentComponent, createSignal } from "solid-js";
-import { SQLSyncContext } from ".";
+import { ParentComponent, createContext, createSignal } from "solid-js";
 import { SQLSync } from "./sqlsync";
+
+export const SQLSyncContext = createContext<[() => SQLSync, (sqlSync: SQLSync) => void]>();
 
 interface Props {
   workerUrl: string | URL;
