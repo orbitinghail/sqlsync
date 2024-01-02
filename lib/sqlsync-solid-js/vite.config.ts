@@ -21,9 +21,6 @@ export default defineConfig({
       external: ["solid-js"],
       output: {
         exports: "named",
-        globals: {
-          react: "React",
-        },
       },
     },
   },
