@@ -1,38 +1,31 @@
 import { ConnectionStatus, DocId } from "@orbitinghail/sqlsync-worker";
-// import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Accessor, createEffect, createSignal, onCleanup, useContext } from "solid-js";
 import { SQLSyncContext } from "./context";
 import { ParameterizedQuery, normalizeQuery } from "./sql";
 import { DocType, QuerySubscription, Row, SQLSync } from "./sqlsync";
 import { pendingPromise } from "./util";
 
-export const useSqlContext = () => {
-  return [useContext(SQLSyncContext)!, SQLSyncContext, useContext];
-};
-
 export function useSQLSync(): Accessor<SQLSync> {
-  console.log("context", SQLSyncContext.id.toString());
-  const [value] = useContext(SQLSyncContext)!;
-  console.log("sqlsync: useSQLSync", value, JSON.stringify(value));
-  if (import.meta.env.DEV && !value()) {
+  const [sqlSync] = useContext(SQLSyncContext);
+  if (import.meta.env.DEV && !sqlSync()) {
     throw new Error(
       "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
     );
   }
 
-  // biome-ignore lint/style/noNonNullAssertion: asserts in dev
   return () => {
-    const sqlsync = value();
-    if (import.meta.env.DEV && !sqlsync) {
+    const sqlSyncValue = sqlSync();
+    if (import.meta.env.DEV && !sqlSyncValue) {
       throw new Error(
         "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
       );
-    } else if (!sqlsync) {
+    } else if (!sqlSyncValue) {
       console.error(
         "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
       );
     }
-    return sqlsync!;
+    // biome-ignore lint/style/noNonNullAssertion: asserts in dev
+    return sqlSyncValue!;
   };
 }
 
