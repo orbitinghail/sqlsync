@@ -1,8 +1,10 @@
-// import React, { useEffect } from "react";
-
-import { JournalId } from "@orbitinghail/sqlsync-worker";
+import { JournalId, journalIdFromString } from "@orbitinghail/sqlsync-worker";
+import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
+import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
 import { Match, Switch, createEffect } from "solid-js";
 import { createSignal } from "solid-js/types/server/reactive.js";
+import { render } from "solid-js/web";
+import { SQLSyncProvider } from "../src";
 import { createDocHooks } from "../src/hooks";
 import { sql } from "../src/sql";
 import { DocType } from "../src/sqlsync";
@@ -13,7 +15,7 @@ const DEMO_REDUCER_URL = new URL(
   import.meta.url
 );
 
-// const DOC_ID = journalIdFromString("VM7fC4gKxa52pbdtrgd9G9");
+const DOC_ID = journalIdFromString("VM7fC4gKxa52pbdtrgd9G9");
 
 type CounterOps =
   | {
@@ -37,14 +39,14 @@ const [counterDocType, _setCounterDocType] = createSignal(CounterDocType);
 
 const { useMutate, useQuery } = createDocHooks(counterDocType);
 
-// biome-ignore lint/style/noNonNullAssertion: root is defined
-// ReactDOM.createRoot(document.getElementById("root")!).render(
-//   <React.StrictMode>
-//     <SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
-//       <App docId={DOC_ID} />
-//     </SQLSyncProvider>
-//   </React.StrictMode>
-// );
+render(
+  () => (
+    <SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
+      <App docId={DOC_ID} />
+    </SQLSyncProvider>
+  ),
+  document.getElementById("root")!
+);
 
 // @ts-ignore
 function App({ docId }: { docId: JournalId }) {
