@@ -6,8 +6,6 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 /// Log Sequence Number
-///
-/// These are used to identify frames in the journal
 pub type Lsn = u64;
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
