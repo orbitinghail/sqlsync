@@ -1,48 +1,34 @@
-import type {
-  ConnectionStatus,
-  DocEvent,
-  DocId,
-  DocReply,
-  DocRequest,
-  HandlerId,
-  HostToWorkerMsg,
-  QueryKey,
-  SqlValue,
-  WorkerToHostMsg,
-} from "../sqlsync-wasm/pkg/sqlsync_wasm";
+export {
+  journalIdFromString,
+  journalIdToString,
+  randomJournalId,
+  randomJournalId256
+} from "./journal-id";
+export { normalizeQuery, sql } from "./sql";
+export { SQLSync } from "./sqlsync";
+export { pendingPromise, serializeMutationAsJSON } from "./util";
 
-export * from "./journal-id";
-export type {
-  HostToWorkerMsg,
-  DocRequest,
-  WorkerToHostMsg,
-  DocReply,
-  DocEvent,
-  DocId,
-  SqlValue,
-  HandlerId,
-  QueryKey,
+import {
   ConnectionStatus,
+  DocId,
+  DocRequest,
+  HandlerId,
+  SqlValue,
+} from "../sqlsync-wasm/pkg/sqlsync_wasm";
+import { JournalId } from "./journal-id";
+import { ParameterizedQuery } from "./sql";
+import { DocType, QuerySubscription, Row } from "./sqlsync";
+
+export type {
+  ConnectionStatus,
+  DocId,
+  DocRequest,
+  DocType,
+  HandlerId,
+  JournalId,
+  ParameterizedQuery,
+  QuerySubscription,
+  Row,
+  SqlValue
 };
 
-export interface BootRequest {
-  tag: "Boot";
-  handlerId: HandlerId;
-  coordinatorUrl?: string;
-  wasmUrl: string;
-}
-
-export interface CloseRequest {
-  tag: "Close";
-  handlerId: HandlerId;
-}
-
-export type WorkerRequest =
-  | {
-      tag: "Doc";
-      handlerId: HandlerId;
-      docId: DocId;
-      req: DocRequest;
-    }
-  | BootRequest
-  | CloseRequest;

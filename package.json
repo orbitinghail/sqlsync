@@ -1,5 +1,5 @@
 {
   "devDependencies": {
-    "@biomejs/biome": "1.4.0"
+    "@biomejs/biome": "1.4.1"
   }
 }

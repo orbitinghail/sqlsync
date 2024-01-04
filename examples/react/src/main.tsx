@@ -1,14 +1,17 @@
 import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 
-import { JournalId, journalIdFromString } from "@orbitinghail/sqlsync-worker";
+import {
+  DocType,
+  JournalId,
+  journalIdFromString,
+  serializeMutationAsJSON,
+  sql,
+} from "@orbitinghail/sqlsync-worker";
 import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
 import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
-import { SQLSyncProvider } from "../src/context";
-import { createDocHooks } from "../src/hooks";
-import { sql } from "../src/sql";
-import { DocType } from "../src/sqlsync";
-import { serializeMutationAsJSON } from "../src/util";
+
+import { SQLSyncProvider, createDocHooks } from "@orbitinghail/sqlsync-react";
 
 const DEMO_REDUCER_URL = new URL(
   "../../../target/wasm32-unknown-unknown/debug/sqlsync_react_test_reducer.wasm",

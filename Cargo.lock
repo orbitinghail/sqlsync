@@ -220,6 +220,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "count-reducer"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "log",
+ "serde",
+ "serde_json",
+ "sqlsync-reducer",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1268,17 +1279,6 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "worker",
-]
-
-[[package]]
-name = "sqlsync-react-test-reducer"
-version = "0.1.0"
-dependencies = [
- "futures",
- "log",
- "serde",
- "serde_json",
- "sqlsync-reducer",
 ]
 
 [[package]]

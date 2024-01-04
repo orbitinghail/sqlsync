@@ -1,5 +1,5 @@
+import { SQLSync } from "@orbitinghail/sqlsync-worker";
 import { ReactNode, createContext, useEffect, useState } from "react";
-import { SQLSync } from "./sqlsync";
 
 export const SQLSyncContext = createContext<SQLSync | null>(null);
 

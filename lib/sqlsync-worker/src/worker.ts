@@ -1,6 +1,6 @@
 import init, { DocReply, HandlerId, WorkerApi } from "../sqlsync-wasm/pkg/sqlsync_wasm.js";
-import { WorkerRequest } from "./index";
 import { PortId, PortRouter } from "./port";
+import { WorkerRequest } from "./types";
 import { assertUnreachable } from "./util";
 
 const ports = new PortRouter();

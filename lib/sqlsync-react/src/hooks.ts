@@ -1,20 +1,27 @@
-import { ConnectionStatus, DocId } from "@orbitinghail/sqlsync-worker";
+import {
+  ConnectionStatus,
+  DocId,
+  DocType,
+  ParameterizedQuery,
+  QuerySubscription,
+  Row,
+  SQLSync,
+  normalizeQuery,
+  pendingPromise,
+} from "@orbitinghail/sqlsync-worker";
+
 import { deepEqual } from "fast-equals";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { SQLSyncContext } from "./context";
-import { ParameterizedQuery, normalizeQuery } from "./sql";
-import { DocType, QuerySubscription, Row, SQLSync } from "./sqlsync";
-import { pendingPromise } from "./util";
 
 export function useSQLSync(): SQLSync {
   const value = useContext(SQLSyncContext);
-  if (import.meta.env.DEV && !value) {
+  if (!value) {
     throw new Error(
       "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>",
     );
   }
-  // biome-ignore lint/style/noNonNullAssertion: asserts in dev
-  return value!;
+  return value;
 }
 
 type MutateFn<M> = (mutation: M) => Promise<void>;

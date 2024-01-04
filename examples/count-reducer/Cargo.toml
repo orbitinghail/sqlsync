@@ -1,5 +1,5 @@
 [package]
-name = "sqlsync-react-test-reducer"
+name = "count-reducer"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-sqlsync-reducer = { path = "../../sqlsync-reducer" }
+sqlsync-reducer = { path = "../../lib/sqlsync-reducer" }
 serde = { version = "1.0.171", features = ["derive"] }
 serde_json = "1.0.105"
 log = "0.4.20"
