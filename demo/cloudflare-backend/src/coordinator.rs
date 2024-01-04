@@ -15,13 +15,13 @@ use gloo_net::websocket::{futures::WebSocket, Message, WebSocketError};
 use sqlsync::{
     coordinator::CoordinatorDocument,
     replication::{ReplicationMsg, ReplicationProtocol, ReplicationSource},
-    MemoryJournal, MemoryJournalFactory,
+    MemoryJournal, MemoryJournalFactory, WasmReducer,
 };
 use worker::{console_error, console_log, Error, State};
 
 use crate::{object_id_to_journal_id, persistence::Persistence};
 
-type Document = CoordinatorDocument<MemoryJournal>;
+type Document = CoordinatorDocument<MemoryJournal, WasmReducer>;
 
 pub struct Coordinator {
     accept_queue: mpsc::Sender<WebSocket>,
@@ -37,15 +37,21 @@ impl Coordinator {
 
         console_log!("creating new document with id {}", id);
 
-        let mut storage = MemoryJournal::open(id).map_err(|e| Error::RustError(e.to_string()))?;
+        let mut storage = MemoryJournal::open(id)
+            .map_err(|e| Error::RustError(e.to_string()))?;
 
         // load the persistence layer
         let persistence = Persistence::init(state.storage()).await?;
         // replay any persisted frames into storage
         persistence.replay(id, &mut storage).await?;
 
-        let doc = CoordinatorDocument::open(storage, MemoryJournalFactory, &reducer_bytes)
-            .map_err(|e| Error::RustError(e.to_string()))?;
+        let doc = CoordinatorDocument::open(
+            storage,
+            MemoryJournalFactory,
+            WasmReducer::new(reducer_bytes.as_slice())
+                .map_err(|e| Error::RustError(e.to_string()))?,
+        )
+        .map_err(|e| Error::RustError(e.to_string()))?;
 
         Ok((
             Self { accept_queue: accept_queue_tx },
@@ -183,7 +189,10 @@ impl Client {
         (Self { protocol, writer }, reader)
     }
 
-    async fn start_replication(&mut self, doc: &Document) -> anyhow::Result<()> {
+    async fn start_replication(
+        &mut self,
+        doc: &Document,
+    ) -> anyhow::Result<()> {
         let msg = self.protocol.start(doc);
         self.send_msg(msg).await
     }
@@ -214,9 +223,12 @@ impl Client {
         match msg {
             Ok(Message::Bytes(bytes)) => {
                 let mut cursor = Cursor::new(bytes);
-                let msg: ReplicationMsg = bincode::deserialize_from(&mut cursor)?;
+                let msg: ReplicationMsg =
+                    bincode::deserialize_from(&mut cursor)?;
                 console_log!("received message {:?}", msg);
-                if let Some(resp) = self.protocol.handle(doc, msg, &mut cursor)? {
+                if let Some(resp) =
+                    self.protocol.handle(doc, msg, &mut cursor)?
+                {
                     self.send_msg(resp).await?;
                 }
                 Ok(())

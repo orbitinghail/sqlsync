@@ -7,7 +7,7 @@ use gloo::{
 use js_sys::{Reflect, Uint8Array};
 use log::Level;
 use sha2::{Digest, Sha256};
-use sqlsync::Reducer;
+use sqlsync::WasmReducer;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::console;
@@ -107,7 +107,7 @@ impl_from_error!(
 
 pub async fn fetch_reducer(
     reducer_url: &str,
-) -> Result<(Reducer, Vec<u8>), WasmError> {
+) -> Result<(WasmReducer, Vec<u8>), WasmError> {
     let resp = Request::get(reducer_url).send().await?;
     if !resp.ok() {
         return Err(WasmError(anyhow!(
@@ -143,7 +143,7 @@ pub async fn fetch_reducer(
         Uint8Array::new(&digest).to_vec()
     };
 
-    let reducer = Reducer::new(reducer_wasm_bytes.as_slice())?;
+    let reducer = WasmReducer::new(reducer_wasm_bytes.as_slice())?;
 
     Ok((reducer, digest))
 }

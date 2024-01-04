@@ -3,7 +3,7 @@ use futures::{channel::mpsc, select, FutureExt, StreamExt};
 use rand::thread_rng;
 use sqlsync::{
     local::LocalDocument, sqlite::params_from_iter, JournalId, MemoryJournal,
-    Reducer,
+    WasmReducer,
 };
 
 use crate::{
@@ -40,7 +40,7 @@ impl DocTask {
     pub fn new(
         doc_id: JournalId,
         doc_url: Option<String>,
-        reducer: Reducer,
+        reducer: WasmReducer,
         inbox: mpsc::UnboundedReceiver<HostToWorkerMsg>,
         ports: PortRouter,
     ) -> WasmResult<Self> {

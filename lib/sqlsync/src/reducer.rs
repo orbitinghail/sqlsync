@@ -29,16 +29,29 @@ pub enum ReducerError {
 
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
+
+    #[error(transparent)]
+    External(Box<dyn std::error::Error + Send + Sync>),
 }
 
-type Result<T> = std::result::Result<T, ReducerError>;
+pub type Result<T> = std::result::Result<T, ReducerError>;
 type SqlResult<T> = std::result::Result<T, ErrorResponse>;
 
-pub struct Reducer {
+pub trait Reducer {
+    fn apply(&mut self, tx: &mut Transaction, mutation: &[u8]) -> Result<()>;
+}
+
+impl Reducer for WasmReducer {
+    fn apply(&mut self, tx: &mut Transaction, mutation: &[u8]) -> Result<()> {
+        WasmReducer::apply(self, tx, mutation)
+    }
+}
+
+pub struct WasmReducer {
     store: Store<WasmFFI>,
 }
 
-impl Reducer {
+impl WasmReducer {
     pub fn new(wasm_bytes: impl std::io::Read) -> Result<Self> {
         let engine = Engine::default();
         let module = Module::new(&engine, wasm_bytes)?;
