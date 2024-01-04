@@ -10,7 +10,7 @@
     "outDir": "dist",
     "declaration": true,
     "sourceMap": true,
-    "lib": ["ES6", "DOM", "ES2021.WeakRef"],
+    "lib": ["ES6", "DOM", "WebWorker", "ES2021.WeakRef"],
 
     /* Linting */
     "strict": true,

@@ -14,7 +14,7 @@ import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
 import { SQLSyncProvider, createDocHooks } from "@orbitinghail/sqlsync-react";
 
 const DEMO_REDUCER_URL = new URL(
-  "../../../target/wasm32-unknown-unknown/debug/sqlsync_react_test_reducer.wasm",
+  "../../../target/wasm32-unknown-unknown/debug/count_reducer.wasm",
   import.meta.url,
 );
 

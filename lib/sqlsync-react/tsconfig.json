@@ -4,7 +4,7 @@
     "module": "esnext",
     "moduleResolution": "Bundler",
     "baseUrl": ".",
-    "lib": ["ES6", "DOM", "WebWorker", "ES2021.WeakRef"],
+    "lib": ["ES6", "DOM", "ES2021.WeakRef"],
 
     /* Compiling */
     "allowJs": true,
@@ -19,5 +19,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "node_modules/@orbitinghail/sqlsync-worker"]
+  "include": ["src"]
 }

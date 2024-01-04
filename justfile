@@ -38,8 +38,8 @@ wasm-counter-reducer:
 wasm-task-reducer:
     cargo build --target wasm32-unknown-unknown --example task-reducer
 
-wasm-sqlsync-react-test-reducer:
-    cargo build --target wasm32-unknown-unknown --package sqlsync-react-test-reducer
+wasm-examples-count-reducer:
+    cargo build --target wasm32-unknown-unknown --package count-reducer
 
 test-end-to-end-local rng_seed="": wasm-task-reducer
     RUST_BACKTRACE=1 cargo run --example end-to-end-local {{rng_seed}}

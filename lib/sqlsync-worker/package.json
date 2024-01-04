@@ -4,14 +4,7 @@
   "description": "SQLSync is a collaborative offline-first wrapper around SQLite. It is designed to synchronize web application state between users, devices, and the edge.",
   "homepage": "https://sqlsync.dev",
   "license": "Apache-2.0",
-  "keywords": [
-    "sqlsync",
-    "sql",
-    "database",
-    "sqlite",
-    "offline-first",
-    "local-first"
-  ],
+  "keywords": ["sqlsync", "sql", "database", "sqlite", "offline-first", "local-first"],
   "repository": {
     "type": "git",
     "url": "https://github.com/orbitinghail/sqlsync"
@@ -19,25 +12,33 @@
   "type": "module",
   "files": [
     "dist",
-    "src",
     "sqlsync-wasm/pkg/sqlsync_wasm.js",
     "sqlsync-wasm/pkg/sqlsync_wasm.d.ts",
     "sqlsync-wasm/pkg/sqlsync_wasm_bg.wasm"
   ],
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
   "exports": {
     ".": {
+      "default": "./src/index.ts",
       "import": "./src/index.ts",
-      "require": "./dist/index.js",
       "types": "./src/index.ts"
     },
-    "./worker.js": "./dist/worker.js",
     "./worker.ts": "./src/worker.ts",
     "./sqlsync.wasm": "./sqlsync-wasm/pkg/sqlsync_wasm_bg.wasm"
   },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "default": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      },
+      "./worker.js": "./dist/worker.js",
+      "./sqlsync.wasm": "./sqlsync-wasm/pkg/sqlsync_wasm_bg.wasm"
+    }
+  },
   "scripts": {
-    "tsc": "tsc",
     "build-wasm": "cd sqlsync-wasm && wasm-pack build --target web --dev",
     "build-wasm-release": "cd sqlsync-wasm && wasm-pack build --target web --release",
     "build": "pnpm run build-wasm && rollup --config",
@@ -47,7 +48,6 @@
     "@rollup/plugin-commonjs": "^25.0.7",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-typescript": "^11.1.5",
-    "microbundle": "^0.15.1",
     "rollup": "^3.29.4",
     "tslib": "^2.6.2",
     "typescript": "^5.2.2"

@@ -9,15 +9,25 @@
     "type": "git",
     "url": "https://github.com/orbitinghail/sqlsync"
   },
-  "files": ["dist", "src"],
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "main": "./src/index.ts",
   "exports": {
     ".": {
       "import": "./src/index.ts",
-      "require": "./dist/index.js",
+      "default": "./src/index.ts",
       "types": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "default": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      }
     }
   },
   "scripts": {
@@ -26,18 +36,19 @@
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-typescript": "^11.1.5",
+    "@types/react": "^18.2.31",
+    "@types/react-dom": "^18.2.14",
+    "@orbitinghail/sqlsync-worker": "workspace:^",
     "rollup": "^3.29.4",
     "tslib": "^2.6.2",
-    "typescript": "^5.2.2",
-    "@types/react": "^18.2.31",
-    "@types/react-dom": "^18.2.14"
+    "typescript": "^5.2.2"
   },
   "peerDependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "@orbitinghail/sqlsync-worker": "workspace:^"
   },
   "dependencies": {
-    "fast-equals": "^5.0.1",
-    "@orbitinghail/sqlsync-worker": "workspace:^"
+    "fast-equals": "^5.0.1"
   }
 }
