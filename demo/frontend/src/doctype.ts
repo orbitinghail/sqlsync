@@ -1,4 +1,5 @@
-import { DocType, createDocHooks, serializeMutationAsJSON } from "@orbitinghail/sqlsync-react";
+import { createDocHooks } from "@orbitinghail/sqlsync-react";
+import { DocType, serializeMutationAsJSON } from "@orbitinghail/sqlsync-worker";
 
 const REDUCER_URL = new URL(
   "../../../target/wasm32-unknown-unknown/release/demo_reducer.wasm",

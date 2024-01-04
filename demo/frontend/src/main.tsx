@@ -3,14 +3,12 @@ import ReactDOM from "react-dom/client";
 
 import { RouterProvider, createBrowserRouter, redirect, useParams } from "react-router-dom";
 
-// HACK: switch to the .ts version for nicer local dev
-// import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
-import workerUrl from "@orbitinghail/sqlsync-worker/worker.js?url";
+import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
+import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?worker&url";
 
 import { MantineProvider } from "@mantine/core";
 import { SQLSyncProvider } from "@orbitinghail/sqlsync-react";
 import { journalIdFromString, journalIdToString } from "@orbitinghail/sqlsync-worker";
-import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
 import { App } from "./App";
 
 import "@mantine/code-highlight/styles.css";
