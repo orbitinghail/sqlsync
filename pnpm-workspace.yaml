@@ -3,4 +3,4 @@ packages:
   - "demo/frontend"
   - "lib/sqlsync-react"
   - "lib/sqlsync-worker"
-  - "examples/simple-counter-react"
+  - "examples/guestbook-react"

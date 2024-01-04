@@ -48,7 +48,7 @@ strip = "debuginfo"
 codegen-units = 1
 
 [dependencies]
-sqlsync-reducer = "0.1"
+sqlsync-reducer = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 log = "0.4"
@@ -118,17 +118,12 @@ Also, make sure your JS bundling tool supports importing assets from the file sy
 Create a file which will contain type information for your Mutations, the reducer URL, and export some useful React hooks for your app to consume. It should look something like this:
 
 ```typescript
-import {
-  DocType,
-  createDocHooks,
-  serializeMutationAsJSON,
-} from "@orbitinghail/sqlsync-react";
+import { createDocHooks } from "@orbitinghail/sqlsync-react";
+import { DocType, serializeMutationAsJSON } from "@orbitinghail/sqlsync-worker";
 
-// Path to your compiled reducer artifact, your js bundler should handle making
-// this a working URL that resolves during development and in production.
 const REDUCER_URL = new URL(
-  "../reducer/target/wasm32-unknown-unknown/release/reducer.wasm",
-  import.meta.url
+  "../../../target/wasm32-unknown-unknown/release/reducer_guestbook.wasm",
+  import.meta.url,
 );
 
 // Must match the Mutation type in the Rust Reducer code
@@ -147,8 +142,7 @@ export const TaskDocType: DocType<Mutation> = {
   serializeMutation: serializeMutationAsJSON,
 };
 
-export const { useMutate, useQuery, useSetConnectionEnabled } =
-  createDocHooks(TaskDocType);
+export const { useMutate, useQuery, useSetConnectionEnabled } = createDocHooks(TaskDocType);
 ```
 
 ## Step 3: Hooking it up to your app
@@ -158,31 +152,32 @@ Using the hooks exported from the file in [Step 2](#step-2-install-and-configure
 Here is a complete example of a very trivial guestbook application which uses the reducer we created above.
 
 ```tsx
-import React, { FormEvent, useEffect } from "react";
-import ReactDOM from "react-dom/client";
+import { SQLSyncProvider } from "@orbitinghail/sqlsync-react";
+import { journalIdFromString, sql } from "@orbitinghail/sqlsync-worker";
 
 // this example uses the uuid library (`npm install uuid`)
 import { v4 as uuidv4 } from "uuid";
 
-// You'll need to configure your build system to make these entrypoints
-// available as urls. Vite does this automatically via the `?url` suffix.
-import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
-import workerUrl from "@orbitinghail/sqlsync-worker/worker.js?url";
+import React, { FormEvent, useCallback, useEffect } from "react";
+import ReactDOM from "react-dom/client";
 
-// import the SQLSync provider and hooks
-import { SQLSyncProvider, sql } from "@orbitinghail/sqlsync-react";
+// You'll need to configure your build system to make these entrypoints
+// available as urls. Vite does this automatically via the `?url` and `?worker&url` suffix.
+import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
+import workerUrl from "@orbitinghail/sqlsync-worker/worker.js?worker&url";
+
 import { useMutate, useQuery } from "./doctype";
 
 // Create a DOC_ID to use, each DOC_ID will correspond to a different SQLite
 // database. We use a static doc id so we can play with cross-tab sync.
-import { journalIdFromString } from "@orbitinghail/sqlsync-worker";
 const DOC_ID = journalIdFromString("VM7fC4gKxa52pbdtrgd9G9");
 
 // Configure the SQLSync provider near the top of the React tree
+// biome-ignore lint/style/noNonNullAssertion: we know this element exists
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
     <App />
-  </SQLSyncProvider>
+  </SQLSyncProvider>,
 );
 
 // Use SQLSync hooks in your app
@@ -201,7 +196,7 @@ export function App() {
   }, [mutate]);
 
   // create a callback which knows how to trigger the add message mutation
-  const handleSubmit = React.useCallback(
+  const handleSubmit = useCallback(
     (e: FormEvent<HTMLFormElement>) => {
       // Prevent the browser from reloading the page
       e.preventDefault();
@@ -218,7 +213,7 @@ export function App() {
         setMsg("");
       }
     },
-    [mutate, msg]
+    [mutate, msg, setMsg],
   );
 
   // finally, query SQLSync for all the messages, sorted by created_at
@@ -227,7 +222,7 @@ export function App() {
     sql`
       select id, msg from messages
       order by created_at
-    `
+    `,
   );
 
   return (
@@ -242,12 +237,7 @@ export function App() {
       <form onSubmit={handleSubmit}>
         <label>
           Msg:
-          <input
-            type="text"
-            name="msg"
-            value={msg}
-            onChange={(e) => setMsg(e.target.value)}
-          />
+          <input type="text" name="msg" value={msg} onChange={(e) => setMsg(e.target.value)} />
         </label>
         <input type="submit" value="Submit" />
       </form>

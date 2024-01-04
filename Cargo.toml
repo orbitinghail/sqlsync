@@ -7,7 +7,8 @@ members = [
     "lib/sqlsync-reducer",
     "lib/sqlite-vfs",
     "lib/testutil",
-    "examples/count-reducer",
+
+    "examples/reducer-guestbook",
 
     "demo/demo-reducer",
     "demo/cloudflare-backend",

@@ -38,8 +38,11 @@ wasm-counter-reducer:
 wasm-task-reducer:
     cargo build --target wasm32-unknown-unknown --example task-reducer
 
-wasm-examples-count-reducer:
-    cargo build --target wasm32-unknown-unknown --package count-reducer
+wasm-examples-reducer-guestbook:
+    cargo build --target wasm32-unknown-unknown --package reducer-guestbook --release
+
+example-guestbook-react: wasm-examples-reducer-guestbook
+    cd examples/guestbook-react && pnpm dev
 
 test-end-to-end-local rng_seed="": wasm-task-reducer
     RUST_BACKTRACE=1 cargo run --example end-to-end-local {{rng_seed}}
@@ -51,8 +54,7 @@ test-sqlsync-reducer: wasm-sqlsync-reducer-guest
     cargo run --example host
 
 node_modules:
-    cd lib/sqlsync-worker && pnpm i
-    cd demo/frontend && pnpm i
+    pnpm i
 
 package-sqlsync-react:
     cd lib/sqlsync-react && pnpm build

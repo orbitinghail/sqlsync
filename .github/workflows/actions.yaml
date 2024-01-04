@@ -45,3 +45,7 @@ jobs:
         run: just test-sqlsync-reducer
       - name: build sqlsync react and worker packages
         run: just package-sqlsync-react package-sqlsync-worker
+      - name: build frontend
+        run: cd demo/frontend && pnpm build
+      - name: build examples
+        run: cd examples/guestbook-react && pnpm build
