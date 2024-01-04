@@ -1,5 +1,4 @@
-// import { ReactNode, createContext, useEffect, useState } from "react";
-import { ParentComponent, createContext, createEffect, createSignal, onCleanup } from "solid-js";
+import { ParentComponent, createContext, createSignal, onCleanup } from "solid-js";
 import { SQLSync } from "./sqlsync";
 
 export const SQLSyncContext = createContext<[() => SQLSync | null, (sqlSync: SQLSync) => void]>([
@@ -20,12 +19,11 @@ export const createSqlSync = (props: Props): SQLSync => {
 export const SQLSyncProvider: ParentComponent<Props> = (props) => {
   const [sqlSync, setSQLSync] = createSignal<SQLSync>(createSqlSync(props));
 
-  createEffect(() => {
-    const sqlSync = createSqlSync(props);
-    setSQLSync(sqlSync);
-    onCleanup(() => {
-      sqlSync.close();
-    });
+  onCleanup(() => {
+    const s = sqlSync();
+    if (s) {
+      s.close();
+    }
   });
 
   return (
