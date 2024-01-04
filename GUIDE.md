@@ -5,7 +5,10 @@
 
 SQLSync is distributed as a JavaScript package as well as a Rust Crate.  Currently, both are required to use SQLSync. Also, React is the only supported framework at the moment.
 
-If you want to jump ahead to a working demo, check out the finished product at: https://github.com/orbitinghail/sqlsync-demo-guestbook
+If you want to jump ahead to a working demo, [check out the finished product here][guestbook-src]
+
+[guestbook-src]: examples/guestbook-react
+
 
 ## Step 1: Creating the Reducer
 
