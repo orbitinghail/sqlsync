@@ -6,6 +6,7 @@ use sqlsync_reducer::{execute, init_reducer, types::ReducerError};
 enum Mutation {
     InitSchema,
     AddMessage { id: String, msg: String },
+    DeleteMessage { id: String },
 }
 
 init_reducer!(reducer);
@@ -32,6 +33,10 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                 msg
             )
             .await?;
+        }
+
+        Mutation::DeleteMessage { id } => {
+            execute!("delete from messages where id = ?", id).await?;
         }
     }
 

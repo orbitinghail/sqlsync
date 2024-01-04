@@ -62,6 +62,16 @@ export function App() {
     [mutate, msg, setMsg],
   );
 
+  // create a callback to delete a message
+  const handleDelete = useCallback(
+    (id: string) => {
+      mutate({ tag: "DeleteMessage", id }).catch((err) => {
+        console.error("Failed to delete message", err);
+      });
+    },
+    [mutate],
+  );
+
   // finally, query SQLSync for all the messages, sorted by created_at
   const { rows } = useQuery<{ id: string; msg: string }>(
     DOC_ID,
@@ -76,7 +86,12 @@ export function App() {
       <h1>Guestbook:</h1>
       <ul>
         {(rows ?? []).map(({ id, msg }) => (
-          <li key={id}>{msg}</li>
+          <li key={id}>
+            {msg}
+            <button type="button" onClick={() => handleDelete(id)} style={{ marginLeft: "40px" }}>
+              remove msg
+            </button>
+          </li>
         ))}
       </ul>
       <h3>Leave a message:</h3>

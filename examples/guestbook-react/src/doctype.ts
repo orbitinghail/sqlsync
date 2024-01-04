@@ -15,6 +15,10 @@ export type Mutation =
       tag: "AddMessage";
       id: string;
       msg: string;
+    }
+  | {
+      tag: "DeleteMessage";
+      id: string;
     };
 
 export const TaskDocType: DocType<Mutation> = {

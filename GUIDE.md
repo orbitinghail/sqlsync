@@ -5,7 +5,7 @@
 
 SQLSync is distributed as a JavaScript package as well as a Rust Crate.  Currently, both are required to use SQLSync. Also, React is the only supported framework at the moment.
 
-If you want to jump ahead to a working demo, [check out the finished product here][guestbook-src]
+If you want to jump ahead to a working demo, [check out the finished product here][guestbook-src]. Note that it has a couple more features than what you get with this guide.
 
 [guestbook-src]: examples/guestbook-react
 
