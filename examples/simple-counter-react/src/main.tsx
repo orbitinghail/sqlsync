@@ -9,7 +9,7 @@ import {
   sql,
 } from "@orbitinghail/sqlsync-worker";
 import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
-import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
+import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?worker&url";
 
 import { SQLSyncProvider, createDocHooks } from "@orbitinghail/sqlsync-react";
 
