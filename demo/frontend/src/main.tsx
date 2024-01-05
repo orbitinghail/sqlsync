@@ -1,21 +1,27 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-import { RouterProvider, createBrowserRouter, redirect, useParams } from "react-router-dom";
+import {
+  RouterProvider,
+  createBrowserRouter,
+  redirect,
+  useParams,
+  useRouteError,
+} from "react-router-dom";
 
-// HACK: switch to the .ts version for nicer local dev
-// import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?url";
-import workerUrl from "@orbitinghail/sqlsync-worker/worker.js?url";
+import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
+import workerUrl from "@orbitinghail/sqlsync-worker/worker.ts?worker&url";
 
-import { MantineProvider } from "@mantine/core";
+import { Alert, Container, MantineProvider, Stack } from "@mantine/core";
 import { SQLSyncProvider } from "@orbitinghail/sqlsync-react";
 import { journalIdFromString, journalIdToString } from "@orbitinghail/sqlsync-worker";
-import sqlSyncWasmUrl from "@orbitinghail/sqlsync-worker/sqlsync.wasm?url";
 import { App } from "./App";
 
 import "@mantine/code-highlight/styles.css";
 // import stylesheets
 import "@mantine/core/styles.css";
+import { IconInfoCircle } from "@tabler/icons-react";
+import { Header } from "./components/Header";
 import { MANTINE_THEME } from "./theme";
 
 const isLocalhost = location.hostname === "localhost" || location.hostname.startsWith("192.168");
@@ -33,6 +39,9 @@ const newDocumentId = async (name = "") => {
   const response = await fetch(url, {
     method: "POST",
   });
+  if (!response.ok) {
+    throw new Error(`Failed to create new document: ${response.status}`);
+  }
   return journalIdFromString(await response.text());
 };
 
@@ -47,9 +56,27 @@ export const DocRoute = () => {
   return <App docId={journalIdFromString(docId)} />;
 };
 
+const ErrorBoundary = () => {
+  // biome-ignore lint/suspicious/noExplicitAny: could be thrown from anywhere
+  const error = useRouteError() as any;
+  console.error(error);
+  return (
+    <Container size="xs" py="sm">
+      <Stack>
+        <Header />
+        <Alert variant="light" color="red" title="Error" icon={<IconInfoCircle />}>
+          Failed to load document
+          {Object.prototype.hasOwnProperty.call(error, "message") ? `: ${error.message}` : ""}
+        </Alert>
+      </Stack>
+    </Container>
+  );
+};
+
 const router = createBrowserRouter([
   {
     path: "/",
+    errorElement: <ErrorBoundary />,
     loader: async () => {
       const docId = await newDocumentId();
       return redirect(`/${journalIdToString(docId)}`);
@@ -57,6 +84,7 @@ const router = createBrowserRouter([
   },
   {
     path: "/named/:name",
+    errorElement: <ErrorBoundary />,
     loader: async ({ params }) => {
       const docId = await newDocumentId(params.name);
       return redirect(`/${journalIdToString(docId)}`);
@@ -65,6 +93,7 @@ const router = createBrowserRouter([
   {
     path: "/:docId",
     element: <DocRoute />,
+    errorElement: <ErrorBoundary />,
   },
 ]);
 

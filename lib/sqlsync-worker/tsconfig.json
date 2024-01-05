@@ -1,16 +1,16 @@
 {
   "compilerOptions": {
-    "target": "esnext",
+    "target": "es6",
     "module": "esnext",
     "moduleResolution": "Bundler",
     "baseUrl": ".",
-    "lib": ["ES6", "WebWorker", "ES2021.WeakRef"],
 
     /* Compiling */
     "allowJs": true,
     "outDir": "dist",
     "declaration": true,
     "sourceMap": true,
+    "lib": ["ES6", "DOM", "WebWorker", "ES2021.WeakRef"],
 
     /* Linting */
     "strict": true,
@@ -18,5 +18,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
 }

@@ -6,14 +6,12 @@ import {
   HandlerId,
   QueryKey,
   SqlValue,
-  WorkerRequest,
   WorkerToHostMsg,
-  journalIdToString,
-} from "@orbitinghail/sqlsync-worker";
+} from "../sqlsync-wasm/pkg/sqlsync_wasm";
+import { journalIdToString } from "./journal-id";
 import { ParameterizedQuery, toQueryKey } from "./sql";
+import { Row, WorkerRequest } from "./types";
 import { NarrowTaggedEnum, OmitUnion, assertUnreachable, initWorker, toRows } from "./util";
-
-export type Row = Record<string, SqlValue>;
 
 export interface DocType<Mutation> {
   readonly reducerUrl: string | URL;

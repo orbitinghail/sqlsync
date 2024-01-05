@@ -255,7 +255,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
- "sqlsync-reducer",
+ "sqlsync-reducer 0.2.0",
 ]
 
 [[package]]
@@ -1007,6 +1007,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "reducer-guestbook"
+version = "0.2.0"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "sqlsync-reducer 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "regex"
 version = "1.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1243,7 +1253,7 @@ dependencies = [
  "serde",
  "simple_logger",
  "sqlite-vfs",
- "sqlsync-reducer",
+ "sqlsync-reducer 0.2.0",
  "testutil",
  "thiserror",
  "time",
@@ -1271,17 +1281,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sqlsync-react-test-reducer"
-version = "0.1.0"
-dependencies = [
- "futures",
- "log",
- "serde",
- "serde_json",
- "sqlsync-reducer",
-]
-
-[[package]]
 name = "sqlsync-reducer"
 version = "0.2.0"
 dependencies = [
@@ -1293,6 +1292,19 @@ dependencies = [
  "simple_logger",
  "thiserror",
  "wasmi",
+]
+
+[[package]]
+name = "sqlsync-reducer"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c88981b831c525276b86f1a97e75ebc79f054159035c629d44a724f84613b199"
+dependencies = [
+ "bincode",
+ "futures",
+ "log",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

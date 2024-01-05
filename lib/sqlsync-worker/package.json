@@ -12,24 +12,31 @@
   "type": "module",
   "files": [
     "dist",
-    "src",
     "sqlsync-wasm/pkg/sqlsync_wasm.js",
     "sqlsync-wasm/pkg/sqlsync_wasm.d.ts",
     "sqlsync-wasm/pkg/sqlsync_wasm_bg.wasm"
   ],
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
   "exports": {
     ".": {
+      "default": "./src/index.ts",
       "import": "./src/index.ts",
-      "require": "./dist/index.js",
       "types": "./src/index.ts"
     },
-    "./worker.js": "./dist/worker.js",
-    "./api.js": "./dist/api.js",
     "./worker.ts": "./src/worker.ts",
-    "./api.ts": "./src/api.ts",
     "./sqlsync.wasm": "./sqlsync-wasm/pkg/sqlsync_wasm_bg.wasm"
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "default": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      },
+      "./worker.js": "./dist/worker.js",
+      "./sqlsync.wasm": "./sqlsync-wasm/pkg/sqlsync_wasm_bg.wasm"
+    }
   },
   "scripts": {
     "build-wasm": "cd sqlsync-wasm && wasm-pack build --target web --dev",
@@ -38,6 +45,7 @@
     "build-release": "pnpm run build-wasm-release && rollup --config"
   },
   "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-typescript": "^11.1.5",
     "rollup": "^3.29.4",
@@ -45,6 +53,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@scure/base": "^1.1.3"
+    "@scure/base": "^1.1.3",
+    "fast-sha256": "^1.3.0"
   }
 }

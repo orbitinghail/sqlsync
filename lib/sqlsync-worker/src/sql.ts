@@ -1,5 +1,5 @@
-import { QueryKey, SqlValue } from "@orbitinghail/sqlsync-worker";
 import { base58 } from "@scure/base";
+import { QueryKey, SqlValue } from "../sqlsync-wasm/pkg/sqlsync_wasm";
 import { sha256Digest } from "./util";
 
 const UTF8_ENCODER = new TextEncoder();

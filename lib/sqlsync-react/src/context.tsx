@@ -1,5 +1,5 @@
-import { ReactNode, createContext, useEffect, useState } from "react";
-import { SQLSync } from "./sqlsync";
+import { SQLSync } from "@orbitinghail/sqlsync-worker";
+import { ReactNode, createContext, createElement, useEffect, useState } from "react";
 
 export const SQLSyncContext = createContext<SQLSync | null>(null);
 
@@ -23,6 +23,6 @@ export const SQLSyncProvider = (props: Props) => {
   }, [workerUrl, wasmUrl, coordinatorUrl]);
 
   if (sqlsync) {
-    return <SQLSyncContext.Provider value={sqlsync}>{children}</SQLSyncContext.Provider>;
+    return createElement(SQLSyncContext.Provider, { value: sqlsync }, children);
   }
 };

@@ -2,26 +2,22 @@ import { createDocHooks } from "@orbitinghail/sqlsync-react";
 import { DocType, serializeMutationAsJSON } from "@orbitinghail/sqlsync-worker";
 
 const REDUCER_URL = new URL(
-  "../../../target/wasm32-unknown-unknown/release/demo_reducer.wasm",
+  "../../../target/wasm32-unknown-unknown/release/reducer_guestbook.wasm",
   import.meta.url,
 );
 
-// matches the Mutation type in demo/demo-reducer
+// Must match the Mutation type in the Rust Reducer code
 export type Mutation =
   | {
       tag: "InitSchema";
     }
   | {
-      tag: "CreateTask";
+      tag: "AddMessage";
       id: string;
-      description: string;
+      msg: string;
     }
   | {
-      tag: "DeleteTask";
-      id: string;
-    }
-  | {
-      tag: "ToggleCompleted";
+      tag: "DeleteMessage";
       id: string;
     };
 
