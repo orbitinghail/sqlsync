@@ -3,6 +3,9 @@ on:
   push:
     paths-ignore:
       - "**.md"
+  pull_request:
+    paths-ignore:
+      - "**.md"
 jobs:
   build:
     runs-on: ubuntu-latest
