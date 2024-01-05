@@ -1,5 +1,5 @@
+import { SQLSync } from "@orbitinghail/sqlsync-worker";
 import { ParentComponent, createContext, createSignal, onCleanup } from "solid-js";
-import { SQLSync } from "./sqlsync";
 
 export const SQLSyncContext = createContext<[() => SQLSync | null, (sqlSync: SQLSync) => void]>([
   () => null,
