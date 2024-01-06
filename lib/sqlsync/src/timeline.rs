@@ -9,7 +9,6 @@ use crate::{
     lsn::{Lsn, LsnRange},
     positioned_io::PositionedReader,
     reducer::{Reducer, ReducerError, WasmReducer},
-    JournalError,
 };
 
 const TIMELINES_TABLE_SQL: &str = "

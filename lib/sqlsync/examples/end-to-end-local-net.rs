@@ -80,7 +80,7 @@ fn start_server<'a>(
     let coordinator = CoordinatorDocument::open(
         storage_journal,
         MemoryJournalFactory,
-        &wasm_bytes[..],
+        WasmReducer::new(wasm_bytes.as_slice())?,
     )?;
     let coordinator = Arc::new(Mutex::new(coordinator));
 
@@ -112,7 +112,7 @@ fn start_server<'a>(
 }
 
 fn handle_client(
-    doc: Arc<Mutex<CoordinatorDocument<MemoryJournal>>>,
+    doc: Arc<Mutex<CoordinatorDocument<MemoryJournal, WasmReducer>>>,
     socket: TcpStream,
 ) -> anyhow::Result<()> {
     log::info!("server: received client connection");

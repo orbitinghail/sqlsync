@@ -8,7 +8,7 @@ use rusqlite::Transaction;
 
 use crate::db::{open_with_vfs, run_in_tx, ConnectionPair};
 use crate::error::Result;
-use crate::reducer::{Reducer, WasmReducer};
+use crate::reducer::Reducer;
 use crate::replication::{
     ReplicationDestination, ReplicationError, ReplicationSource,
 };
@@ -47,7 +47,7 @@ impl<J: Journal, R: Reducer> CoordinatorDocument<J, R> {
     pub fn open(
         storage: J,
         timeline_factory: J::Factory,
-        reducer: R, // reducer_wasm_bytes: &[u8],
+        reducer: R,
     ) -> Result<Self> {
         let (mut sqlite, mut storage) = open_with_vfs(storage)?;
 
@@ -141,7 +141,7 @@ impl<J: Journal, R: Reducer> CoordinatorDocument<J, R> {
 }
 
 /// CoordinatorDocument knows how to replicate it's storage journal
-impl<J: Journal + ReplicationSource, R: Reducer> ReplicationSource
+impl<J: Journal + ReplicationSource, R> ReplicationSource
     for CoordinatorDocument<J, R>
 {
     type Reader<'a> = <J as ReplicationSource>::Reader<'a>
