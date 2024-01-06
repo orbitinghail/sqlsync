@@ -7,7 +7,7 @@ use crate::{
     error::Result,
     journal::{Journal, JournalId},
     lsn::LsnRange,
-    reducer::Reducer,
+    reducer::WasmReducer,
     replication::{
         ReplicationDestination, ReplicationError, ReplicationSource,
     },
@@ -26,7 +26,7 @@ impl Signal for NoopSignal {
 }
 
 pub struct LocalDocument<J, S> {
-    reducer: Reducer,
+    reducer: WasmReducer,
     timeline: J,
     storage: Box<Storage<J>>,
     sqlite: ConnectionPair,
@@ -54,7 +54,7 @@ where
     pub fn open(
         storage: J,
         timeline: J,
-        reducer: Reducer,
+        reducer: WasmReducer,
         storage_changed: S,
         timeline_changed: S,
         rebase_available: S,

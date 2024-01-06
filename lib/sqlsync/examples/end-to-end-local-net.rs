@@ -17,7 +17,7 @@ use sqlsync::replication::ReplicationMsg;
 use sqlsync::replication::ReplicationProtocol;
 use sqlsync::JournalId;
 use sqlsync::MemoryJournalFactory;
-use sqlsync::Reducer;
+use sqlsync::WasmReducer;
 
 use serde::{Deserialize, Serialize};
 use sqlsync::{coordinator::CoordinatorDocument, MemoryJournal};
@@ -223,7 +223,7 @@ fn start_client(
     let mut doc = LocalDocument::open(
         storage_journal,
         timeline_journal,
-        Reducer::new(wasm_bytes.as_slice())?,
+        WasmReducer::new(wasm_bytes.as_slice())?,
         NoopSignal,
         NoopSignal,
         NoopSignal,

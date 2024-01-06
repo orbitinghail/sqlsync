@@ -8,7 +8,8 @@ use crate::{
     journal::Journal,
     lsn::{Lsn, LsnRange},
     positioned_io::PositionedReader,
-    reducer::{Reducer, ReducerError},
+    reducer::{Reducer, ReducerError, WasmReducer},
+    JournalError,
 };
 
 const TIMELINES_TABLE_SQL: &str = "
@@ -52,7 +53,7 @@ pub fn run_timeline_migration(sqlite: &mut Connection) -> Result<()> {
 pub fn apply_mutation<J: Journal>(
     timeline: &mut J,
     sqlite: &mut Connection,
-    reducer: &mut Reducer,
+    reducer: &mut WasmReducer,
     mutation: &[u8],
 ) -> Result<()> {
     run_in_tx(sqlite, |tx| reducer.apply(tx, &mutation))?;
@@ -63,7 +64,7 @@ pub fn apply_mutation<J: Journal>(
 pub fn rebase_timeline<J: Journal>(
     timeline: &mut J,
     sqlite: &mut Connection,
-    reducer: &mut Reducer,
+    reducer: &mut WasmReducer,
 ) -> Result<()> {
     let applied_lsn: Option<Lsn> = sqlite
         .query_row(
@@ -96,10 +97,10 @@ pub fn rebase_timeline<J: Journal>(
     Ok(())
 }
 
-pub fn apply_timeline_range<J: Journal>(
+pub fn apply_timeline_range<J: Journal, R: Reducer>(
     timeline: &J,
     sqlite: &mut Connection,
-    reducer: &mut Reducer,
+    reducer: &mut R,
     range: LsnRange,
 ) -> Result<()> {
     // nothing to apply, optimistically return

@@ -11,7 +11,7 @@ use sqlsync::{
     local::{LocalDocument, NoopSignal},
     replication::ReplicationProtocol,
     sqlite::Connection,
-    JournalId, MemoryJournal, MemoryJournalFactory, Reducer,
+    JournalId, MemoryJournal, MemoryJournalFactory, WasmReducer,
 };
 
 #[derive(Debug, PartialEq)]
@@ -96,7 +96,7 @@ fn main() -> anyhow::Result<()> {
     let mut local = LocalDocument::open(
         MemoryJournal::open(doc_id)?,
         MemoryJournal::open(JournalId::new128(&mut rng))?,
-        Reducer::new(wasm_bytes.as_slice())?,
+        WasmReducer::new(wasm_bytes.as_slice())?,
         NoopSignal,
         NoopSignal,
         NoopSignal,
@@ -104,7 +104,7 @@ fn main() -> anyhow::Result<()> {
     let mut local2 = LocalDocument::open(
         MemoryJournal::open(doc_id)?,
         MemoryJournal::open(JournalId::new128(&mut rng))?,
-        Reducer::new(wasm_bytes.as_slice())?,
+        WasmReducer::new(wasm_bytes.as_slice())?,
         NoopSignal,
         NoopSignal,
         NoopSignal,
@@ -112,7 +112,7 @@ fn main() -> anyhow::Result<()> {
     let mut remote = CoordinatorDocument::open(
         MemoryJournal::open(doc_id)?,
         MemoryJournalFactory,
-        &wasm_bytes[..],
+        WasmReducer::new(wasm_bytes.as_slice())?,
     )?;
 
     let mut protocols = BTreeMap::new();

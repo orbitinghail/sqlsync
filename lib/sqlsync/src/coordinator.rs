@@ -8,7 +8,7 @@ use rusqlite::Transaction;
 
 use crate::db::{open_with_vfs, run_in_tx, ConnectionPair};
 use crate::error::Result;
-use crate::reducer::Reducer;
+use crate::reducer::{Reducer, WasmReducer};
 use crate::replication::{
     ReplicationDestination, ReplicationError, ReplicationSource,
 };
@@ -25,8 +25,8 @@ struct ReceiveQueueEntry {
     range: LsnRange,
 }
 
-pub struct CoordinatorDocument<J: Journal> {
-    reducer: Reducer,
+pub struct CoordinatorDocument<J: Journal, R> {
+    reducer: R,
     storage: Box<Storage<J>>,
     sqlite: ConnectionPair,
     timeline_factory: J::Factory,
@@ -34,7 +34,7 @@ pub struct CoordinatorDocument<J: Journal> {
     timeline_receive_queue: VecDeque<ReceiveQueueEntry>,
 }
 
-impl<J: Journal> Debug for CoordinatorDocument<J> {
+impl<J: Journal, R> Debug for CoordinatorDocument<J, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("CoordinatorDocument")
             .field(&self.storage)
@@ -43,11 +43,11 @@ impl<J: Journal> Debug for CoordinatorDocument<J> {
     }
 }
 
-impl<J: Journal> CoordinatorDocument<J> {
+impl<J: Journal, R: Reducer> CoordinatorDocument<J, R> {
     pub fn open(
         storage: J,
         timeline_factory: J::Factory,
-        reducer_wasm_bytes: &[u8],
+        reducer: R, // reducer_wasm_bytes: &[u8],
     ) -> Result<Self> {
         let (mut sqlite, mut storage) = open_with_vfs(storage)?;
 
@@ -56,7 +56,7 @@ impl<J: Journal> CoordinatorDocument<J> {
         storage.commit()?;
 
         Ok(Self {
-            reducer: Reducer::new(reducer_wasm_bytes)?,
+            reducer,
             storage,
             sqlite,
             timeline_factory,
@@ -141,8 +141,8 @@ impl<J: Journal> CoordinatorDocument<J> {
 }
 
 /// CoordinatorDocument knows how to replicate it's storage journal
-impl<J: Journal + ReplicationSource> ReplicationSource
-    for CoordinatorDocument<J>
+impl<J: Journal + ReplicationSource, R: Reducer> ReplicationSource
+    for CoordinatorDocument<J, R>
 {
     type Reader<'a> = <J as ReplicationSource>::Reader<'a>
     where
@@ -165,8 +165,8 @@ impl<J: Journal + ReplicationSource> ReplicationSource
 }
 
 /// CoordinatorDocument knows how to receive timeline journals from elsewhere
-impl<J: Journal + ReplicationDestination> ReplicationDestination
-    for CoordinatorDocument<J>
+impl<J: Journal + ReplicationDestination, R: Reducer> ReplicationDestination
+    for CoordinatorDocument<J, R>
 {
     fn range(
         &mut self,
@@ -176,14 +176,14 @@ impl<J: Journal + ReplicationDestination> ReplicationDestination
         ReplicationDestination::range(timeline, id)
     }
 
-    fn write_lsn<R>(
+    fn write_lsn<Reader>(
         &mut self,
         id: JournalId,
         lsn: crate::Lsn,
-        reader: &mut R,
+        reader: &mut Reader,
     ) -> std::result::Result<(), ReplicationError>
     where
-        R: io::Read,
+        Reader: io::Read,
     {
         let timeline = self.get_or_create_timeline_mut(id)?;
         timeline.write_lsn(id, lsn, reader)?;
