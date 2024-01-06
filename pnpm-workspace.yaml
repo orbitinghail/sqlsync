@@ -5,3 +5,4 @@ packages:
   - "lib/sqlsync-solid-js"
   - "lib/sqlsync-worker"
   - "examples/guestbook-react"
+  - "examples/guestbook-solid-js"

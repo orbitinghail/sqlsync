@@ -134,6 +134,37 @@ importers:
         specifier: ^5.0.8
         version: 5.0.10(@types/node@20.8.8)
 
+  examples/guestbook-solid-js:
+    dependencies:
+      '@orbitinghail/sqlsync-solid-js':
+        specifier: workspace:*
+        version: link:../../lib/sqlsync-solid-js
+      '@orbitinghail/sqlsync-worker':
+        specifier: workspace:*
+        version: link:../../lib/sqlsync-worker
+      solid-js:
+        specifier: ^1.8.7
+        version: 1.8.8
+      uuid:
+        specifier: ^9.0.1
+        version: 9.0.1
+    devDependencies:
+      '@types/uuid':
+        specifier: ^9.0.6
+        version: 9.0.6
+      typescript:
+        specifier: ^5.2.2
+        version: 5.3.3
+      vite:
+        specifier: ^4.5.0
+        version: 4.5.0
+      vite-plugin-solid:
+        specifier: ^2.7.0
+        version: 2.8.0(solid-js@1.8.8)(vite@4.5.0)
+      vitest:
+        specifier: ^0.34.6
+        version: 0.34.6
+
   lib/sqlsync-react:
     dependencies:
       fast-equals:
@@ -4393,7 +4424,7 @@ packages:
       merge-anything: 5.1.7
       solid-js: 1.8.8
       solid-refresh: 0.5.3(solid-js@1.8.8)
-      vite: 4.5.0(@types/node@20.8.8)
+      vite: 4.5.0
       vitefu: 0.2.5(vite@4.5.0)
     transitivePeerDependencies:
       - supports-color
@@ -4414,6 +4445,41 @@ packages:
     transitivePeerDependencies:
       - supports-color
       - typescript
+    dev: true
+
+  /vite@4.5.0:
+    resolution: {integrity: sha512-ulr8rNLA6rkyFAlVWw2q5YJ91v098AFQ2R0PRFwPzREXOUJQPtFUG0t+/ZikhaOCDqFoDhN6/v8Sq0o4araFAw==}
+    engines: {node: ^14.18.0 || >=16.0.0}
+    hasBin: true
+    peerDependencies:
+      '@types/node': '>= 14'
+      less: '*'
+      lightningcss: ^1.21.0
+      sass: '*'
+      stylus: '*'
+      sugarss: '*'
+      terser: ^5.4.0
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+      less:
+        optional: true
+      lightningcss:
+        optional: true
+      sass:
+        optional: true
+      stylus:
+        optional: true
+      sugarss:
+        optional: true
+      terser:
+        optional: true
+    dependencies:
+      esbuild: 0.18.20
+      postcss: 8.4.32
+      rollup: 3.29.4
+    optionalDependencies:
+      fsevents: 2.3.3
     dev: true
 
   /vite@4.5.0(@types/node@20.8.8):
@@ -4496,7 +4562,7 @@ packages:
       vite:
         optional: true
     dependencies:
-      vite: 4.5.0(@types/node@20.8.8)
+      vite: 4.5.0
     dev: true
 
   /vitest@0.34.6:
