@@ -95,7 +95,6 @@ impl_from_error!(
     io::Error,
     sqlsync::error::Error,
     sqlsync::sqlite::Error,
-    sqlsync::JournalError,
     sqlsync::replication::ReplicationError,
     sqlsync::JournalIdParseError,
     sqlsync::ReducerError,

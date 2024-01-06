@@ -3,7 +3,7 @@ use std::{cmp, io};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{lsn::LsnRange, positioned_io::PositionedReader, JournalError, JournalId, Lsn};
+use crate::{lsn::LsnRange, positioned_io::PositionedReader, JournalId, Lsn};
 
 // maximum number of frames we will send without receiving an acknowledgement
 // note: this does not affect durability, as we keep don't truncate the source journal until rebase
@@ -32,9 +32,6 @@ pub enum ReplicationError {
     #[error("unknown journal id: {0}")]
     UnknownJournal(JournalId),
 
-    #[error(transparent)]
-    JournalError(#[from] JournalError),
-
     #[error(
         "replication must be contiguous, received lsn {received} but expected lsn in range {range}"
     )]
@@ -57,7 +54,10 @@ impl ReplicationProtocol {
     pub fn start<D: ReplicationSource>(&self, doc: &D) -> ReplicationMsg {
         // before we can start sending frames to the destination, we need to know
         // what frames the destination already has
-        ReplicationMsg::RangeRequest { id: doc.source_id(), source_range: doc.source_range() }
+        ReplicationMsg::RangeRequest {
+            id: doc.source_id(),
+            source_range: doc.source_range(),
+        }
     }
 
     /// initialized returns true if we have received a response to our initial range request
@@ -86,7 +86,11 @@ impl ReplicationProtocol {
 
                 // send frame
                 return Ok(Some((
-                    ReplicationMsg::Frame { id: doc.source_id(), lsn, len: data.size()? as u64 },
+                    ReplicationMsg::Frame {
+                        id: doc.source_id(),
+                        lsn,
+                        len: data.size()? as u64,
+                    },
                     data,
                 )));
             }
@@ -123,14 +127,18 @@ impl ReplicationProtocol {
                     // subsequent range response, update outstanding range
                     |outstanding_range| {
                         let next = range.next();
-                        assert!(next > 0, "subsequent range responses should never be empty");
+                        assert!(
+                            next > 0,
+                            "subsequent range responses should never be empty"
+                        );
                         Some(outstanding_range.trim_prefix(next - 1))
                     },
                 );
                 Ok(None)
             }
             ReplicationMsg::Frame { id, lsn, len } => {
-                let mut reader = LimitedReader { limit: len, inner: connection };
+                let mut reader =
+                    LimitedReader { limit: len, inner: connection };
                 doc.write_lsn(id, lsn, &mut reader)?;
                 Ok(Some(ReplicationMsg::Range { range: doc.range(id)? }))
             }
@@ -150,7 +158,8 @@ pub trait ReplicationSource {
     fn source_range(&self) -> LsnRange;
 
     /// read the given lsn from the source journal if it exists
-    fn read_lsn<'a>(&'a self, lsn: Lsn) -> io::Result<Option<Self::Reader<'a>>>;
+    fn read_lsn<'a>(&'a self, lsn: Lsn)
+        -> io::Result<Option<Self::Reader<'a>>>;
 }
 
 pub trait ReplicationDestination {

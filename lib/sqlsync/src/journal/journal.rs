@@ -1,8 +1,5 @@
 use std::fmt::Debug;
 use std::io;
-use std::result::Result;
-
-use thiserror::Error;
 
 use crate::Serializable;
 use crate::{
@@ -11,17 +8,6 @@ use crate::{
 };
 
 use super::Scannable;
-
-#[derive(Error, Debug)]
-pub enum JournalError {
-    #[error("io error: {0}")]
-    IoError(#[from] io::Error),
-
-    #[error("failed to serialize object")]
-    SerializationError(#[source] io::Error),
-}
-
-pub type JournalResult<T> = Result<T, JournalError>;
 
 pub trait Journal: Scannable + Debug + Sized {
     type Factory: JournalFactory<Self>;
@@ -33,12 +19,12 @@ pub trait Journal: Scannable + Debug + Sized {
     fn range(&self) -> LsnRange;
 
     /// append a new journal entry, and then write to it
-    fn append(&mut self, obj: impl Serializable) -> JournalResult<()>;
+    fn append(&mut self, obj: impl Serializable) -> io::Result<()>;
 
     /// drop the journal's prefix
-    fn drop_prefix(&mut self, up_to: Lsn) -> JournalResult<()>;
+    fn drop_prefix(&mut self, up_to: Lsn) -> io::Result<()>;
 }
 
 pub trait JournalFactory<J> {
-    fn open(&self, id: JournalId) -> JournalResult<J>;
+    fn open(&self, id: JournalId) -> io::Result<J>;
 }

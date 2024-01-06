@@ -16,7 +16,6 @@ use sqlsync::local::NoopSignal;
 use sqlsync::replication::ReplicationMsg;
 use sqlsync::replication::ReplicationProtocol;
 use sqlsync::JournalId;
-use sqlsync::Lsn;
 use sqlsync::MemoryJournalFactory;
 use sqlsync::Reducer;
 
@@ -141,6 +140,8 @@ fn handle_client(
 
     let mut num_steps = 0;
 
+    let mut remaining_direct_mutations = 5;
+
     loop {
         let msg = receive_msg(&mut socket_reader)?;
         log::info!("server: received {:?}", msg);
@@ -156,6 +157,31 @@ fn handle_client(
         num_steps += 1;
         log::info!("server: stepping doc (steps: {})", num_steps);
         unlock!(|doc| doc.step()?);
+
+        // trigger a direct increment on the server side after every message
+        if remaining_direct_mutations > 0 {
+            remaining_direct_mutations -= 1;
+            unlock!(|doc| {
+                log::info!("server: running a direct mutation on the doc");
+                doc.mutate_direct(|tx| {
+                    match tx.execute(
+                        "INSERT INTO counter (id, value) VALUES (1, 0)
+                        ON CONFLICT (id) DO UPDATE SET value = value + 1",
+                        [],
+                    ) {
+                        Ok(_) => Ok::<_, anyhow::Error>(()),
+                        // ignore missing table error
+                        Err(rusqlite::Error::SqliteFailure(_, Some(msg)))
+                            if msg == "no such table: counter" =>
+                        {
+                            log::info!("server: skipping direct mutation");
+                            Ok(())
+                        }
+                        Err(err) => Err(err)?,
+                    }
+                })?;
+            });
+        }
 
         // sync back to the client if needed
         unlock!(|doc| {
@@ -219,7 +245,16 @@ fn start_client(
     let total_mutations = 10 as usize;
     let mut remaining_mutations = total_mutations;
 
+    // the total number of sync attempts we will make
+    let total_syncs = 100 as usize;
+    let mut syncs = 0;
+
     loop {
+        syncs += 1;
+        if syncs > total_syncs {
+            panic!("client({}): too many syncs", timeline_id);
+        }
+
         let msg = receive_msg(&mut socket_reader)?;
         log::info!("client({}): received {:?}", timeline_id, msg);
 
@@ -248,25 +283,31 @@ fn start_client(
         }
 
         log::info!("client({}): QUERYING STATE", timeline_id);
-        doc.query(|conn| {
-            conn.query_row("select value from counter", [], |row| {
-                let value: Option<i32> = row.get(0)?;
-                log::info!(
-                    "client({}): counter value: {:?}",
-                    timeline_id,
-                    value
-                );
-                Ok(())
-            })?;
+        let current_value = doc.query(|conn| {
+            let value = conn.query_row(
+                "select value from counter where id = 0",
+                [],
+                |row| {
+                    let value: Option<usize> = row.get(0)?;
+                    log::info!(
+                        "client({}): counter value: {:?}",
+                        timeline_id,
+                        value
+                    );
+                    Ok(value)
+                },
+            )?;
 
-            Ok::<_, anyhow::Error>(())
+            Ok::<_, anyhow::Error>(value)
         })?;
 
-        if let Some(lsn) = doc.storage_lsn() {
-            // once the storage has reached (total_mutations+1) * num_clients
-            // then we have reached the end
-            log::info!("client({}): storage lsn: {}", timeline_id, lsn);
-            if lsn >= ((total_mutations * num_clients) + 1) as Lsn {
+        if let Some(value) = current_value {
+            log::info!(
+                "client({}): storage lsn: {:?}",
+                timeline_id,
+                doc.storage_lsn()
+            );
+            if value == (total_mutations * num_clients) {
                 break;
             }
         }
@@ -279,23 +320,47 @@ fn start_client(
 
     // final query, value should be total_mutations * num_clients
     doc.query(|conn| {
-        conn.query_row_and_then("select value from counter", [], |row| {
-            let value: Option<usize> = row.get(0)?;
-            log::info!(
-                "client({}): FINAL counter value: {:?}",
-                timeline_id,
-                value
-            );
-            if value != Some(total_mutations * num_clients) {
-                return Err(anyhow::anyhow!(
+        conn.query_row_and_then(
+            "select value from counter where id = 0",
+            [],
+            |row| {
+                let value: Option<usize> = row.get(0)?;
+                log::info!(
+                    "client({}): FINAL counter value: {:?}",
+                    timeline_id,
+                    value
+                );
+                if value != Some(total_mutations * num_clients) {
+                    return Err(anyhow::anyhow!(
                     "client({}): counter value is incorrect: {:?}, expected {}",
                     timeline_id,
                     value,
                     total_mutations * num_clients
                 ));
-            }
-            Ok(())
-        })?;
+                }
+                Ok(())
+            },
+        )?;
+        conn.query_row_and_then(
+            "select value from counter where id = 1",
+            [],
+            |row| {
+                let value: Option<usize> = row.get(0)?;
+                log::info!(
+                    "client({}): FINAL server counter value: {:?}",
+                    timeline_id,
+                    value
+                );
+                if value.is_none() || value == Some(0) {
+                    return Err(anyhow::anyhow!(
+                    "client({}): server counter value is incorrect: {:?}, expected non-zero value",
+                    timeline_id,
+                    value,
+                ));
+                }
+                Ok(())
+            },
+        )?;
         Ok::<_, anyhow::Error>(())
     })?;
 

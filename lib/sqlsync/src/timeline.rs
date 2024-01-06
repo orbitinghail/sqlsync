@@ -1,14 +1,14 @@
 use std::io;
 
-use rusqlite::{named_params, Connection, Transaction};
+use rusqlite::{named_params, Connection};
 use thiserror::Error;
 
 use crate::{
+    db::run_in_tx,
     journal::Journal,
     lsn::{Lsn, LsnRange},
     positioned_io::PositionedReader,
     reducer::{Reducer, ReducerError},
-    JournalError,
 };
 
 const TIMELINES_TABLE_SQL: &str = "
@@ -39,23 +39,10 @@ pub enum TimelineError {
     Sqlite(#[from] rusqlite::Error),
 
     #[error(transparent)]
-    JournalError(#[from] JournalError),
-
-    #[error(transparent)]
     ReducerError(#[from] ReducerError),
 }
 
 type Result<T> = std::result::Result<T, TimelineError>;
-
-fn run_in_tx<F>(sqlite: &mut Connection, f: F) -> Result<()>
-where
-    F: FnOnce(&mut Transaction) -> Result<()>,
-{
-    let mut txn = sqlite.transaction()?;
-    f(&mut txn)?; // will cause a rollback on failure
-    txn.commit()?;
-    Ok(())
-}
 
 pub fn run_timeline_migration(sqlite: &mut Connection) -> Result<()> {
     sqlite.execute(TIMELINES_TABLE_SQL, [])?;
@@ -68,7 +55,7 @@ pub fn apply_mutation<J: Journal>(
     reducer: &mut Reducer,
     mutation: &[u8],
 ) -> Result<()> {
-    run_in_tx(sqlite, |tx| Ok(reducer.apply(tx, &mutation)?))?;
+    run_in_tx(sqlite, |tx| reducer.apply(tx, &mutation))?;
     timeline.append(mutation)?;
     Ok(())
 }
@@ -103,7 +90,7 @@ pub fn rebase_timeline<J: Journal>(
             let mutation = cursor.read_all()?;
             reducer.apply(tx, &mutation)?;
         }
-        Ok(())
+        Ok::<_, TimelineError>(())
     })?;
 
     Ok(())

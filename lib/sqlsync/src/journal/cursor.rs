@@ -28,11 +28,7 @@ pub struct Cursor<'a, S: Scannable, I> {
 
 impl<'a, S: Scannable, I: DoubleEndedIterator<Item = Lsn>> Cursor<'a, S, I> {
     pub fn new(inner: &'a S, lsn_iter: I) -> Self {
-        Self {
-            inner,
-            lsn_iter,
-            state: None,
-        }
+        Self { inner, lsn_iter, state: None }
     }
 
     /// advance the cursor
@@ -60,11 +56,7 @@ impl<'a, S: Scannable, I: DoubleEndedIterator<Item = Lsn>> Cursor<'a, S, I> {
 
     /// reverse this cursor
     pub fn into_rev(self) -> Cursor<'a, S, Rev<I>> {
-        Cursor {
-            inner: self.inner,
-            lsn_iter: self.lsn_iter.rev(),
-            state: None,
-        }
+        Cursor { inner: self.inner, lsn_iter: self.lsn_iter.rev(), state: None }
     }
 }
 

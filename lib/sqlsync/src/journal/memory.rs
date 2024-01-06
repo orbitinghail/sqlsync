@@ -2,10 +2,12 @@ use std::fmt::{Debug, Formatter};
 use std::io;
 
 use crate::lsn::{Lsn, LsnIter, LsnRange};
-use crate::{JournalError, JournalFactory, Serializable};
+use crate::{JournalFactory, Serializable};
 
-use super::{Cursor, Journal, JournalId, JournalResult, Scannable};
-use crate::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
+use super::{Cursor, Journal, JournalId, Scannable};
+use crate::replication::{
+    ReplicationDestination, ReplicationError, ReplicationSource,
+};
 
 pub struct MemoryJournal {
     id: JournalId,
@@ -23,19 +25,15 @@ impl Debug for MemoryJournal {
 }
 
 impl MemoryJournal {
-    pub fn open(id: JournalId) -> JournalResult<Self> {
-        Ok(MemoryJournal {
-            id,
-            range: LsnRange::empty(),
-            data: vec![],
-        })
+    pub fn open(id: JournalId) -> io::Result<Self> {
+        Ok(MemoryJournal { id, range: LsnRange::empty(), data: vec![] })
     }
 }
 
 pub struct MemoryJournalFactory;
 
 impl JournalFactory<MemoryJournal> for MemoryJournalFactory {
-    fn open(&self, id: JournalId) -> JournalResult<MemoryJournal> {
+    fn open(&self, id: JournalId) -> io::Result<MemoryJournal> {
         MemoryJournal::open(id)
     }
 }
@@ -51,11 +49,10 @@ impl Journal for MemoryJournal {
         self.range
     }
 
-    fn append(&mut self, obj: impl Serializable) -> JournalResult<()> {
+    fn append(&mut self, obj: impl Serializable) -> io::Result<()> {
         // serialize the entry
         let mut entry: Vec<u8> = Vec::new();
-        obj.serialize_into(&mut entry)
-            .map_err(|err| JournalError::SerializationError(err))?;
+        obj.serialize_into(&mut entry)?;
 
         // update the journal
         self.data.push(entry);
@@ -64,7 +61,7 @@ impl Journal for MemoryJournal {
         Ok(())
     }
 
-    fn drop_prefix(&mut self, up_to: Lsn) -> JournalResult<()> {
+    fn drop_prefix(&mut self, up_to: Lsn) -> io::Result<()> {
         let remaining_range = self.range.trim_prefix(up_to);
         let offsets = self.range.intersection_offsets(&remaining_range);
         self.data = self.data[offsets].to_vec();
@@ -108,7 +105,10 @@ impl ReplicationSource for MemoryJournal {
         self.range()
     }
 
-    fn read_lsn<'a>(&'a self, lsn: Lsn) -> io::Result<Option<Self::Reader<'a>>> {
+    fn read_lsn<'a>(
+        &'a self,
+        lsn: Lsn,
+    ) -> io::Result<Option<Self::Reader<'a>>> {
         match self.range.offset(lsn) {
             None => Ok(None),
             Some(offset) => Ok(Some(&self.data[offset][..])),
