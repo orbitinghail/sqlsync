@@ -9,7 +9,7 @@ use crate::{
     lsn::LsnRange,
     page::{Page, PageIdx},
     replication::{ReplicationDestination, ReplicationSource},
-    JournalResult, Lsn,
+    Lsn,
 };
 
 // Useful SQLite header offsets
@@ -82,12 +82,13 @@ impl<J: Journal> Storage<J> {
         self.visible_lsn_range.last() < self.journal.range().last()
     }
 
-    pub fn commit(&mut self) -> JournalResult<()> {
+    pub fn commit(&mut self) -> io::Result<()> {
         if self.pending.num_pages() > 0 {
             self.journal.append(std::mem::take(&mut self.pending))?;
 
             // calculate the LsnRange between the current visible range and the committed range
-            let new_lsns = self.journal.range().difference(&self.visible_lsn_range);
+            let new_lsns =
+                self.journal.range().difference(&self.visible_lsn_range);
             // clear the changed pages list (update_changed_root_pages will scan the new lsns)
             self.changed_pages.clear();
 
@@ -102,7 +103,7 @@ impl<J: Journal> Storage<J> {
         Ok(())
     }
 
-    pub fn reset(&mut self) -> JournalResult<()> {
+    pub fn reset(&mut self) -> io::Result<()> {
         // mark every page in pending as changed to ensure that we re-run queries that depended on the results of something in pending
         self.changed_pages = self.pending.page_idxs().copied().collect();
 
@@ -126,7 +127,7 @@ impl<J: Journal> Storage<J> {
     /// update_changed_root_pages does two things
     /// 1. it scans the journal, updating changed_root_pages for each frame
     /// 2. it updates changed_root_pages for every page in self.changed_pages
-    fn update_changed_root_pages(&mut self, range: LsnRange) -> JournalResult<()> {
+    fn update_changed_root_pages(&mut self, range: LsnRange) -> io::Result<()> {
         // scan the journal, updating changed_root_pages for each frame
         let mut cursor = self.journal.scan_range(range);
         while cursor.advance()? {
@@ -135,9 +136,11 @@ impl<J: Journal> Storage<J> {
             for page_idx in pages.page_idxs()?.iter() {
                 // we need to resolve each page_idx to it's root page by only
                 // looking at ptrmap pages that existed as of this lsn
-                if let Some(root_page_idx) =
-                    self.resolve_root_page(LsnRange::new(0, lsn), false, *page_idx)?
-                {
+                if let Some(root_page_idx) = self.resolve_root_page(
+                    LsnRange::new(0, lsn),
+                    false,
+                    *page_idx,
+                )? {
                     self.changed_root_pages.insert(root_page_idx);
                 }
             }
@@ -168,7 +171,7 @@ impl<J: Journal> Storage<J> {
         range: LsnRange,
         include_pending: bool,
         page_idx: PageIdx,
-    ) -> JournalResult<Option<PageIdx>> {
+    ) -> io::Result<Option<PageIdx>> {
         const PENDING_BYTE_PAGE_IDX: u64 = (0x40000000 / (PAGESIZE as u64)) + 1;
 
         // XXX: SQLSync does not currently support SQLite extensions, so we
@@ -184,7 +187,8 @@ impl<J: Journal> Storage<J> {
         // effectively taking into account the ptrmap page itself
         // math mostly copied from:
         //  https://github.com/sqlite/sqlite/blob/1eca330a08e18fd0930491302802141f5ce6298e/src/btree.c#L989C1-L1001C2
-        const PAGES_PER_PTRMAP: u64 = (USABLE_PAGE_SIZE / PTRMAP_ENTRY_SIZE) + 1;
+        const PAGES_PER_PTRMAP: u64 =
+            (USABLE_PAGE_SIZE / PTRMAP_ENTRY_SIZE) + 1;
 
         if page_idx == 1 {
             // page 1 is the schema root page
@@ -213,13 +217,25 @@ impl<J: Journal> Storage<J> {
             }
 
             // calculate the offset of the page_idx within the ptrmap page
-            let page_idx_offset = (page_idx - ptrmap_page_idx - 1) * PTRMAP_ENTRY_SIZE;
+            let page_idx_offset =
+                (page_idx - ptrmap_page_idx - 1) * PTRMAP_ENTRY_SIZE;
             // convert the relative offset to an absolute offset within the file
-            let page_idx_pos = ((ptrmap_page_idx - 1) * (PAGESIZE as u64)) + page_idx_offset;
+            let page_idx_pos =
+                ((ptrmap_page_idx - 1) * (PAGESIZE as u64)) + page_idx_offset;
 
             // read the ptrmap_entry for this page
-            self.read_at_range(range, include_pending, page_idx_pos, &mut ptrmap_entry)?;
+            self.read_at_range(
+                range,
+                include_pending,
+                page_idx_pos,
+                &mut ptrmap_entry,
+            )?;
             match ptrmap_entry[0] {
+                0 => {
+                    // page is missing, this can happen while we are rebasing
+                    // right after we create a local table or index (for example)
+                    return Ok(None);
+                }
                 1 => {
                     // page is a b-tree root page
                     // return the page_idx
@@ -242,7 +258,7 @@ impl<J: Journal> Storage<J> {
         }
     }
 
-    fn schema_cookie(&self) -> JournalResult<u32> {
+    fn schema_cookie(&self) -> io::Result<u32> {
         let mut buf = [0; 4];
         self.read_at_range(
             self.visible_lsn_range,
@@ -256,10 +272,11 @@ impl<J: Journal> Storage<J> {
     pub fn has_changes(&self) -> bool {
         // it's not possible for the schema to change without also modifying pages
         // so we don't have to check the schema cookie here
-        return self.changed_pages.len() > 0 || self.changed_root_pages.len() > 0;
+        return self.changed_pages.len() > 0
+            || self.changed_root_pages.len() > 0;
     }
 
-    pub fn changes(&mut self) -> JournalResult<StorageChange> {
+    pub fn changes(&mut self) -> io::Result<StorageChange> {
         // check to see if the schema has changed
         let schema_cookie = self.schema_cookie()?;
         if schema_cookie != self.last_schema_cookie {
@@ -280,7 +297,8 @@ impl<J: Journal> Storage<J> {
         self.update_changed_root_pages(LsnRange::empty())?;
 
         // gather changed root pages into sorted vec
-        let mut root_pages_sorted: Vec<_> = self.changed_root_pages.iter().copied().collect();
+        let mut root_pages_sorted: Vec<_> =
+            self.changed_root_pages.iter().copied().collect();
         root_pages_sorted.sort();
 
         // reset variables
@@ -325,7 +343,8 @@ impl<J: Journal> Storage<J> {
             {
                 // if pos = 0, then this should be FILE_CHANGE_COUNTER_OFFSET
                 // if pos = FILE_CHANGE_COUNTER_OFFSET, this this should be 0
-                let file_change_buf_offset = FILE_CHANGE_COUNTER_OFFSET - page_offset;
+                let file_change_buf_offset =
+                    FILE_CHANGE_COUNTER_OFFSET - page_offset;
 
                 buf[file_change_buf_offset..(file_change_buf_offset + 4)]
                     .copy_from_slice(&self.file_change_counter.to_be_bytes());
@@ -351,7 +370,10 @@ impl<J: ReplicationSource> ReplicationSource for Storage<J> {
         self.journal.source_range()
     }
 
-    fn read_lsn<'a>(&'a self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'a>>> {
+    fn read_lsn<'a>(
+        &'a self,
+        lsn: crate::Lsn,
+    ) -> io::Result<Option<Self::Reader<'a>>> {
         self.journal.read_lsn(lsn)
     }
 }
@@ -386,7 +408,8 @@ impl<J: Journal> sqlite_vfs::File for Storage<J> {
         let mut cursor = self.journal.scan_range(self.visible_lsn_range);
         while cursor.advance().map_err(|_| SQLITE_IOERR)? {
             let pages = SerializedPagesReader(&cursor);
-            max_page_idx = max_page_idx.max(Some(pages.max_page_idx().map_err(|_| SQLITE_IOERR)?));
+            max_page_idx = max_page_idx
+                .max(Some(pages.max_page_idx().map_err(|_| SQLITE_IOERR)?));
         }
 
         Ok(max_page_idx
@@ -418,7 +441,11 @@ impl<J: Journal> sqlite_vfs::File for Storage<J> {
         Ok(buf.len())
     }
 
-    fn read(&mut self, pos: u64, buf: &mut [u8]) -> sqlite_vfs::VfsResult<usize> {
+    fn read(
+        &mut self,
+        pos: u64,
+        buf: &mut [u8],
+    ) -> sqlite_vfs::VfsResult<usize> {
         self.read_at_range(self.visible_lsn_range, true, pos, buf)
             .map_err(|_| SQLITE_IOERR)
     }

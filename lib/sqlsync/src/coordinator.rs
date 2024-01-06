@@ -1,19 +1,24 @@
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
+use std::convert::From;
 use std::fmt::Debug;
 use std::io;
 
-use crate::db::{open_with_vfs, ConnectionPair};
+use rusqlite::Transaction;
+
+use crate::db::{open_with_vfs, run_in_tx, ConnectionPair};
 use crate::error::Result;
 use crate::reducer::Reducer;
-use crate::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
+use crate::replication::{
+    ReplicationDestination, ReplicationError, ReplicationSource,
+};
 use crate::timeline::{apply_timeline_range, run_timeline_migration};
+use crate::Lsn;
 use crate::{
     journal::{Journal, JournalFactory, JournalId},
     lsn::LsnRange,
     storage::Storage,
 };
-use crate::{JournalError, Lsn};
 
 struct ReceiveQueueEntry {
     id: JournalId,
@@ -44,10 +49,11 @@ impl<J: Journal> CoordinatorDocument<J> {
         timeline_factory: J::Factory,
         reducer_wasm_bytes: &[u8],
     ) -> Result<Self> {
-        let (mut sqlite, storage) = open_with_vfs(storage)?;
+        let (mut sqlite, mut storage) = open_with_vfs(storage)?;
 
         // TODO: this feels awkward here
         run_timeline_migration(&mut sqlite.readwrite)?;
+        storage.commit()?;
 
         Ok(Self {
             reducer: Reducer::new(reducer_wasm_bytes)?,
@@ -62,10 +68,12 @@ impl<J: Journal> CoordinatorDocument<J> {
     fn get_or_create_timeline_mut(
         &mut self,
         id: JournalId,
-    ) -> std::result::Result<&mut J, JournalError> {
+    ) -> io::Result<&mut J> {
         match self.timelines.entry(id) {
             Entry::Occupied(entry) => Ok(entry.into_mut()),
-            Entry::Vacant(entry) => Ok(entry.insert(self.timeline_factory.open(id)?)),
+            Entry::Vacant(entry) => {
+                Ok(entry.insert(self.timeline_factory.open(id)?))
+            }
         }
     }
 
@@ -89,12 +97,26 @@ impl<J: Journal> CoordinatorDocument<J> {
         }
     }
 
+    pub fn mutate_direct<F, E>(&mut self, f: F) -> Result<(), E>
+    where
+        F: FnOnce(&mut Transaction) -> Result<(), E>,
+        E: From<rusqlite::Error> + From<io::Error>,
+    {
+        run_in_tx(&mut self.sqlite.readwrite, f)?;
+        self.storage.commit()?;
+        Ok(())
+    }
+
     pub fn step(&mut self) -> Result<()> {
         // check to see if we have anything in the receive queue
         let entry = self.timeline_receive_queue.pop_front();
 
         if let Some(entry) = entry {
-            log::debug!("applying range {} to timeline {}", entry.range, entry.id);
+            log::debug!(
+                "applying range {} to timeline {}",
+                entry.range,
+                entry.id
+            );
 
             // get the timeline
             let timeline = self
@@ -119,7 +141,9 @@ impl<J: Journal> CoordinatorDocument<J> {
 }
 
 /// CoordinatorDocument knows how to replicate it's storage journal
-impl<J: Journal + ReplicationSource> ReplicationSource for CoordinatorDocument<J> {
+impl<J: Journal + ReplicationSource> ReplicationSource
+    for CoordinatorDocument<J>
+{
     type Reader<'a> = <J as ReplicationSource>::Reader<'a>
     where
         Self: 'a;
@@ -132,14 +156,22 @@ impl<J: Journal + ReplicationSource> ReplicationSource for CoordinatorDocument<J
         self.storage.source_range()
     }
 
-    fn read_lsn<'a>(&'a self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'a>>> {
+    fn read_lsn<'a>(
+        &'a self,
+        lsn: crate::Lsn,
+    ) -> io::Result<Option<Self::Reader<'a>>> {
         self.storage.read_lsn(lsn)
     }
 }
 
 /// CoordinatorDocument knows how to receive timeline journals from elsewhere
-impl<J: Journal + ReplicationDestination> ReplicationDestination for CoordinatorDocument<J> {
-    fn range(&mut self, id: JournalId) -> std::result::Result<LsnRange, ReplicationError> {
+impl<J: Journal + ReplicationDestination> ReplicationDestination
+    for CoordinatorDocument<J>
+{
+    fn range(
+        &mut self,
+        id: JournalId,
+    ) -> std::result::Result<LsnRange, ReplicationError> {
         let timeline = self.get_or_create_timeline_mut(id)?;
         ReplicationDestination::range(timeline, id)
     }

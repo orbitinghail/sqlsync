@@ -1,6 +1,8 @@
+use std::convert::From;
+
 use rusqlite::{
     hooks::{AuthAction, AuthContext, Authorization},
-    Connection, OpenFlags,
+    Connection, OpenFlags, Transaction,
 };
 use sqlite_vfs::FilePtr;
 
@@ -13,11 +15,9 @@ pub struct ConnectionPair {
     pub readonly: Connection,
 }
 
-type Result<T> = std::result::Result<T, rusqlite::Error>;
-
 pub fn open_with_vfs<J: Journal>(
     journal: J,
-) -> Result<(ConnectionPair, Box<Storage<J>>)> {
+) -> rusqlite::Result<(ConnectionPair, Box<Storage<J>>)> {
     let mut storage = Box::new(Storage::new(journal));
     let storage_ptr = FilePtr::new(&mut storage);
 
@@ -67,4 +67,15 @@ pub fn open_with_vfs<J: Journal>(
         ConnectionPair { readwrite: sqlite, readonly: sqlite_readonly },
         storage,
     ))
+}
+
+pub fn run_in_tx<F, E>(sqlite: &mut Connection, f: F) -> Result<(), E>
+where
+    F: FnOnce(&mut Transaction) -> Result<(), E>,
+    E: From<rusqlite::Error>,
+{
+    let mut txn = sqlite.transaction()?;
+    f(&mut txn)?; // will cause a rollback on failure
+    txn.commit()?;
+    Ok(())
 }

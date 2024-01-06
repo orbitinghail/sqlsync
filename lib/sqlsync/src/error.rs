@@ -1,17 +1,16 @@
+use std::io;
+
 use thiserror::Error;
 
 use crate::{
-    reducer::ReducerError, replication::ReplicationError, timeline::TimelineError, JournalError,
-    JournalIdParseError,
+    reducer::ReducerError, replication::ReplicationError,
+    timeline::TimelineError, JournalIdParseError,
 };
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     ReplicationError(#[from] ReplicationError),
-
-    #[error(transparent)]
-    JournalError(#[from] JournalError),
 
     #[error(transparent)]
     JournalIdParseError(#[from] JournalIdParseError),
@@ -24,6 +23,9 @@ pub enum Error {
 
     #[error(transparent)]
     SqliteError(#[from] rusqlite::Error),
+
+    #[error("io error: {0}")]
+    IoError(#[from] io::Error),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, E = Error> = std::result::Result<T, E>;
