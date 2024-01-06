@@ -12,8 +12,8 @@ use serde::de::DeserializeOwned;
 use crate::{
     guest_ffi::{fbm, FFIBufPtr},
     types::{
-        ErrorResponse, ExecResponse, QueryResponse, ReducerError, Request,
-        RequestId, Requests, Responses, SqliteValue,
+        ErrorResponse, ExecResponse, QueryResponse, ReducerError, Request, RequestId, Requests,
+        Responses, SqliteValue,
     },
 };
 
@@ -31,6 +31,7 @@ pub fn reactor() -> &'static mut Reactor {
 
 type ReducerTask = Pin<Box<dyn Future<Output = Result<(), ReducerError>>>>;
 
+#[derive(Default)]
 pub struct Reactor {
     task: Option<ReducerTask>,
     request_id_generator: RequestId,
@@ -43,12 +44,7 @@ pub struct Reactor {
 
 impl Reactor {
     pub fn new() -> Self {
-        Self {
-            task: None,
-            request_id_generator: 0,
-            requests: None,
-            responses: None,
-        }
+        Reactor::default()
     }
 
     fn queue_request(&mut self, request: Request) -> RequestId {
@@ -60,14 +56,14 @@ impl Reactor {
         id
     }
 
-    fn get_response<T: DeserializeOwned>(
-        &mut self,
-        id: RequestId,
-    ) -> Option<T> {
+    fn get_response<T: DeserializeOwned>(&mut self, id: RequestId) -> Option<T> {
         self.responses
             .as_mut()
             .and_then(|b| b.remove(&id))
-            .map(|ptr| fbm().decode(ptr as *mut u8).unwrap())
+            .map(|ptr| {
+                let f = fbm();
+                unsafe { f.decode(ptr as *mut u8).unwrap() }
+            })
     }
 
     pub fn spawn(&mut self, task: ReducerTask) {
@@ -77,10 +73,7 @@ impl Reactor {
         self.task = Some(task);
     }
 
-    pub fn step(
-        &mut self,
-        responses: Responses,
-    ) -> Result<Requests, ReducerError> {
+    pub fn step(&mut self, responses: Responses) -> Result<Requests, ReducerError> {
         if let Some(ref mut previous) = self.responses {
             // if we still have previous responses, merge new responses in
             // this replaces keys in previous with those in next - as long
@@ -166,8 +159,14 @@ macro_rules! execute {
 macro_rules! init_reducer {
     // fn should be (Vec<u8>) -> Future<Output = Result<(), ReducerError>>
     ($fn:ident) => {
+        /// ffi_reduce is called by the host to cause the reducer to start processing a new mutation.
+        ///
+        /// # Panics
+        /// Panics if the host passes in an invalid pointer.
+        /// # Safety
+        /// The host must pass in a valid pointer to a Mutation buffer.
         #[no_mangle]
-        pub fn ffi_reduce(
+        pub unsafe fn ffi_reduce(
             mutation_ptr: sqlsync_reducer::guest_ffi::FFIBufPtr,
         ) -> sqlsync_reducer::guest_ffi::FFIBufPtr {
             let reactor = sqlsync_reducer::guest_reactor::reactor();
@@ -191,8 +190,15 @@ macro_rules! init_reducer {
     };
 }
 
+/// ffi_reactor_step is called by the host to advance the reactor forward.
+///
+/// # Panics
+/// Panics if the host passes in an invalid pointer.
+///
+/// # Safety
+/// The host must pass in a valid pointer to a serialized Responses object.
 #[no_mangle]
-pub fn ffi_reactor_step(responses_ptr: FFIBufPtr) -> FFIBufPtr {
+pub unsafe fn ffi_reactor_step(responses_ptr: FFIBufPtr) -> FFIBufPtr {
     let fbm = fbm();
     let responses = fbm.decode(responses_ptr).unwrap();
     let out = reactor().step(responses);

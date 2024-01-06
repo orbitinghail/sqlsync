@@ -2,15 +2,11 @@ use anyhow::anyhow;
 use futures::{channel::mpsc, select, FutureExt, StreamExt};
 use rand::thread_rng;
 use sqlsync::{
-    local::LocalDocument, sqlite::params_from_iter, JournalId, MemoryJournal,
-    WasmReducer,
+    local::LocalDocument, sqlite::params_from_iter, JournalId, MemoryJournal, WasmReducer,
 };
 
 use crate::{
-    api::{
-        DocEvent, DocReply, DocRequest, HostToWorkerMsg, PortRouter,
-        WorkerToHostMsg,
-    },
+    api::{DocEvent, DocReply, DocRequest, HostToWorkerMsg, PortRouter, WorkerToHostMsg},
     net::{ConnectionTask, CoordinatorClient},
     reactive::ReactiveQueries,
     signal::{SignalEmitter, SignalRouter},
@@ -60,14 +56,18 @@ impl DocTask {
             signals.emitter(Signal::CanRebase),
         )?;
 
-        let queries =
-            ReactiveQueries::new(signals.emitter(Signal::HasDirtyQueries));
-        let coordinator_client = CoordinatorClient::new(
-            doc_url,
-            signals.emitter(Signal::ConnectionStateChanged),
-        );
+        let queries = ReactiveQueries::new(signals.emitter(Signal::HasDirtyQueries));
+        let coordinator_client =
+            CoordinatorClient::new(doc_url, signals.emitter(Signal::ConnectionStateChanged));
 
-        Ok(Self { doc, inbox, signals, ports, queries, coordinator_client })
+        Ok(Self {
+            doc,
+            inbox,
+            signals,
+            ports,
+            queries,
+            coordinator_client,
+        })
     }
 
     pub async fn into_task(mut self) {
@@ -102,9 +102,7 @@ impl DocTask {
     async fn handle_signals(&mut self, signals: Vec<Signal>) {
         for signal in signals {
             match signal {
-                Signal::ConnectionStateChanged => {
-                    self.handle_connection_state_changed()
-                }
+                Signal::ConnectionStateChanged => self.handle_connection_state_changed(),
                 Signal::TimelineChanged => self.handle_timeline_changed().await,
                 Signal::HasDirtyQueries => self.handle_dirty_queries(),
 
@@ -124,11 +122,9 @@ impl DocTask {
     }
 
     fn handle_connection_state_changed(&mut self) {
-        let _ = self.ports.send_all(WorkerToHostMsg::Event {
+        self.ports.send_all(WorkerToHostMsg::Event {
             doc_id: self.doc.doc_id(),
-            evt: DocEvent::ConnectionStatus {
-                status: self.coordinator_client.status(),
-            },
+            evt: DocEvent::ConnectionStatus { status: self.coordinator_client.status() },
         });
     }
 
@@ -147,15 +143,14 @@ impl DocTask {
 
     fn handle_dirty_queries(&mut self) {
         if let Some(query) = self.queries.next_dirty_query() {
-            let result =
-                query.refresh(self.doc.sqlite_readonly(), |columns, row| {
-                    let mut out = Vec::with_capacity(columns.len());
-                    for i in 0..columns.len() {
-                        let val: SqlValue = row.get_ref(i)?.into();
-                        out.push(val);
-                    }
-                    Ok::<_, WasmError>(out)
-                });
+            let result = query.refresh(self.doc.sqlite_readonly(), |columns, row| {
+                let mut out = Vec::with_capacity(columns.len());
+                for i in 0..columns.len() {
+                    let val: SqlValue = row.get_ref(i)?.into();
+                    out.push(val);
+                }
+                Ok::<_, WasmError>(out)
+            });
 
             let msg = match result {
                 Ok((columns, rows)) => WorkerToHostMsg::Event {
@@ -197,22 +192,16 @@ impl DocTask {
         }
     }
 
-    async fn process_request(
-        &mut self,
-        msg: &HostToWorkerMsg,
-    ) -> WasmResult<DocReply> {
+    async fn process_request(&mut self, msg: &HostToWorkerMsg) -> WasmResult<DocReply> {
         log::info!("DocTask::process_request: {:?}", msg.req);
         match &msg.req {
-            DocRequest::Open { .. } => {
-                Err(WasmError(anyhow!("doc is already open")))
-            }
+            DocRequest::Open { .. } => Err(WasmError(anyhow!("doc is already open"))),
 
             DocRequest::Query { sql, params } => self.doc.query(|conn| {
                 let params = params_from_iter(params.iter());
                 let mut stmt = conn.prepare(sql)?;
 
-                let columns: Vec<_> =
-                    stmt.column_names().iter().map(|&s| s.to_owned()).collect();
+                let columns: Vec<_> = stmt.column_names().iter().map(|&s| s.to_owned()).collect();
 
                 let rows = stmt
                     .query_and_then(params, |row| {
@@ -235,7 +224,7 @@ impl DocTask {
             }
 
             DocRequest::QueryUnsubscribe { key } => {
-                self.queries.unsubscribe(msg.port_id, &key);
+                self.queries.unsubscribe(msg.port_id, key);
                 Ok(DocReply::Ack)
             }
 

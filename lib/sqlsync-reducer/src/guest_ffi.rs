@@ -13,25 +13,20 @@ pub fn fbm() -> &'static mut FFIBufManager {
     static ONCE: Once = Once::new();
     unsafe {
         ONCE.call_once(|| {
-            let singleton = FFIBufManager::new();
+            let singleton = FFIBufManager::default();
             SINGLETON.write(singleton);
         });
         SINGLETON.assume_init_mut()
     }
 }
 
+#[derive(Default)]
 pub struct FFIBufManager {
     // map from pointer to buffer to length of buffer
     bufs: BTreeMap<FFIBufPtr, FFIBufLen>,
 }
 
 impl FFIBufManager {
-    pub fn new() -> Self {
-        Self {
-            bufs: BTreeMap::new(),
-        }
-    }
-
     pub fn alloc(&mut self, len: FFIBufLen) -> FFIBufPtr {
         let mut buf = Vec::with_capacity(len as usize);
         let ptr = buf.as_mut_ptr();
@@ -40,7 +35,11 @@ impl FFIBufManager {
         ptr
     }
 
-    pub fn dealloc(&mut self, ptr: FFIBufPtr) {
+    /// frees the memory pointed to by ptr
+    ///
+    /// # Safety
+    /// The pointer must have been allocated by FFIBufManager::alloc.
+    pub unsafe fn dealloc(&mut self, ptr: FFIBufPtr) {
         self.consume(ptr);
         // immediately drops the vec, freeing the memory
     }
@@ -49,9 +48,13 @@ impl FFIBufManager {
         *self.bufs.get(&ptr).unwrap()
     }
 
-    pub fn consume(&mut self, ptr: FFIBufPtr) -> FFIBuf {
+    /// consumes the buffer pointed to by ptr and returns a Vec<u8> with the same contents.
+    ///
+    /// # Safety
+    /// The pointer must have been allocated by FFIBufManager::alloc.
+    pub unsafe fn consume(&mut self, ptr: FFIBufPtr) -> FFIBuf {
         let len = self.bufs.remove(&ptr).unwrap();
-        unsafe { Vec::from_raw_parts(ptr, len as usize, len as usize) }
+        Vec::from_raw_parts(ptr, len as usize, len as usize)
     }
 
     pub fn encode<T: Serialize>(&mut self, data: &T) -> Result<FFIBufPtr, bincode::Error> {
@@ -62,7 +65,20 @@ impl FFIBufManager {
         Ok(ptr)
     }
 
-    pub fn decode<T: DeserializeOwned>(&mut self, ptr: FFIBufPtr) -> Result<T, bincode::Error> {
+    /// decode will consume the raw memory pointed to by ptr and return a deserialized object.
+    /// After calling decode, manually deallocating the ptr is no longer needed.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if deserialization fails. If this
+    /// happens the memory pointed to by the ptr will also be dropped.
+    ///
+    /// # Safety
+    /// The pointer must have been allocated by FFIBufManager::alloc.
+    pub unsafe fn decode<T: DeserializeOwned>(
+        &mut self,
+        ptr: FFIBufPtr,
+    ) -> Result<T, bincode::Error> {
         let buf = self.consume(ptr);
         bincode::deserialize(&buf)
     }
@@ -73,8 +89,12 @@ pub fn ffi_buf_allocate(length: FFIBufLen) -> FFIBufPtr {
     fbm().alloc(length)
 }
 
+/// ffi_buf_deallocate will immediately drop the buffer pointed to by the pointer, freeing the memory
+///
+/// # Safety
+/// The pointer must have been allocated by ffi_buf_allocate or FFIBufManager::alloc.
 #[no_mangle]
-pub fn ffi_buf_deallocate(ptr: FFIBufPtr) {
+pub unsafe fn ffi_buf_deallocate(ptr: FFIBufPtr) {
     fbm().dealloc(ptr)
 }
 

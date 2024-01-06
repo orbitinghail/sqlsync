@@ -107,7 +107,7 @@ impl LogRecord {
         log::logger().log(
             &log::Record::builder()
                 .level(Level::from_str(&self.level).unwrap_or(Level::Error))
-                .file(self.file.as_ref().map(|s| s.as_str()))
+                .file(self.file.as_deref())
                 .line(self.line)
                 .module_path(Some("wasm guest"))
                 .args(format_args!("{}", self.message))
@@ -148,10 +148,7 @@ impl Row {
         T::try_from(self.get_value(idx))
     }
 
-    pub fn maybe_get<'a, T>(
-        &'a self,
-        idx: usize,
-    ) -> Result<Option<T>, ReducerError>
+    pub fn maybe_get<'a, T>(&'a self, idx: usize) -> Result<Option<T>, ReducerError>
     where
         T: TryFrom<&'a SqliteValue, Error = ReducerError>,
     {

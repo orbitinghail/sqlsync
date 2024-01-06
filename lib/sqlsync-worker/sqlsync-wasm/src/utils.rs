@@ -1,9 +1,7 @@
 use std::{convert::TryFrom, fmt::Display, io};
 
 use anyhow::anyhow;
-use gloo::{
-    net::http::Request, timers::future::TimeoutFuture, utils::errors::JsError,
-};
+use gloo::{net::http::Request, timers::future::TimeoutFuture, utils::errors::JsError};
 use js_sys::{Reflect, Uint8Array};
 use log::Level;
 use sha2::{Digest, Sha256};
@@ -104,9 +102,7 @@ impl_from_error!(
     futures::channel::mpsc::SendError,
 );
 
-pub async fn fetch_reducer(
-    reducer_url: &str,
-) -> Result<(WasmReducer, Vec<u8>), WasmError> {
+pub async fn fetch_reducer(reducer_url: &str) -> Result<(WasmReducer, Vec<u8>), WasmError> {
     let resp = Request::get(reducer_url).send().await?;
     if !resp.ok() {
         return Err(WasmError(anyhow!(
@@ -134,10 +130,9 @@ pub async fn fetch_reducer(
         // sha256 sum the data
         // TODO: it would be much better to stream the data through the hash function
         // but afaik that's not doable with the crypto.subtle api
-        let digest = JsFuture::from(subtle.digest_with_str_and_u8_array(
-            "SHA-256",
-            &mut reducer_wasm_bytes,
-        )?)
+        let digest = JsFuture::from(
+            subtle.digest_with_str_and_u8_array("SHA-256", &mut reducer_wasm_bytes)?,
+        )
         .await?;
         Uint8Array::new(&digest).to_vec()
     };
@@ -155,7 +150,11 @@ pub struct Backoff {
 
 impl Backoff {
     pub fn new(start_ms: u32, max_ms: u32) -> Self {
-        Self { current_ms: start_ms, max_ms, future: None }
+        Self {
+            current_ms: start_ms,
+            max_ms,
+            future: None,
+        }
     }
 
     /// increase the backoff time if needed

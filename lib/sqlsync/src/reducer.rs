@@ -7,9 +7,7 @@ use rusqlite::{
 };
 use sqlsync_reducer::{
     host_ffi::{register_log_handler, WasmFFI, WasmFFIError},
-    types::{
-        ErrorResponse, ExecResponse, QueryResponse, Request, Row, SqliteValue,
-    },
+    types::{ErrorResponse, ExecResponse, QueryResponse, Request, Row, SqliteValue},
 };
 use thiserror::Error;
 use wasmi::{errors::LinkerError, Engine, Linker, Module, Store};
@@ -60,12 +58,11 @@ impl WasmReducer {
         register_log_handler(&mut linker)?;
 
         let mut store = Store::new(&engine, WasmFFI::uninitialized());
-        let instance =
-            linker.instantiate(&mut store, &module)?.start(&mut store)?;
+        let instance = linker.instantiate(&mut store, &module)?.start(&mut store)?;
 
         // initialize the FFI
         let ffi = WasmFFI::initialized(&store, &instance)?;
-        (*store.data_mut()) = ffi.clone();
+        (*store.data_mut()) = ffi;
 
         // initialize the reducer
         ffi.init_reducer(&mut store)?;
@@ -73,11 +70,7 @@ impl WasmReducer {
         Ok(Self { store })
     }
 
-    pub fn apply(
-        &mut self,
-        tx: &mut Transaction,
-        mutation: &[u8],
-    ) -> Result<()> {
+    pub fn apply(&mut self, tx: &mut Transaction, mutation: &[u8]) -> Result<()> {
         let ffi = self.store.data().to_owned();
 
         // start the reducer
@@ -115,10 +108,8 @@ impl WasmReducer {
         params: Vec<SqliteValue>,
     ) -> SqlResult<QueryResponse> {
         log::info!("received query req: {}, {:?}", sql, params);
-        let params =
-            params_from_iter(params.into_iter().map(from_sqlite_value));
-        let mut stmt =
-            tx.prepare(&sql).map_err(rusqlite_err_to_response_err)?;
+        let params = params_from_iter(params.into_iter().map(from_sqlite_value));
+        let mut stmt = tx.prepare(sql).map_err(rusqlite_err_to_response_err)?;
 
         let columns: Vec<String> = stmt
             .column_names()
@@ -152,13 +143,12 @@ impl WasmReducer {
         params: Vec<SqliteValue>,
     ) -> SqlResult<ExecResponse> {
         log::info!("received exec req: {}, {:?}", sql, params);
-        let params =
-            params_from_iter(params.into_iter().map(from_sqlite_value));
+        let params = params_from_iter(params.into_iter().map(from_sqlite_value));
 
         let start = unix_timestamp_milliseconds();
 
         let changes = tx
-            .execute(&sql, params)
+            .execute(sql, params)
             .map_err(rusqlite_err_to_response_err)?;
 
         let end = unix_timestamp_milliseconds();
@@ -185,9 +175,7 @@ fn to_sqlite_value(v: ValueRef) -> SqliteValue {
         ValueRef::Null => SqliteValue::Null,
         ValueRef::Integer(i) => SqliteValue::Integer(i),
         ValueRef::Real(f) => SqliteValue::Real(f),
-        r @ ValueRef::Text(_) => {
-            SqliteValue::Text(r.as_str().unwrap().to_owned())
-        }
+        r @ ValueRef::Text(_) => SqliteValue::Text(r.as_str().unwrap().to_owned()),
         ValueRef::Blob(b) => SqliteValue::Blob(b.to_vec()),
     }
 }

@@ -37,8 +37,7 @@ impl Coordinator {
 
         console_log!("creating new document with id {}", id);
 
-        let mut storage = MemoryJournal::open(id)
-            .map_err(|e| Error::RustError(e.to_string()))?;
+        let mut storage = MemoryJournal::open(id).map_err(|e| Error::RustError(e.to_string()))?;
 
         // load the persistence layer
         let persistence = Persistence::init(state.storage()).await?;
@@ -55,7 +54,11 @@ impl Coordinator {
 
         Ok((
             Self { accept_queue: accept_queue_tx },
-            CoordinatorTask { accept_queue: accept_queue_rx, persistence, doc },
+            CoordinatorTask {
+                accept_queue: accept_queue_rx,
+                persistence,
+                doc,
+            },
         ))
     }
 
@@ -189,10 +192,7 @@ impl Client {
         (Self { protocol, writer }, reader)
     }
 
-    async fn start_replication(
-        &mut self,
-        doc: &Document,
-    ) -> anyhow::Result<()> {
+    async fn start_replication(&mut self, doc: &Document) -> anyhow::Result<()> {
         let msg = self.protocol.start(doc);
         self.send_msg(msg).await
     }
@@ -223,12 +223,9 @@ impl Client {
         match msg {
             Ok(Message::Bytes(bytes)) => {
                 let mut cursor = Cursor::new(bytes);
-                let msg: ReplicationMsg =
-                    bincode::deserialize_from(&mut cursor)?;
+                let msg: ReplicationMsg = bincode::deserialize_from(&mut cursor)?;
                 console_log!("received message {:?}", msg);
-                if let Some(resp) =
-                    self.protocol.handle(doc, msg, &mut cursor)?
-                {
+                if let Some(resp) = self.protocol.handle(doc, msg, &mut cursor)? {
                     self.send_msg(resp).await?;
                 }
                 Ok(())

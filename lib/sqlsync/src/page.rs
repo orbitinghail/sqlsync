@@ -23,9 +23,7 @@ pub struct SparsePages {
 
 impl SparsePages {
     pub fn new() -> SparsePages {
-        Self {
-            pages: BTreeMap::new(),
-        }
+        Self { pages: BTreeMap::new() }
     }
 
     pub fn num_pages(&self) -> usize {
@@ -66,7 +64,7 @@ impl SparsePages {
 impl Serializable for SparsePages {
     fn serialize_into<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         assert!(
-            self.pages.len() > 0,
+            !self.pages.is_empty(),
             "cannot serialize empty sparse pages obj"
         );
 
@@ -134,15 +132,19 @@ impl<R: PositionedReader> SerializedPagesReader<R> {
 
             let mid_idx = PageIdx::from_le_bytes(page_idx_buf);
 
-            if mid_idx == page_idx {
-                let page_offset = (num_pages * PAGE_IDX_SIZE) + (mid * PAGESIZE);
-                return Ok(Some(page_offset));
-            } else if mid_idx < page_idx {
-                // pages are sorted in descending order, so we need to search left
-                right = mid;
-            } else {
-                // pages are sorted in descending order, so we need to search right
-                left = mid + 1;
+            match mid_idx.cmp(&page_idx) {
+                std::cmp::Ordering::Equal => {
+                    let page_offset = (num_pages * PAGE_IDX_SIZE) + (mid * PAGESIZE);
+                    return Ok(Some(page_offset));
+                }
+                std::cmp::Ordering::Less => {
+                    // pages are sorted in descending order, so we need to search left
+                    right = mid;
+                }
+                std::cmp::Ordering::Greater => {
+                    // pages are sorted in descending order, so we need to search right
+                    left = mid + 1;
+                }
             }
         }
 

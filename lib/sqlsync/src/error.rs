@@ -3,8 +3,8 @@ use std::io;
 use thiserror::Error;
 
 use crate::{
-    reducer::ReducerError, replication::ReplicationError,
-    timeline::TimelineError, JournalIdParseError,
+    reducer::ReducerError, replication::ReplicationError, timeline::TimelineError,
+    JournalIdParseError,
 };
 
 #[derive(Error, Debug)]

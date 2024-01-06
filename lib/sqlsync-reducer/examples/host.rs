@@ -22,9 +22,8 @@ fn main() -> anyhow::Result<()> {
         .init()?;
 
     // build guest.wasm using: `cargo build --target wasm32-unknown-unknown --example guest`
-    let wasm_bytes = include_bytes!(
-        "../../../target/wasm32-unknown-unknown/debug/examples/guest.wasm"
-    );
+    let wasm_bytes =
+        include_bytes!("../../../target/wasm32-unknown-unknown/debug/examples/guest.wasm");
 
     let engine = Engine::default();
     let module = Module::new(&engine, &wasm_bytes[..])?;
@@ -33,12 +32,11 @@ fn main() -> anyhow::Result<()> {
     register_log_handler(&mut linker)?;
 
     let mut store = Store::new(&engine, WasmFFI::uninitialized());
-    let instance =
-        linker.instantiate(&mut store, &module)?.start(&mut store)?;
+    let instance = linker.instantiate(&mut store, &module)?.start(&mut store)?;
 
     // initialize the FFI
     let ffi = WasmFFI::initialized(&store, &instance)?;
-    (*store.data_mut()) = ffi.clone();
+    (*store.data_mut()) = ffi;
 
     // initialize the reducer
     ffi.init_reducer(&mut store)?;
@@ -70,20 +68,16 @@ fn main() -> anyhow::Result<()> {
                     if sql == "FAIL" {
                         let ptr = ffi.encode(
                             &mut store,
-                            &Err::<ExecResponse, _>(
-                                ErrorResponse::SqliteError {
-                                    code: 1,
-                                    message: "error".to_string(),
-                                },
-                            ),
+                            &Err::<ExecResponse, _>(ErrorResponse::SqliteError {
+                                code: 1,
+                                message: "error".to_string(),
+                            }),
                         )?;
                         responses.insert(id, ptr);
                     } else {
                         let ptr = ffi.encode(
                             &mut store,
-                            &Ok::<_, ErrorResponse>(ExecResponse {
-                                changes: 1,
-                            }),
+                            &Ok::<_, ErrorResponse>(ExecResponse { changes: 1 }),
                         )?;
                         responses.insert(id, ptr);
                     }

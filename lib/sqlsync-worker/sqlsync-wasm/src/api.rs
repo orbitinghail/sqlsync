@@ -1,3 +1,6 @@
+// this is needed due to an issue with Tsify emitting non-snake_case names without the correct annotations
+#![allow(non_snake_case)]
+
 use std::{collections::HashMap, fmt::Debug};
 
 use anyhow::anyhow;
@@ -177,11 +180,12 @@ pub struct WorkerApi {
 #[wasm_bindgen]
 impl WorkerApi {
     #[wasm_bindgen(constructor)]
-    pub fn new(
-        ports: PortRouter,
-        coordinator_url: Option<String>,
-    ) -> WorkerApi {
-        WorkerApi { coordinator_url, ports, inboxes: HashMap::new() }
+    pub fn new(ports: PortRouter, coordinator_url: Option<String>) -> WorkerApi {
+        WorkerApi {
+            coordinator_url,
+            ports,
+            inboxes: HashMap::new(),
+        }
     }
 
     #[wasm_bindgen(skip_typescript)]
@@ -198,10 +202,8 @@ impl WorkerApi {
                     inbox.send(msg).await?;
                 } else {
                     // open the doc
-                    self.spawn_doc_task(msg.doc_id, &reducer_url).await?;
-                    let _ = self
-                        .ports
-                        .send_one(msg.port_id, msg.reply(DocReply::Ack));
+                    self.spawn_doc_task(msg.doc_id, reducer_url).await?;
+                    let _ = self.ports.send_one(msg.port_id, msg.reply(DocReply::Ack));
                 }
             }
 
@@ -210,10 +212,7 @@ impl WorkerApi {
                 None => {
                     let _ = self.ports.send_one(
                         msg.port_id,
-                        msg.reply_err(WasmError(anyhow!(
-                            "no document with id {}",
-                            msg.doc_id
-                        ))),
+                        msg.reply_err(WasmError(anyhow!("no document with id {}", msg.doc_id))),
                     );
                 }
             },
@@ -240,8 +239,7 @@ impl WorkerApi {
 
         let (tx, rx) = mpsc::unbounded();
 
-        let task =
-            DocTask::new(doc_id, doc_url, reducer, rx, self.ports.clone())?;
+        let task = DocTask::new(doc_id, doc_url, reducer, rx, self.ports.clone())?;
 
         wasm_bindgen_futures::spawn_local(task.into_task());
 

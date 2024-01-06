@@ -55,7 +55,7 @@ pub fn apply_mutation<J: Journal>(
     reducer: &mut WasmReducer,
     mutation: &[u8],
 ) -> Result<()> {
-    run_in_tx(sqlite, |tx| reducer.apply(tx, &mutation))?;
+    run_in_tx(sqlite, |tx| reducer.apply(tx, mutation))?;
     timeline.append(mutation)?;
     Ok(())
 }

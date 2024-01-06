@@ -1,7 +1,7 @@
-///! This example demonstrates setting up sqlsync in process between two clients
-///! and a server. There is no networking in this example so it's easy to follow
-///! the sync & rebase logic between the different nodes.
-///
+//! This example demonstrates setting up sqlsync in process between two clients
+//! and a server. There is no networking in this example so it's easy to follow
+//! the sync & rebase logic between the different nodes.
+
 use std::{collections::BTreeMap, format, io};
 
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -151,11 +151,7 @@ fn main() -> anyhow::Result<()> {
         ($client:ident) => {
             $client.query(|conn| {
                 let tasks = query_tasks(conn)?;
-                log::info!(
-                    "{} has {} tasks:",
-                    std::stringify!($client),
-                    tasks.len()
-                );
+                log::info!("{} has {} tasks:", std::stringify!($client), tasks.len());
                 for task in tasks {
                     log::info!("  {:?}", task);
                 }
@@ -335,8 +331,8 @@ fn main() -> anyhow::Result<()> {
     print_tasks!(local2)?;
 
     // get both sets of tasks and make sure they are the same
-    let tasks1 = local.query(|conn| query_tasks(conn))?;
-    let tasks2 = local2.query(|conn| query_tasks(conn))?;
+    let tasks1 = local.query(query_tasks)?;
+    let tasks2 = local2.query(query_tasks)?;
 
     // compare the two Vec<Task> objects
     assert_eq!(tasks1.len(), tasks2.len(), "different number of tasks",);

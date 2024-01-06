@@ -17,8 +17,7 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
     log::info!("running query and execute at the same time");
 
     let x: Option<i64> = None;
-    let query_future =
-        query!("SELECT * FROM foo WHERE bar = ?", "baz", 1, 1.23, x);
+    let query_future = query!("SELECT * FROM foo WHERE bar = ?", "baz", 1, 1.23, x);
     let exec_future = execute!("SELECT * FROM foo WHERE bar = ?", "baz");
 
     let (result, result2) = futures::join!(query_future, exec_future);

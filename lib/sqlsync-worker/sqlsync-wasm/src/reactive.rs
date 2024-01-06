@@ -47,7 +47,10 @@ pub struct ReactiveQueries<S: Signal> {
 
 impl<S: Signal> ReactiveQueries<S> {
     pub fn new(has_dirty_queries: S) -> Self {
-        Self { queries: BTreeMap::new(), has_dirty_queries }
+        Self {
+            queries: BTreeMap::new(),
+            has_dirty_queries,
+        }
     }
 
     pub fn handle_storage_change(&mut self, change: &StorageChange) {
@@ -61,21 +64,15 @@ impl<S: Signal> ReactiveQueries<S> {
         }
     }
 
-    pub fn subscribe(
-        &mut self,
-        port: PortId,
-        key: &QueryKey,
-        sql: &str,
-        params: Vec<SqlValue>,
-    ) {
-        let tracker =
-            self.queries
-                .entry(key.clone())
-                .or_insert_with(|| QueryTracker {
-                    query_key: key.clone(),
-                    query: ReactiveQuery::new(sql.to_owned(), params),
-                    ports: Vec::new(),
-                });
+    pub fn subscribe(&mut self, port: PortId, key: &QueryKey, sql: &str, params: Vec<SqlValue>) {
+        let tracker = self
+            .queries
+            .entry(key.clone())
+            .or_insert_with(|| QueryTracker {
+                query_key: key.clone(),
+                query: ReactiveQuery::new(sql.to_owned(), params),
+                ports: Vec::new(),
+            });
 
         // store the port, if it's not already subscribed
         if !tracker.ports.contains(&port) {
@@ -97,7 +94,7 @@ impl<S: Signal> ReactiveQueries<S> {
         }
     }
 
-    pub fn unsubscribe_all(&mut self, ports: &Vec<PortId>) {
+    pub fn unsubscribe_all(&mut self, ports: &[PortId]) {
         for tracker in self.queries.values_mut() {
             tracker.ports.retain(|p| !ports.contains(p));
         }

@@ -1,5 +1,6 @@
 [package]
 name = "sqlsync-wasm"
+description = "SQLSync is a collaborative offline-first wrapper around SQLite. It is designed to synchronize web application state between users, devices, and the edge."
 
 version.workspace = true
 authors.workspace = true

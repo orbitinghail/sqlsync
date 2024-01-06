@@ -8,9 +8,7 @@ use crate::{
     journal::{Journal, JournalId},
     lsn::LsnRange,
     reducer::WasmReducer,
-    replication::{
-        ReplicationDestination, ReplicationError, ReplicationSource,
-    },
+    replication::{ReplicationDestination, ReplicationError, ReplicationSource},
     storage::{Storage, StorageChange},
     timeline::{apply_mutation, rebase_timeline, run_timeline_migration},
     Lsn,
@@ -111,9 +109,7 @@ where
     }
 
     pub fn rebase(&mut self) -> Result<()> {
-        if self.storage.has_committed_pages()
-            && self.storage.has_invisible_pages()
-        {
+        if self.storage.has_committed_pages() && self.storage.has_invisible_pages() {
             self.storage.reset()?;
             rebase_timeline(
                 &mut self.timeline,
@@ -148,22 +144,14 @@ impl<J: ReplicationSource, S> ReplicationSource for LocalDocument<J, S> {
         self.timeline.source_range()
     }
 
-    fn read_lsn<'a>(
-        &'a self,
-        lsn: crate::Lsn,
-    ) -> io::Result<Option<Self::Reader<'a>>> {
+    fn read_lsn(&self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'_>>> {
         self.timeline.read_lsn(lsn)
     }
 }
 
 /// LocalDocument knows how to receive a storage journal from elsewhere
-impl<J: ReplicationDestination, S: Signal> ReplicationDestination
-    for LocalDocument<J, S>
-{
-    fn range(
-        &mut self,
-        id: JournalId,
-    ) -> std::result::Result<LsnRange, ReplicationError> {
+impl<J: ReplicationDestination, S: Signal> ReplicationDestination for LocalDocument<J, S> {
+    fn range(&mut self, id: JournalId) -> std::result::Result<LsnRange, ReplicationError> {
         self.storage.range(id)
     }
 

@@ -1,3 +1,6 @@
+// this is needed due to an issue with Tsify emitting non-snake_case names without the correct annotations
+#![allow(non_snake_case)]
+
 use std::{
     fmt::Debug,
     io::{self, Cursor},
@@ -12,10 +15,7 @@ use gloo::net::websocket::{futures::WebSocket, Message};
 use serde::Serialize;
 use sqlsync::{
     local::Signal,
-    replication::{
-        ReplicationDestination, ReplicationMsg, ReplicationProtocol,
-        ReplicationSource,
-    },
+    replication::{ReplicationDestination, ReplicationMsg, ReplicationProtocol, ReplicationSource},
 };
 use tsify::Tsify;
 
@@ -56,9 +56,7 @@ impl<S: Signal> CoordinatorClient<S> {
     pub async fn poll(&mut self) -> ConnectionTask {
         match self.state {
             Some(ref mut state) => state.poll().await,
-            None => unreachable!(
-                "CoordinatorClient: invalid concurrent call to poll"
-            ),
+            None => unreachable!("CoordinatorClient: invalid concurrent call to poll"),
         }
     }
 
@@ -66,18 +64,13 @@ impl<S: Signal> CoordinatorClient<S> {
     pub fn status(&self) -> ConnectionStatus {
         match self.state {
             Some(ref state) => state.status(),
-            None => unreachable!(
-                "CoordinatorClient: invalid concurrent call to status"
-            ),
+            None => unreachable!("CoordinatorClient: invalid concurrent call to status"),
         }
     }
 
     // SAFETY: poll, status, and handle can not be called concurrently on the same CoordinatorClient
-    pub async fn handle<'a, R, D>(
-        &mut self,
-        doc: &'a mut D,
-        task: ConnectionTask,
-    ) where
+    pub async fn handle<'a, R, D>(&mut self, doc: &'a mut D, task: ConnectionTask)
+    where
         R: io::Read,
         D: ReplicationDestination + ReplicationSource<Reader<'a> = R>,
     {
@@ -175,18 +168,18 @@ impl ConnectionState {
                 backoff.wait().await;
                 ConnectionTask::Connect
             }
-            ConnectionState::Connecting { conn, .. } => {
-                conn.recv().await.map_or_else(
-                    |e| ConnectionTask::Error(e),
-                    |(msg, buf)| ConnectionTask::Recv(msg, buf),
-                )
-            }
-            ConnectionState::Connected { conn } => {
-                conn.recv().await.map_or_else(
-                    |e| ConnectionTask::Error(e),
-                    |(msg, buf)| ConnectionTask::Recv(msg, buf),
-                )
-            }
+            ConnectionState::Connecting { conn, .. } => conn
+                .recv()
+                .await
+                .map_or_else(ConnectionTask::Error, |(msg, buf)| {
+                    ConnectionTask::Recv(msg, buf)
+                }),
+            ConnectionState::Connected { conn } => conn
+                .recv()
+                .await
+                .map_or_else(ConnectionTask::Error, |(msg, buf)| {
+                    ConnectionTask::Recv(msg, buf)
+                }),
         }
     }
 
@@ -225,15 +218,13 @@ impl ConnectionState {
 
         match (self, task) {
             // disabled ignores all tasks except for Connect
-            (Disabled, Connect) => {
-                match CoordinatorConnection::open(url, doc).await {
-                    Ok(conn) => ConnectionState::Connecting {
-                        conn,
-                        backoff: Backoff::new(MIN_BACKOFF_MS, MAX_BACKOFF_MS),
-                    },
-                    Err(e) => handle_err!(e),
-                }
-            }
+            (Disabled, Connect) => match CoordinatorConnection::open(url, doc).await {
+                Ok(conn) => ConnectionState::Connecting {
+                    conn,
+                    backoff: Backoff::new(MIN_BACKOFF_MS, MAX_BACKOFF_MS),
+                },
+                Err(e) => handle_err!(e),
+            },
             (s @ Disabled, _) => s,
 
             // the disable task universally disables
@@ -279,12 +270,10 @@ impl ConnectionState {
 
             (s @ Connected { .. }, Connect) => s,
 
-            (Connected { mut conn }, Recv(msg, buf)) => {
-                match conn.handle(doc, msg, buf).await {
-                    Ok(()) => Connected { conn },
-                    Err(e) => handle_err!(e),
-                }
-            }
+            (Connected { mut conn }, Recv(msg, buf)) => match conn.handle(doc, msg, buf).await {
+                Ok(()) => Connected { conn },
+                Err(e) => handle_err!(e),
+            },
 
             (Connected { mut conn }, Sync) => match conn.sync(doc).await {
                 Ok(()) => Connected { conn },
@@ -303,10 +292,7 @@ struct CoordinatorConnection {
 }
 
 impl CoordinatorConnection {
-    async fn open<D>(
-        url: &str,
-        doc: &D,
-    ) -> anyhow::Result<CoordinatorConnection>
+    async fn open<D>(url: &str, doc: &D) -> anyhow::Result<CoordinatorConnection>
     where
         D: ReplicationSource,
     {
@@ -332,9 +318,7 @@ impl CoordinatorConnection {
         Ok(self.writer.send(Message::Bytes(msg)).await?)
     }
 
-    async fn recv(
-        &mut self,
-    ) -> anyhow::Result<(ReplicationMsg, Cursor<Vec<u8>>)> {
+    async fn recv(&mut self) -> anyhow::Result<(ReplicationMsg, Cursor<Vec<u8>>)> {
         let msg = self.reader.select_next_some().await?;
         match msg {
             Message::Bytes(bytes) => {

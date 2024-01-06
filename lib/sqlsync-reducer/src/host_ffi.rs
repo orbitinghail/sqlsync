@@ -31,31 +31,19 @@ impl WasmFFI {
         Self::Uninitialized
     }
 
-    pub fn initialized(
-        store: &impl AsContext,
-        instance: &Instance,
-    ) -> Result<Self, WasmFFIError> {
+    pub fn initialized(store: &impl AsContext, instance: &Instance) -> Result<Self, WasmFFIError> {
         let memory = instance
             .get_memory(store, "memory")
             .ok_or(WasmFFIError::MemoryNotFound)?;
-        let ffi_buf_allocate = instance
-            .get_typed_func::<FFIBufLen, FFIBufPtr>(
-                store,
-                "ffi_buf_allocate",
-            )?;
-        let ffi_buf_deallocate = instance
-            .get_typed_func::<FFIBufPtr, ()>(store, "ffi_buf_deallocate")?;
-        let ffi_buf_len = instance
-            .get_typed_func::<FFIBufPtr, FFIBufLen>(store, "ffi_buf_len")?;
-        let ffi_init_reducer =
-            instance.get_typed_func::<(), ()>(store, "ffi_init_reducer")?;
-        let ffi_reduce = instance
-            .get_typed_func::<FFIBufPtr, FFIBufPtr>(store, "ffi_reduce")?;
-        let ffi_reactor_step = instance
-            .get_typed_func::<FFIBufPtr, FFIBufPtr>(
-                store,
-                "ffi_reactor_step",
-            )?;
+        let ffi_buf_allocate =
+            instance.get_typed_func::<FFIBufLen, FFIBufPtr>(store, "ffi_buf_allocate")?;
+        let ffi_buf_deallocate =
+            instance.get_typed_func::<FFIBufPtr, ()>(store, "ffi_buf_deallocate")?;
+        let ffi_buf_len = instance.get_typed_func::<FFIBufPtr, FFIBufLen>(store, "ffi_buf_len")?;
+        let ffi_init_reducer = instance.get_typed_func::<(), ()>(store, "ffi_init_reducer")?;
+        let ffi_reduce = instance.get_typed_func::<FFIBufPtr, FFIBufPtr>(store, "ffi_reduce")?;
+        let ffi_reactor_step =
+            instance.get_typed_func::<FFIBufPtr, FFIBufPtr>(store, "ffi_reactor_step")?;
 
         Ok(Self::Initialized {
             memory,
@@ -76,10 +64,7 @@ impl WasmFFI {
         match self {
             Self::Uninitialized => Err(WasmFFIError::Uninitialized),
             Self::Initialized {
-                memory,
-                ffi_buf_deallocate,
-                ffi_buf_len,
-                ..
+                memory, ffi_buf_deallocate, ffi_buf_len, ..
             } => {
                 let len = ffi_buf_len.call(&mut store, ptr)?;
                 let mem = memory.data(&store);
@@ -90,11 +75,7 @@ impl WasmFFI {
         }
     }
 
-    fn persist(
-        &self,
-        mut store: impl AsContextMut,
-        buf: &[u8],
-    ) -> Result<FFIBufPtr, WasmFFIError> {
+    fn persist(&self, mut store: impl AsContextMut, buf: &[u8]) -> Result<FFIBufPtr, WasmFFIError> {
         match self {
             Self::Uninitialized => Err(WasmFFIError::Uninitialized),
             Self::Initialized { memory, ffi_buf_allocate, .. } => {
@@ -125,15 +106,10 @@ impl WasmFFI {
         self.persist(&mut store, &bytes)
     }
 
-    pub fn init_reducer(
-        &self,
-        mut ctx: impl AsContextMut,
-    ) -> Result<(), WasmFFIError> {
+    pub fn init_reducer(&self, mut ctx: impl AsContextMut) -> Result<(), WasmFFIError> {
         match self {
             Self::Uninitialized => Err(WasmFFIError::Uninitialized),
-            Self::Initialized { ffi_init_reducer, .. } => {
-                Ok(ffi_init_reducer.call(&mut ctx, ())?)
-            }
+            Self::Initialized { ffi_init_reducer, .. } => Ok(ffi_init_reducer.call(&mut ctx, ())?),
         }
     }
 
@@ -163,8 +139,7 @@ impl WasmFFI {
             Self::Uninitialized => Err(WasmFFIError::Uninitialized),
             Self::Initialized { ffi_reactor_step, .. } => {
                 let responses_ptr = self.encode(&mut ctx, responses)?;
-                let requests_ptr =
-                    ffi_reactor_step.call(&mut ctx, responses_ptr)?;
+                let requests_ptr = ffi_reactor_step.call(&mut ctx, responses_ptr)?;
                 let requests: Result<Requests, ReducerError> =
                     self.decode(&mut ctx, requests_ptr)?;
                 Ok(requests?)
@@ -205,9 +180,7 @@ impl From<Trap> for WasmFFIError {
     }
 }
 
-pub fn register_log_handler(
-    linker: &mut Linker<WasmFFI>,
-) -> Result<(), LinkerError> {
+pub fn register_log_handler(linker: &mut Linker<WasmFFI>) -> Result<(), LinkerError> {
     linker.func_wrap(
         "env",
         "host_log",

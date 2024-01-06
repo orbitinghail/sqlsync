@@ -14,10 +14,10 @@ pub trait Scannable: Sized {
     where
         Self: 'a;
 
-    fn scan<'a>(&'a self) -> Cursor<'a, Self, LsnIter>;
-    fn scan_range<'a>(&'a self, range: LsnRange) -> Cursor<'a, Self, LsnIter>;
+    fn scan(&self) -> Cursor<'_, Self, LsnIter>;
+    fn scan_range(&self, range: LsnRange) -> Cursor<'_, Self, LsnIter>;
 
-    fn get<'a>(&'a self, lsn: Lsn) -> Result<Option<Self::Reader<'a>>>;
+    fn get(&self, lsn: Lsn) -> Result<Option<Self::Reader<'_>>>;
 }
 
 pub struct Cursor<'a, S: Scannable, I> {
@@ -56,7 +56,11 @@ impl<'a, S: Scannable, I: DoubleEndedIterator<Item = Lsn>> Cursor<'a, S, I> {
 
     /// reverse this cursor
     pub fn into_rev(self) -> Cursor<'a, S, Rev<I>> {
-        Cursor { inner: self.inner, lsn_iter: self.lsn_iter.rev(), state: None }
+        Cursor {
+            inner: self.inner,
+            lsn_iter: self.lsn_iter.rev(),
+            state: None,
+        }
     }
 }
 

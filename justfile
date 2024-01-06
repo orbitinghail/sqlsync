@@ -3,6 +3,10 @@ SQLSYNC_PROD_URL := "https://sqlsync.orbitinghail.workers.dev"
 default:
     @just --choose
 
+lint:
+    cargo clippy --all-targets --all-features -- -D warnings
+    cargo fmt --check
+
 unit-test:
     cargo test
 

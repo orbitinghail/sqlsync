@@ -38,7 +38,7 @@ pub enum ReplicationError {
     NonContiguousLsn { received: Lsn, range: LsnRange },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ReplicationProtocol {
     // outstanding lsn frames sent to the destination but awaiting acknowledgement
     // this is an Option because we need the to initialize it from the initial RangeRequest
@@ -47,7 +47,7 @@ pub struct ReplicationProtocol {
 
 impl ReplicationProtocol {
     pub fn new() -> Self {
-        Self { outstanding_range: None }
+        Self::default()
     }
 
     /// start replication, must be called on both sides of the connection
@@ -127,18 +127,14 @@ impl ReplicationProtocol {
                     // subsequent range response, update outstanding range
                     |outstanding_range| {
                         let next = range.next();
-                        assert!(
-                            next > 0,
-                            "subsequent range responses should never be empty"
-                        );
+                        assert!(next > 0, "subsequent range responses should never be empty");
                         Some(outstanding_range.trim_prefix(next - 1))
                     },
                 );
                 Ok(None)
             }
             ReplicationMsg::Frame { id, lsn, len } => {
-                let mut reader =
-                    LimitedReader { limit: len, inner: connection };
+                let mut reader = LimitedReader { limit: len, inner: connection };
                 doc.write_lsn(id, lsn, &mut reader)?;
                 Ok(Some(ReplicationMsg::Range { range: doc.range(id)? }))
             }
@@ -158,8 +154,7 @@ pub trait ReplicationSource {
     fn source_range(&self) -> LsnRange;
 
     /// read the given lsn from the source journal if it exists
-    fn read_lsn<'a>(&'a self, lsn: Lsn)
-        -> io::Result<Option<Self::Reader<'a>>>;
+    fn read_lsn(&self, lsn: Lsn) -> io::Result<Option<Self::Reader<'_>>>;
 }
 
 pub trait ReplicationDestination {

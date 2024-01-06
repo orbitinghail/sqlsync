@@ -10,7 +10,9 @@ pub struct SignalRouter<S: Copy + Hash + Eq> {
 
 impl<S: Copy + Hash + Eq> SignalRouter<S> {
     pub fn new() -> Self {
-        Self { shared: Rc::new(RefCell::new(Shared::new())) }
+        Self {
+            shared: Rc::new(RefCell::new(Shared::new())),
+        }
     }
 
     pub fn emitter(&self, signal: S) -> SignalEmitter<S> {
@@ -48,7 +50,10 @@ struct Shared<S: Copy + Hash + Eq> {
 
 impl<S: Copy + Hash + Eq> Shared<S> {
     fn new() -> Self {
-        Self { signals: HashSet::new(), event: Event::new() }
+        Self {
+            signals: HashSet::new(),
+            event: Event::new(),
+        }
     }
 
     fn emit(&mut self, signal: S) {

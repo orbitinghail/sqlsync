@@ -146,9 +146,7 @@ fn handle_client(
         let msg = receive_msg(&mut socket_reader)?;
         log::info!("server: received {:?}", msg);
 
-        if let Some(resp) =
-            unlock!(|doc| protocol.handle(doc, msg, &mut socket_reader)?)
-        {
+        if let Some(resp) = unlock!(|doc| protocol.handle(doc, msg, &mut socket_reader)?) {
             log::info!("server: sending {:?}", resp);
             send_msg(socket_writer, &resp)?;
         }
@@ -235,18 +233,18 @@ fn start_client(
     let mut protocol = ReplicationProtocol::new();
 
     // send start message
-    let start_msg = protocol.start(&mut doc);
+    let start_msg = protocol.start(&doc);
     log::info!("client({}): sending {:?}", timeline_id, start_msg);
     send_msg(socket_writer, &start_msg)?;
 
     log::info!("client({}): connected to server", timeline_id);
 
     // the amount of mutations we will send the server
-    let total_mutations = 10 as usize;
+    let total_mutations = 10;
     let mut remaining_mutations = total_mutations;
 
     // the total number of sync attempts we will make
-    let total_syncs = 100 as usize;
+    let total_syncs = 100;
     let mut syncs = 0;
 
     loop {
@@ -258,9 +256,7 @@ fn start_client(
         let msg = receive_msg(&mut socket_reader)?;
         log::info!("client({}): received {:?}", timeline_id, msg);
 
-        if let Some(resp) =
-            protocol.handle(&mut doc, msg, &mut socket_reader)?
-        {
+        if let Some(resp) = protocol.handle(&mut doc, msg, &mut socket_reader)? {
             log::info!("client({}): sending {:?}", timeline_id, resp);
             send_msg(socket_writer, &resp)?;
         }
@@ -275,7 +271,7 @@ fn start_client(
         }
 
         // sync pending mutations to the server
-        if let Some((msg, mut reader)) = protocol.sync(&mut doc)? {
+        if let Some((msg, mut reader)) = protocol.sync(&doc)? {
             log::info!("client({}): syncing to server: {:?}", timeline_id, msg);
             send_msg(socket_writer, &msg)?;
             // write the frame
@@ -284,19 +280,11 @@ fn start_client(
 
         log::info!("client({}): QUERYING STATE", timeline_id);
         let current_value = doc.query(|conn| {
-            let value = conn.query_row(
-                "select value from counter where id = 0",
-                [],
-                |row| {
-                    let value: Option<usize> = row.get(0)?;
-                    log::info!(
-                        "client({}): counter value: {:?}",
-                        timeline_id,
-                        value
-                    );
-                    Ok(value)
-                },
-            )?;
+            let value = conn.query_row("select value from counter where id = 0", [], |row| {
+                let value: Option<usize> = row.get(0)?;
+                log::info!("client({}): counter value: {:?}", timeline_id, value);
+                Ok(value)
+            })?;
 
             Ok::<_, anyhow::Error>(value)
         })?;
@@ -320,47 +308,35 @@ fn start_client(
 
     // final query, value should be total_mutations * num_clients
     doc.query(|conn| {
-        conn.query_row_and_then(
-            "select value from counter where id = 0",
-            [],
-            |row| {
-                let value: Option<usize> = row.get(0)?;
-                log::info!(
-                    "client({}): FINAL counter value: {:?}",
-                    timeline_id,
-                    value
-                );
-                if value != Some(total_mutations * num_clients) {
-                    return Err(anyhow::anyhow!(
+        conn.query_row_and_then("select value from counter where id = 0", [], |row| {
+            let value: Option<usize> = row.get(0)?;
+            log::info!("client({}): FINAL counter value: {:?}", timeline_id, value);
+            if value != Some(total_mutations * num_clients) {
+                return Err(anyhow::anyhow!(
                     "client({}): counter value is incorrect: {:?}, expected {}",
                     timeline_id,
                     value,
                     total_mutations * num_clients
                 ));
-                }
-                Ok(())
-            },
-        )?;
-        conn.query_row_and_then(
-            "select value from counter where id = 1",
-            [],
-            |row| {
-                let value: Option<usize> = row.get(0)?;
-                log::info!(
-                    "client({}): FINAL server counter value: {:?}",
-                    timeline_id,
-                    value
-                );
-                if value.is_none() || value == Some(0) {
-                    return Err(anyhow::anyhow!(
+            }
+            Ok(())
+        })?;
+        conn.query_row_and_then("select value from counter where id = 1", [], |row| {
+            let value: Option<usize> = row.get(0)?;
+            log::info!(
+                "client({}): FINAL server counter value: {:?}",
+                timeline_id,
+                value
+            );
+            if value.is_none() || value == Some(0) {
+                return Err(anyhow::anyhow!(
                     "client({}): server counter value is incorrect: {:?}, expected non-zero value",
                     timeline_id,
                     value,
                 ));
-                }
-                Ok(())
-            },
-        )?;
+            }
+            Ok(())
+        })?;
         Ok::<_, anyhow::Error>(())
     })?;
 
@@ -394,17 +370,13 @@ fn main() -> anyhow::Result<()> {
     thread::scope(|s| {
         let num_clients = 2;
 
-        s.spawn(move || {
-            start_server(listener, doc_id, num_clients, s)
-                .expect("server failed")
-        });
+        s.spawn(move || start_server(listener, doc_id, num_clients, s).expect("server failed"));
 
         for _ in 0..num_clients {
             // create separate rngs for each client seeded by the root rng
             let client_rng = StdRng::seed_from_u64(rng.gen());
             s.spawn(move || {
-                start_client(client_rng, addr, num_clients, doc_id)
-                    .expect("client failed")
+                start_client(client_rng, addr, num_clients, doc_id).expect("client failed")
             });
         }
     });

@@ -6,9 +6,7 @@ use rusqlite::{
 };
 use sqlite_vfs::FilePtr;
 
-use crate::{
-    journal::Journal, page::PAGESIZE, storage::Storage, vfs::StorageVfs,
-};
+use crate::{journal::Journal, page::PAGESIZE, storage::Storage, vfs::StorageVfs};
 
 pub struct ConnectionPair {
     pub readwrite: Connection,
@@ -26,8 +24,7 @@ pub fn open_with_vfs<J: Journal>(
 
     // register the vfs globally
     let vfs = StorageVfs::new(storage_ptr);
-    sqlite_vfs::register(&vfs_name, vfs)
-        .expect("failed to register local-vfs with sqlite");
+    sqlite_vfs::register(&vfs_name, vfs).expect("failed to register local-vfs with sqlite");
 
     let sqlite = Connection::open_with_flags_and_vfs(
         "main.db",
@@ -64,7 +61,10 @@ pub fn open_with_vfs<J: Journal>(
     }));
 
     Ok((
-        ConnectionPair { readwrite: sqlite, readonly: sqlite_readonly },
+        ConnectionPair {
+            readwrite: sqlite,
+            readonly: sqlite_readonly,
+        },
         storage,
     ))
 }

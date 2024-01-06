@@ -47,7 +47,7 @@ async fn query_sort_after(id: i64) -> Result<f64, ReducerError> {
     )
     .await?;
 
-    if response.rows.len() == 0 {
+    if response.rows.is_empty() {
         query_max_sort().await
     } else {
         let row = &response.rows[0];
@@ -108,8 +108,7 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
 
         Mutation::MoveTask { id, after } => {
             let new_sort = query_sort_after(after).await?;
-            execute!("update tasks set sort = ? where id = ?", new_sort, id)
-                .await?;
+            execute!("update tasks set sort = ? where id = ?", new_sort, id).await?;
         }
     }
 

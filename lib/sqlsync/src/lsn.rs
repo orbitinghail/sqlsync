@@ -100,13 +100,10 @@ impl LsnRange {
     pub fn immediately_preceeds(&self, other: &Self) -> bool {
         match (self, other) {
             (_, LsnRange::Empty { .. }) => false,
-            (LsnRange::Empty { nextlsn }, LsnRange::NonEmpty { first, .. }) => {
-                *nextlsn == *first
+            (LsnRange::Empty { nextlsn }, LsnRange::NonEmpty { first, .. }) => *nextlsn == *first,
+            (LsnRange::NonEmpty { last, .. }, LsnRange::NonEmpty { first, .. }) => {
+                last + 1 == *first
             }
-            (
-                LsnRange::NonEmpty { last, .. },
-                LsnRange::NonEmpty { first, .. },
-            ) => last + 1 == *first,
         }
     }
 
@@ -118,9 +115,7 @@ impl LsnRange {
         if self.contains(lsn) {
             match self {
                 LsnRange::Empty { .. } => None,
-                LsnRange::NonEmpty { first, .. } => {
-                    Some(lsn.saturating_sub(*first) as usize)
-                }
+                LsnRange::NonEmpty { first, .. } => Some(lsn.saturating_sub(*first) as usize),
             }
         } else {
             None
@@ -134,10 +129,8 @@ impl LsnRange {
                     LsnRange::NonEmpty { first: self_first, last: self_last },
                     LsnRange::NonEmpty { first: other_first, last: other_last },
                 ) => {
-                    let start =
-                        std::cmp::max(*self_first, *other_first) - self_first;
-                    let end =
-                        std::cmp::min(*self_last, *other_last) - self_first + 1;
+                    let start = std::cmp::max(*self_first, *other_first) - self_first;
+                    let end = std::cmp::min(*self_last, *other_last) - self_first + 1;
                     start as usize..end as usize
                 }
                 (_, _) => 0..0,
@@ -200,12 +193,8 @@ impl LsnRange {
     pub fn extend_by(&self, len: u64) -> LsnRange {
         assert!(len > 0, "len must be > 0");
         match self {
-            LsnRange::Empty { nextlsn } => {
-                LsnRange::new(*nextlsn, nextlsn + len - 1)
-            }
-            LsnRange::NonEmpty { first, last } => {
-                LsnRange::new(*first, last + len)
-            }
+            LsnRange::Empty { nextlsn } => LsnRange::new(*nextlsn, nextlsn + len - 1),
+            LsnRange::NonEmpty { first, last } => LsnRange::new(*first, last + len),
         }
     }
 
@@ -288,9 +277,7 @@ impl LsnRange {
 impl Debug for LsnRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LsnRange::Empty { nextlsn } => {
-                f.debug_tuple("LsnRange::E").field(nextlsn).finish()
-            }
+            LsnRange::Empty { nextlsn } => f.debug_tuple("LsnRange::E").field(nextlsn).finish(),
             LsnRange::NonEmpty { first, last } => {
                 f.debug_tuple("LsnRange").field(first).field(last).finish()
             }

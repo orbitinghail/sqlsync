@@ -21,9 +21,7 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
                     value INTEGER
                 )"
             );
-            let init_counter = execute!(
-                "INSERT OR IGNORE INTO counter (id, value) VALUES (0, 0)"
-            );
+            let init_counter = execute!("INSERT OR IGNORE INTO counter (id, value) VALUES (0, 0)");
 
             create_table.await?;
             init_counter.await?;

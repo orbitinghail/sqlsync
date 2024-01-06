@@ -87,8 +87,7 @@ impl<J: Journal> Storage<J> {
             self.journal.append(std::mem::take(&mut self.pending))?;
 
             // calculate the LsnRange between the current visible range and the committed range
-            let new_lsns =
-                self.journal.range().difference(&self.visible_lsn_range);
+            let new_lsns = self.journal.range().difference(&self.visible_lsn_range);
             // clear the changed pages list (update_changed_root_pages will scan the new lsns)
             self.changed_pages.clear();
 
@@ -136,11 +135,9 @@ impl<J: Journal> Storage<J> {
             for page_idx in pages.page_idxs()?.iter() {
                 // we need to resolve each page_idx to it's root page by only
                 // looking at ptrmap pages that existed as of this lsn
-                if let Some(root_page_idx) = self.resolve_root_page(
-                    LsnRange::new(0, lsn),
-                    false,
-                    *page_idx,
-                )? {
+                if let Some(root_page_idx) =
+                    self.resolve_root_page(LsnRange::new(0, lsn), false, *page_idx)?
+                {
                     self.changed_root_pages.insert(root_page_idx);
                 }
             }
@@ -187,8 +184,7 @@ impl<J: Journal> Storage<J> {
         // effectively taking into account the ptrmap page itself
         // math mostly copied from:
         //  https://github.com/sqlite/sqlite/blob/1eca330a08e18fd0930491302802141f5ce6298e/src/btree.c#L989C1-L1001C2
-        const PAGES_PER_PTRMAP: u64 =
-            (USABLE_PAGE_SIZE / PTRMAP_ENTRY_SIZE) + 1;
+        const PAGES_PER_PTRMAP: u64 = (USABLE_PAGE_SIZE / PTRMAP_ENTRY_SIZE) + 1;
 
         if page_idx == 1 {
             // page 1 is the schema root page
@@ -217,19 +213,12 @@ impl<J: Journal> Storage<J> {
             }
 
             // calculate the offset of the page_idx within the ptrmap page
-            let page_idx_offset =
-                (page_idx - ptrmap_page_idx - 1) * PTRMAP_ENTRY_SIZE;
+            let page_idx_offset = (page_idx - ptrmap_page_idx - 1) * PTRMAP_ENTRY_SIZE;
             // convert the relative offset to an absolute offset within the file
-            let page_idx_pos =
-                ((ptrmap_page_idx - 1) * (PAGESIZE as u64)) + page_idx_offset;
+            let page_idx_pos = ((ptrmap_page_idx - 1) * (PAGESIZE as u64)) + page_idx_offset;
 
             // read the ptrmap_entry for this page
-            self.read_at_range(
-                range,
-                include_pending,
-                page_idx_pos,
-                &mut ptrmap_entry,
-            )?;
+            self.read_at_range(range, include_pending, page_idx_pos, &mut ptrmap_entry)?;
             match ptrmap_entry[0] {
                 0 => {
                     // page is missing, this can happen while we are rebasing
@@ -272,8 +261,7 @@ impl<J: Journal> Storage<J> {
     pub fn has_changes(&self) -> bool {
         // it's not possible for the schema to change without also modifying pages
         // so we don't have to check the schema cookie here
-        return self.changed_pages.len() > 0
-            || self.changed_root_pages.len() > 0;
+        !(self.changed_pages.is_empty() && self.changed_root_pages.is_empty())
     }
 
     pub fn changes(&mut self) -> io::Result<StorageChange> {
@@ -297,8 +285,7 @@ impl<J: Journal> Storage<J> {
         self.update_changed_root_pages(LsnRange::empty())?;
 
         // gather changed root pages into sorted vec
-        let mut root_pages_sorted: Vec<_> =
-            self.changed_root_pages.iter().copied().collect();
+        let mut root_pages_sorted: Vec<_> = self.changed_root_pages.iter().copied().collect();
         root_pages_sorted.sort();
 
         // reset variables
@@ -343,8 +330,7 @@ impl<J: Journal> Storage<J> {
             {
                 // if pos = 0, then this should be FILE_CHANGE_COUNTER_OFFSET
                 // if pos = FILE_CHANGE_COUNTER_OFFSET, this this should be 0
-                let file_change_buf_offset =
-                    FILE_CHANGE_COUNTER_OFFSET - page_offset;
+                let file_change_buf_offset = FILE_CHANGE_COUNTER_OFFSET - page_offset;
 
                 buf[file_change_buf_offset..(file_change_buf_offset + 4)]
                     .copy_from_slice(&self.file_change_counter.to_be_bytes());
@@ -370,10 +356,7 @@ impl<J: ReplicationSource> ReplicationSource for Storage<J> {
         self.journal.source_range()
     }
 
-    fn read_lsn<'a>(
-        &'a self,
-        lsn: crate::Lsn,
-    ) -> io::Result<Option<Self::Reader<'a>>> {
+    fn read_lsn(&self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'_>>> {
         self.journal.read_lsn(lsn)
     }
 }
@@ -408,8 +391,7 @@ impl<J: Journal> sqlite_vfs::File for Storage<J> {
         let mut cursor = self.journal.scan_range(self.visible_lsn_range);
         while cursor.advance().map_err(|_| SQLITE_IOERR)? {
             let pages = SerializedPagesReader(&cursor);
-            max_page_idx = max_page_idx
-                .max(Some(pages.max_page_idx().map_err(|_| SQLITE_IOERR)?));
+            max_page_idx = max_page_idx.max(Some(pages.max_page_idx().map_err(|_| SQLITE_IOERR)?));
         }
 
         Ok(max_page_idx
@@ -441,11 +423,7 @@ impl<J: Journal> sqlite_vfs::File for Storage<J> {
         Ok(buf.len())
     }
 
-    fn read(
-        &mut self,
-        pos: u64,
-        buf: &mut [u8],
-    ) -> sqlite_vfs::VfsResult<usize> {
+    fn read(&mut self, pos: u64, buf: &mut [u8]) -> sqlite_vfs::VfsResult<usize> {
         self.read_at_range(self.visible_lsn_range, true, pos, buf)
             .map_err(|_| SQLITE_IOERR)
     }

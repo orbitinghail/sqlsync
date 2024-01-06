@@ -9,9 +9,7 @@ use rusqlite::Transaction;
 use crate::db::{open_with_vfs, run_in_tx, ConnectionPair};
 use crate::error::Result;
 use crate::reducer::Reducer;
-use crate::replication::{
-    ReplicationDestination, ReplicationError, ReplicationSource,
-};
+use crate::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 use crate::timeline::{apply_timeline_range, run_timeline_migration};
 use crate::Lsn;
 use crate::{
@@ -44,11 +42,7 @@ impl<J: Journal, R> Debug for CoordinatorDocument<J, R> {
 }
 
 impl<J: Journal, R: Reducer> CoordinatorDocument<J, R> {
-    pub fn open(
-        storage: J,
-        timeline_factory: J::Factory,
-        reducer: R,
-    ) -> Result<Self> {
+    pub fn open(storage: J, timeline_factory: J::Factory, reducer: R) -> Result<Self> {
         let (mut sqlite, mut storage) = open_with_vfs(storage)?;
 
         // TODO: this feels awkward here
@@ -65,15 +59,10 @@ impl<J: Journal, R: Reducer> CoordinatorDocument<J, R> {
         })
     }
 
-    fn get_or_create_timeline_mut(
-        &mut self,
-        id: JournalId,
-    ) -> io::Result<&mut J> {
+    fn get_or_create_timeline_mut(&mut self, id: JournalId) -> io::Result<&mut J> {
         match self.timelines.entry(id) {
             Entry::Occupied(entry) => Ok(entry.into_mut()),
-            Entry::Vacant(entry) => {
-                Ok(entry.insert(self.timeline_factory.open(id)?))
-            }
+            Entry::Vacant(entry) => Ok(entry.insert(self.timeline_factory.open(id)?)),
         }
     }
 
@@ -90,10 +79,9 @@ impl<J: Journal, R: Reducer> CoordinatorDocument<J, R> {
                 }
             }
             // otherwise, just push a new entry
-            _ => self.timeline_receive_queue.push_back(ReceiveQueueEntry {
-                id,
-                range: LsnRange::new(lsn, lsn),
-            }),
+            _ => self
+                .timeline_receive_queue
+                .push_back(ReceiveQueueEntry { id, range: LsnRange::new(lsn, lsn) }),
         }
     }
 
@@ -112,11 +100,7 @@ impl<J: Journal, R: Reducer> CoordinatorDocument<J, R> {
         let entry = self.timeline_receive_queue.pop_front();
 
         if let Some(entry) = entry {
-            log::debug!(
-                "applying range {} to timeline {}",
-                entry.range,
-                entry.id
-            );
+            log::debug!("applying range {} to timeline {}", entry.range, entry.id);
 
             // get the timeline
             let timeline = self
@@ -141,9 +125,7 @@ impl<J: Journal, R: Reducer> CoordinatorDocument<J, R> {
 }
 
 /// CoordinatorDocument knows how to replicate it's storage journal
-impl<J: Journal + ReplicationSource, R> ReplicationSource
-    for CoordinatorDocument<J, R>
-{
+impl<J: Journal + ReplicationSource, R> ReplicationSource for CoordinatorDocument<J, R> {
     type Reader<'a> = <J as ReplicationSource>::Reader<'a>
     where
         Self: 'a;
@@ -156,10 +138,7 @@ impl<J: Journal + ReplicationSource, R> ReplicationSource
         self.storage.source_range()
     }
 
-    fn read_lsn<'a>(
-        &'a self,
-        lsn: crate::Lsn,
-    ) -> io::Result<Option<Self::Reader<'a>>> {
+    fn read_lsn(&self, lsn: crate::Lsn) -> io::Result<Option<Self::Reader<'_>>> {
         self.storage.read_lsn(lsn)
     }
 }
@@ -168,10 +147,7 @@ impl<J: Journal + ReplicationSource, R> ReplicationSource
 impl<J: Journal + ReplicationDestination, R: Reducer> ReplicationDestination
     for CoordinatorDocument<J, R>
 {
-    fn range(
-        &mut self,
-        id: JournalId,
-    ) -> std::result::Result<LsnRange, ReplicationError> {
+    fn range(&mut self, id: JournalId) -> std::result::Result<LsnRange, ReplicationError> {
         let timeline = self.get_or_create_timeline_mut(id)?;
         ReplicationDestination::range(timeline, id)
     }

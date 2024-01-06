@@ -38,6 +38,8 @@ jobs:
           version: "8"
           run_install: true
       # build, test, and package sqlsync
+      - name: Lint & Fmt
+        run: just lint
       - name: Build all
         run: just build
       - name: Unit tests

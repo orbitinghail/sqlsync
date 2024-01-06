@@ -29,7 +29,12 @@ pub struct ReactiveQuery<P: ToSql> {
 impl<P: ToSql> ReactiveQuery<P> {
     pub fn new(sql: String, params: Vec<P>) -> Self {
         let explain_sql = format!("EXPLAIN {}", &sql);
-        Self { sql, explain_sql, params, state: State::Dirty }
+        Self {
+            sql,
+            explain_sql,
+            params,
+            state: State::Dirty,
+        }
     }
 
     // handle_storage_change checks if the storage change affects this query
@@ -38,21 +43,16 @@ impl<P: ToSql> ReactiveQuery<P> {
     pub fn handle_storage_change(&mut self, change: &StorageChange) -> bool {
         match self.state {
             State::Dirty => {}
-            State::Monitoring { root_pages_sorted: ref root_pages } => {
-                match change {
-                    StorageChange::Full => self.state = State::Dirty,
-                    StorageChange::Tables {
-                        root_pages_sorted: ref changed_root_pages,
-                    } => {
-                        if has_sorted_intersection(
-                            root_pages,
-                            changed_root_pages,
-                        ) {
-                            self.state = State::Dirty;
-                        }
+            State::Monitoring { root_pages_sorted: ref root_pages } => match change {
+                StorageChange::Full => self.state = State::Dirty,
+                StorageChange::Tables {
+                    root_pages_sorted: ref changed_root_pages,
+                } => {
+                    if has_sorted_intersection(root_pages, changed_root_pages) {
+                        self.state = State::Dirty;
                     }
                 }
-            }
+            },
             State::Error => self.state = State::Dirty,
         }
         self.is_dirty()
@@ -85,12 +85,11 @@ impl<P: ToSql> ReactiveQuery<P> {
         self.refresh_state(conn)?;
 
         let mut stmt = conn.prepare_cached(&self.sql)?;
-        let columns: Vec<_> =
-            stmt.column_names().iter().map(|&s| s.to_owned()).collect();
+        let columns: Vec<_> = stmt.column_names().iter().map(|&s| s.to_owned()).collect();
         let mut rows = stmt.query(params_from_iter(&self.params))?;
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {
-            let mapped = f(&columns, &row)?;
+            let mapped = f(&columns, row)?;
             out.push(mapped);
         }
 

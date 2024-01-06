@@ -5,9 +5,7 @@ use crate::lsn::{Lsn, LsnIter, LsnRange};
 use crate::{JournalFactory, Serializable};
 
 use super::{Cursor, Journal, JournalId, Scannable};
-use crate::replication::{
-    ReplicationDestination, ReplicationError, ReplicationSource,
-};
+use crate::replication::{ReplicationDestination, ReplicationError, ReplicationSource};
 
 pub struct MemoryJournal {
     id: JournalId,
@@ -26,7 +24,11 @@ impl Debug for MemoryJournal {
 
 impl MemoryJournal {
     pub fn open(id: JournalId) -> io::Result<Self> {
-        Ok(MemoryJournal { id, range: LsnRange::empty(), data: vec![] })
+        Ok(MemoryJournal {
+            id,
+            range: LsnRange::empty(),
+            data: vec![],
+        })
     }
 }
 
@@ -75,16 +77,16 @@ impl Scannable for MemoryJournal {
     where
         Self: 'a;
 
-    fn scan<'a>(&'a self) -> Cursor<'a, Self, LsnIter> {
+    fn scan(&self) -> Cursor<'_, Self, LsnIter> {
         Cursor::new(self, self.range.iter())
     }
 
-    fn scan_range<'a>(&'a self, range: LsnRange) -> Cursor<'a, Self, LsnIter> {
+    fn scan_range(&self, range: LsnRange) -> Cursor<'_, Self, LsnIter> {
         let intersection = self.range.intersect(&range);
         Cursor::new(self, intersection.iter())
     }
 
-    fn get<'a>(&'a self, lsn: Lsn) -> io::Result<Option<Self::Reader<'a>>> {
+    fn get(&self, lsn: Lsn) -> io::Result<Option<Self::Reader<'_>>> {
         Ok(self
             .range
             .offset(lsn)
@@ -105,10 +107,7 @@ impl ReplicationSource for MemoryJournal {
         self.range()
     }
 
-    fn read_lsn<'a>(
-        &'a self,
-        lsn: Lsn,
-    ) -> io::Result<Option<Self::Reader<'a>>> {
+    fn read_lsn(&self, lsn: Lsn) -> io::Result<Option<Self::Reader<'_>>> {
         match self.range.offset(lsn) {
             None => Ok(None),
             Some(offset) => Ok(Some(&self.data[offset][..])),
@@ -164,10 +163,7 @@ impl ReplicationDestination for MemoryJournal {
 
             Ok(())
         } else {
-            Err(ReplicationError::NonContiguousLsn {
-                received: lsn,
-                range: accepted_range,
-            })
+            Err(ReplicationError::NonContiguousLsn { received: lsn, range: accepted_range })
         }
     }
 }

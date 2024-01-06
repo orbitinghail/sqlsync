@@ -1,6 +1,6 @@
 /// has_sorted_intersection returns true if the two iterators have an intersection
 /// requires that both iterators are sorted
-pub fn has_sorted_intersection<'a, I, J, T>(a: I, b: J) -> bool
+pub fn has_sorted_intersection<I, J, T>(a: I, b: J) -> bool
 where
     T: Ord + Eq,
     I: IntoIterator<Item = T>,
