@@ -18,7 +18,7 @@ export function useSQLSync(): SQLSync {
   const value = useContext(SQLSyncContext);
   if (!value) {
     throw new Error(
-      "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
+      "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>",
     );
   }
   return value;
@@ -43,7 +43,7 @@ export function createDocHooks<M>(docType: DocType<M>): DocHooks<M> {
     const sqlsync = useSQLSync();
     return useCallback(
       (mutation: M) => sqlsync.mutate(docId, docType, mutation),
-      [sqlsync, docId, docType]
+      [sqlsync, docId, docType],
     );
   };
 
@@ -55,7 +55,7 @@ export function createDocHooks<M>(docType: DocType<M>): DocHooks<M> {
     const sqlsync = useSQLSync();
     return useCallback(
       (enabled: boolean) => sqlsync.setConnectionEnabled(docId, docType, enabled),
-      [sqlsync, docId, docType]
+      [sqlsync, docId, docType],
     );
   };
 
@@ -74,7 +74,7 @@ export type QueryState<R> =
 export function useQuery<M, R = Row>(
   docType: DocType<M>,
   docId: DocId,
-  rawQuery: ParameterizedQuery | string
+  rawQuery: ParameterizedQuery | string,
 ): QueryState<R> {
   const sqlsync = useSQLSync();
   const [state, setState] = useState<QueryState<R>>({ state: "pending" });
