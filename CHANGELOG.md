@@ -3,6 +3,8 @@ This changelog documents changes across multiple projects contained in this mono
 # Pending Changes
 
 - Moved the majority of functionality from `sqlsync-react` to `sqlsync-worker` to make it easier to add additional JS framework support. ([#38])
+- Introduce Reducer trait, allowing non-Wasm reducers to be used with the Coordinator. ([#40]) Contribution by @matthewgapp.
+- Allow SQLite to be directly modified in the coordinator via a new mutate_direct method. ([#43])
 
 # 0.2.0 - Dec 1 2023
 
@@ -12,5 +14,7 @@ This changelog documents changes across multiple projects contained in this mono
 
 - Initial release
 
-[#38]: https://github.com/orbitinghail/sqlsync/pull/38
 [#29]: https://github.com/orbitinghail/sqlsync/pull/29
+[#38]: https://github.com/orbitinghail/sqlsync/pull/38
+[#40]: https://github.com/orbitinghail/sqlsync/pull/40
+[#43]: https://github.com/orbitinghail/sqlsync/pull/43
