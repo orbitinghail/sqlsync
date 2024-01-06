@@ -2,7 +2,7 @@ export {
   journalIdFromString,
   journalIdToString,
   randomJournalId,
-  randomJournalId256
+  randomJournalId256,
 } from "./journal-id";
 export { normalizeQuery, sql } from "./sql";
 export { SQLSync } from "./sqlsync";
@@ -30,6 +30,5 @@ export type {
   ParameterizedQuery,
   QuerySubscription,
   Row,
-  SqlValue
+  SqlValue,
 };
-
