@@ -14,25 +14,14 @@ import { SQLSyncContext } from "./context";
 
 export function useSQLSync(): Accessor<SQLSync> {
   const [sqlSync] = useContext(SQLSyncContext);
-  if (import.meta.env.DEV && !sqlSync()) {
-    throw new Error(
-      "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
-    );
-  }
-
   return () => {
-    const sqlSyncValue = sqlSync();
-    if (import.meta.env.DEV && !sqlSyncValue) {
+    const value = sqlSync();
+    if (!value) {
       throw new Error(
         "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
       );
-    } else if (!sqlSyncValue) {
-      console.error(
-        "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
-      );
     }
-    // biome-ignore lint/style/noNonNullAssertion: asserts in dev
-    return sqlSyncValue!;
+    return value;
   };
 }
 

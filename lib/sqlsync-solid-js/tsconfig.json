@@ -1,39 +1,26 @@
 {
   "compilerOptions": {
     "target": "esnext",
-    "useDefineForClassFields": true,
     "module": "esnext",
+    "moduleResolution": "Bundler",
     "lib": [
       "ES6",
       "DOM",
       "DOM.Iterable",
       "ES2021.WeakRef"
     ],
-    "types": [
-      "vite/client"
-    ],
-    "skipLibCheck": true,
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
+    "allowJs": true,
+    "outDir": "dist",
+    "declaration": true,
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": [
-    "src",
-    "test"
-  ],
-  "references": [
-    {
-      "path": "./tsconfig.node.json"
-    }
-  ]
+  "include": ["src"]
 }

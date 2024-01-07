@@ -3,8 +3,7 @@
     "target": "esnext",
     "module": "esnext",
     "moduleResolution": "Bundler",
-    "baseUrl": ".",
-    "lib": ["ES6", "DOM", "ES2021.WeakRef"],
+    "lib": ["ES6", "DOM", "DOM.Iterable", "ES2021.WeakRef"],
 
     /* Compiling */
     "allowJs": true,
