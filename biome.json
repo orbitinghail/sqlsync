@@ -37,7 +37,8 @@
       "demo/cloudflare-backend/build",
       "demo/cloudflare-backend/dist",
       "demo/frontend/dist",
-      "target"
+      "target",
+      "llvm"
     ]
   }
 }
