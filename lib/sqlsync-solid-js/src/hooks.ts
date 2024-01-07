@@ -18,7 +18,7 @@ export function useSQLSync(): Accessor<SQLSync> {
     const value = sqlSync();
     if (!value) {
       throw new Error(
-        "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>"
+        "could not find sqlsync context value; please ensure the component is wrapped in a <SqlSyncProvider>",
       );
     }
     return value;
@@ -30,7 +30,7 @@ type UseMutateFn<M> = (docId: DocId) => MutateFn<M>;
 
 type UseQueryFn = <R = Row>(
   docId: Accessor<DocId>,
-  query: Accessor<ParameterizedQuery | string>
+  query: Accessor<ParameterizedQuery | string>,
 ) => Accessor<QueryState<R>>;
 
 type SetConnectionEnabledFn = (enabled: boolean) => Promise<void>;
@@ -50,7 +50,7 @@ export function createDocHooks<M>(docType: Accessor<DocType<M>>): DocHooks<M> {
 
   const useQueryWrapper = <R = Row>(
     docId: Accessor<DocId>,
-    query: Accessor<ParameterizedQuery | string>
+    query: Accessor<ParameterizedQuery | string>,
   ) => {
     return useQuery<M, R>(docType, docId, query);
   };
@@ -75,13 +75,13 @@ export type QueryState<R> =
 export function useQuery<M, R = Row>(
   docType: Accessor<DocType<M>>,
   docId: Accessor<DocId>,
-  rawQuery: Accessor<ParameterizedQuery | string>
+  rawQuery: Accessor<ParameterizedQuery | string>,
 ): Accessor<QueryState<R>> {
   const sqlsync = useSQLSync();
   const [state, setState] = createSignal<QueryState<R>>({ state: "pending" });
 
   createEffect(() => {
-    let query = normalizeQuery(rawQuery());
+    const query = normalizeQuery(rawQuery());
 
     const [unsubPromise, unsubResolve] = pendingPromise<() => void>();
 

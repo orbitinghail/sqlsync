@@ -43,7 +43,6 @@
     }
   },
   "scripts": {
-    "dev": "vite",
     "build": "rollup --config"
   },
   "devDependencies": {
