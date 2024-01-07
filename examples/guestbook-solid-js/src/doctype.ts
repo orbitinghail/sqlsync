@@ -3,7 +3,7 @@ import { DocType, serializeMutationAsJSON } from "@orbitinghail/sqlsync-worker";
 
 const REDUCER_URL = new URL(
   "../../../target/wasm32-unknown-unknown/release/reducer_guestbook.wasm",
-  import.meta.url
+  import.meta.url,
 );
 
 // Must match the Mutation type in the Rust Reducer code

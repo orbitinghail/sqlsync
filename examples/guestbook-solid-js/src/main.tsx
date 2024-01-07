@@ -64,7 +64,7 @@ export function App() {
     () => sql`
       select id, msg from messages
       order by created_at
-    `
+    `,
   );
 
   const rows = () => queryState().rows ?? [];
@@ -103,12 +103,12 @@ export function App() {
 }
 
 // Configure the SQLSync provider near the top of the React tree
-// biome-ignore lint/style/noNonNullAssertion: we know this element exists
 render(
   () => (
     <SQLSyncProvider wasmUrl={sqlSyncWasmUrl} workerUrl={workerUrl}>
       <App />
     </SQLSyncProvider>
   ),
-  document.getElementById("root")!
+  // biome-ignore lint/style/noNonNullAssertion: we know this element exists
+  document.getElementById("root")!,
 );
