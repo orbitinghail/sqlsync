@@ -204,22 +204,16 @@ importers:
 
   lib/sqlsync-solid-js:
     dependencies:
-      '@orbitinghail/sqlsync-worker':
-        specifier: 0.2.0
-        version: link:../sqlsync-worker
-      '@scure/base':
-        specifier: ^1.1.3
-        version: 1.1.3
       fast-equals:
         specifier: ^5.0.1
         version: 5.0.1
-      fast-sha256:
-        specifier: ^1.3.0
-        version: 1.3.0
       solid-js:
         specifier: ^1.8.7
         version: 1.8.8
     devDependencies:
+      '@orbitinghail/sqlsync-worker':
+        specifier: workspace:^
+        version: link:../sqlsync-worker
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.0.4(@babel/core@7.23.7)(rollup@3.29.4)
