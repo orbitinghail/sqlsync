@@ -4,7 +4,14 @@
   "description": "SQLSync is a collaborative offline-first wrapper around SQLite. It is designed to synchronize web application state between users, devices, and the edge.",
   "homepage": "https://sqlsync.dev",
   "license": "Apache-2.0",
-  "keywords": ["sqlsync", "sql", "database", "sqlite", "offline-first", "local-first"],
+  "keywords": [
+    "sqlsync",
+    "sql",
+    "database",
+    "sqlite",
+    "offline-first",
+    "local-first"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/orbitinghail/sqlsync"
@@ -50,10 +57,10 @@
     "@rollup/plugin-typescript": "^11.1.5",
     "rollup": "^3.29.4",
     "tslib": "^2.6.2",
-    "typescript": "^5.2.2"
+    "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@scure/base": "^1.1.3",
+    "@scure/base": "^1.1.5",
     "fast-sha256": "^1.3.0"
   }
 }
