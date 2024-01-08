@@ -64,10 +64,12 @@ tsify = { git = "https://github.com/carlsverre/tsify", rev = "c05a60b6ae15b2869b
 
 [workspace.dependencies.libsqlite3-sys]
 git = "https://github.com/trevyn/rusqlite"
-branch = "wasm32-unknown-unknown"
 features = ["bundled"]
+# on branch: https://github.com/trevyn/rusqlite?branch=wasm32-unknown-unknown
+rev = "82354cffd26a8e1c58613e21defe27110c141a1d"
 
 [workspace.dependencies.rusqlite]
 git = "https://github.com/trevyn/rusqlite"
-branch = "wasm32-unknown-unknown"
 features = ["bundled", "hooks", "modern_sqlite"]
+# on branch: https://github.com/trevyn/rusqlite?branch=wasm32-unknown-unknown
+rev = "82354cffd26a8e1c58613e21defe27110c141a1d"
