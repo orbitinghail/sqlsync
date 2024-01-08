@@ -1,0 +1,65 @@
+{
+  "name": "@orbitinghail/sqlsync-solid-js",
+  "version": "0.2.0",
+  "description": "SQLSync is a collaborative offline-first wrapper around SQLite. It is designed to synchronize web application state between users, devices, and the edge.",
+  "homepage": "https://sqlsync.dev",
+  "license": "Apache-2.0",
+  "keywords": [
+    "sqlsync",
+    "sql",
+    "database",
+    "sqlite",
+    "offline-first",
+    "local-first",
+    "solid-js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/orbitinghail/sqlsync"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "type": "module",
+  "types": "./src/index.ts",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "default": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "default": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      }
+    }
+  },
+  "scripts": {
+    "build": "rollup --config"
+  },
+  "devDependencies": {
+    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.5",
+    "@types/node": "^20.8.8",
+    "babel-preset-solid": "^1.8.8",
+    "@orbitinghail/sqlsync-worker": "workspace:^",
+    "rollup": "^3.29.4",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "fast-equals": "^5.0.1"
+  },
+  "peerDependencies": {
+    "solid-js": "^1.8.7",
+    "@orbitinghail/sqlsync-worker": "workspace:^"
+  }
+}

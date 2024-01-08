@@ -2,5 +2,7 @@ packages:
   - "demo/cloudflare-backend"
   - "demo/frontend"
   - "lib/sqlsync-react"
+  - "lib/sqlsync-solid-js"
   - "lib/sqlsync-worker"
   - "examples/guestbook-react"
+  - "examples/guestbook-solid-js"

@@ -49,6 +49,9 @@ wasm-examples-reducer-guestbook:
 example-guestbook-react: wasm-examples-reducer-guestbook
     cd examples/guestbook-react && pnpm dev
 
+example-guestbook-solid-js: wasm-examples-reducer-guestbook
+    cd examples/guestbook-solid-js && pnpm dev
+
 test-end-to-end-local rng_seed="": wasm-task-reducer
     RUST_BACKTRACE=1 cargo run --example end-to-end-local {{rng_seed}}
 
@@ -63,6 +66,9 @@ node_modules:
 
 package-sqlsync-react:
     cd lib/sqlsync-react && pnpm build
+
+package-sqlsync-solid-js:
+    cd lib/sqlsync-solid-js && pnpm build
 
 package-sqlsync-worker target='release':
     #!/usr/bin/env bash
