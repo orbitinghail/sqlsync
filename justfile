@@ -109,6 +109,9 @@ publish-sqlsync-worker: (package-sqlsync-worker "release")
 publish-sqlsync-react: package-sqlsync-react
     cd lib/sqlsync-react && pnpm publish --access public
 
+publish-sqlsync-solid-js: package-sqlsync-solid-js
+    cd lib/sqlsync-solid-js && pnpm publish --access public
+
 publish-sqlsync-reducer:
     cd lib/sqlsync-reducer && cargo publish
 
