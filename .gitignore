@@ -1,5 +1,3 @@
-/target
-
 # Logs
 logs
 *.log
@@ -24,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+/lib/sqlsync-worker/sqlsync-wasm/pkg
+/demo/cloudflare-backend/build
+/demo/cloudflare-backend/dist
+/lib/sqlsync-worker/dist
+/lib/sqlsync-react/dist
+/llvm
+/target

@@ -3,7 +3,7 @@ import { Alert, Button, Code, Collapse, Paper, Textarea } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { JournalId } from "@orbitinghail/sqlsync-worker";
 import { IconAlertCircle, IconCaretDownFilled, IconCaretRightFilled } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { ReactElement, useMemo, useState } from "react";
 import { useQuery } from "../doctype";
 
 interface Props {
@@ -28,7 +28,7 @@ export const QueryViewerInner = ({ docId }: Props) => {
     );
   }, [result.rows]);
 
-  let output;
+  let output: ReactElement;
   if (result.state === "error") {
     output = (
       <Alert color="red" variant="light" title="SQL Error" icon={<IconAlertCircle />} p="sm">

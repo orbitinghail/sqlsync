@@ -6,7 +6,7 @@ default:
 lint:
     cargo clippy --all-targets --all-features -- -D warnings
     cargo fmt --check
-    pnpm exec biome check .
+    pnpm exec biome ci --diagnostic-level=warn .
 
 unit-test:
     cargo test

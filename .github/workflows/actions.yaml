@@ -10,6 +10,8 @@ on:
       - "**.md"
 jobs:
   build:
+    permissions:
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       # checkout repo

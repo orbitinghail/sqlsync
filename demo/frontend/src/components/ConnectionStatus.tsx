@@ -2,7 +2,7 @@ import { Button, rem } from "@mantine/core";
 import { useConnectionStatus } from "@orbitinghail/sqlsync-react";
 import { JournalId } from "@orbitinghail/sqlsync-worker";
 import { IconWifi, IconWifiOff } from "@tabler/icons-react";
-import { useCallback } from "react";
+import { ReactElement, useCallback } from "react";
 import { useSetConnectionEnabled } from "../doctype";
 
 export const ConnectionStatus = ({ docId }: { docId: JournalId }) => {
@@ -21,7 +21,9 @@ export const ConnectionStatus = ({ docId }: { docId: JournalId }) => {
     }
   }, [status, setConnectionEnabled]);
 
-  let color, icon, loading;
+  let color: string,
+    icon: ReactElement | undefined,
+    loading = false;
   switch (status) {
     case "disabled":
       color = "gray";

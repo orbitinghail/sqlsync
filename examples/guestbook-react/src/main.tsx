@@ -59,7 +59,7 @@ export function App() {
         setMsg("");
       }
     },
-    [mutate, msg, setMsg],
+    [mutate, msg],
   );
 
   // create a callback to delete a message
