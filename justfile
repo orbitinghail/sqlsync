@@ -118,5 +118,5 @@ publish-sqlsync-reducer:
 publish-demo-backend:
     cd demo/cloudflare-backend && pnpm wrangler-deploy
 
-publish-demo-frontend: (package-sqlsync-worker "release") package-sqlsync-react
+publish-demo-frontend: (wasm-demo-reducer "--release") (package-sqlsync-worker "release") package-sqlsync-react
     cd demo/frontend && pnpm release

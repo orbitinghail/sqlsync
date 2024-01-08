@@ -255,7 +255,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
- "sqlsync-reducer 0.2.0",
+ "sqlsync-reducer 0.3.0",
 ]
 
 [[package]]
@@ -1008,12 +1008,12 @@ dependencies = [
 
 [[package]]
 name = "reducer-guestbook"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "log",
  "serde",
  "serde_json",
- "sqlsync-reducer 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sqlsync-reducer 0.2.0",
 ]
 
 [[package]]
@@ -1238,7 +1238,7 @@ dependencies = [
 
 [[package]]
 name = "sqlsync"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1253,7 +1253,7 @@ dependencies = [
  "serde",
  "simple_logger",
  "sqlite-vfs",
- "sqlsync-reducer 0.2.0",
+ "sqlsync-reducer 0.3.0",
  "testutil",
  "thiserror",
  "time",
@@ -1283,6 +1283,19 @@ dependencies = [
 [[package]]
 name = "sqlsync-reducer"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c88981b831c525276b86f1a97e75ebc79f054159035c629d44a724f84613b199"
+dependencies = [
+ "bincode",
+ "futures",
+ "log",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "sqlsync-reducer"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1295,21 +1308,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "sqlsync-reducer"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c88981b831c525276b86f1a97e75ebc79f054159035c629d44a724f84613b199"
-dependencies = [
- "bincode",
- "futures",
- "log",
- "serde",
- "thiserror",
-]
-
-[[package]]
 name = "sqlsync-wasm"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
