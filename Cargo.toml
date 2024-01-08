@@ -63,13 +63,13 @@ gloo-net = { git = "https://github.com/carlsverre/gloo", rev = "90f88e31daf1a959
 tsify = { git = "https://github.com/carlsverre/tsify", rev = "c05a60b6ae15b2869bf63f618940dc56ef516d1d", default-features = false }
 
 [workspace.dependencies.libsqlite3-sys]
-git = "https://github.com/trevyn/rusqlite"
+git = "https://github.com/carlsverre/rusqlite"
 features = ["bundled"]
 # on branch: https://github.com/trevyn/rusqlite?branch=wasm32-unknown-unknown
-rev = "82354cffd26a8e1c58613e21defe27110c141a1d"
+rev = "7c6cd3bf6118ee3e9f7ac3babbc74086860415d2"
 
 [workspace.dependencies.rusqlite]
-git = "https://github.com/trevyn/rusqlite"
+git = "https://github.com/carlsverre/rusqlite"
 features = ["bundled", "hooks", "modern_sqlite"]
 # on branch: https://github.com/trevyn/rusqlite?branch=wasm32-unknown-unknown
-rev = "82354cffd26a8e1c58613e21defe27110c141a1d"
+rev = "7c6cd3bf6118ee3e9f7ac3babbc74086860415d2"
