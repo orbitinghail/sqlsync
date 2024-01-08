@@ -30,3 +30,4 @@ dist-ssr
 /lib/sqlsync-react/dist
 /llvm
 /target
+/.pnpm-store

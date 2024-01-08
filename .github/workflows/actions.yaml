@@ -52,9 +52,11 @@ jobs:
         run: just test-end-to-end-local-net
       - name: test sqlsync-reducer
         run: just test-sqlsync-reducer
-      - name: build sqlsync react and worker packages
-        run: just package-sqlsync-react package-sqlsync-worker
+      - name: build sqlsync js packages
+        run: just package-sqlsync-react package-sqlsync-worker package-sqlsync-solid-js
       - name: build frontend
         run: cd demo/frontend && pnpm build
+      - name: build cloudflare backend
+        run: cd demo/cloudflare-backend && cargo install -q worker-build && worker-build
       - name: build examples
         run: cd examples/guestbook-react && pnpm build
