@@ -52,6 +52,10 @@ just test-end-to-end-local
 just test-end-to-end-local-net
 ```
 
+### Submitting a pull request
+
+When submitting a pull request, it's appreciated if you run `just lint` as well as the above tests before each change. These commands also will run via GitHub actions which will be enabled on your PR once it's been reviewed. Thanks for your contributions!
+
 ## Community & Contributing
 
 If you are interested in contributing to SQLSync, please [join the Discord community][discord] and let us know what you want to build. All contributions will be held to a high standard, and are more likely to be accepted if they are tied to an existing task and agreed upon specification.
