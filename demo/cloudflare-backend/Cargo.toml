@@ -7,8 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-gloo = { workspace = true, features = ["futures"] }
-gloo-net = { workspace = true, features = ["cloudflare"] }
+gloo = { workspace = true, features = ["cloudflare"] }
 futures.workspace = true
 worker.workspace = true
 console_error_panic_hook.workspace = true

@@ -10,8 +10,8 @@ use futures::{
     stream::{repeat, SelectAll, SplitSink, SplitStream},
     FutureExt, SinkExt, StreamExt,
 };
+use gloo::net::websocket::{futures::WebSocket, Message, WebSocketError};
 use gloo::timers::future::TimeoutFuture;
-use gloo_net::websocket::{futures::WebSocket, Message, WebSocketError};
 use sqlsync::{
     coordinator::CoordinatorDocument,
     replication::{ReplicationMsg, ReplicationProtocol, ReplicationSource},

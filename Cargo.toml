@@ -52,15 +52,16 @@ event-listener = "3.0"
 sha2 = "0.10.8"
 serde-wasm-bindgen = "0.6"
 
-# specific revision of gloo needed for:
-#  - access `TryFrom<web_sys::Websocket> for WebSocket`
-#  - parse_message receiving a uint8array directly
-# and the cloudflare compatibility fix for writing to a websocket
-gloo = { git = "https://github.com/carlsverre/gloo", rev = "90f88e31daf1a9592c08c09375731166eeb8940e" }
-gloo-net = { git = "https://github.com/carlsverre/gloo", rev = "90f88e31daf1a9592c08c09375731166eeb8940e" }
-
 # specific revision of tsify needed for serde updates
 tsify = { git = "https://github.com/carlsverre/tsify", rev = "c05a60b6ae15b2869bf63f618940dc56ef516d1d", default-features = false }
+
+# specific revision of gloo needed for:
+#  - parse_message receiving a uint8array directly
+#  - cloudflare compatibility fix for writing to a websocket
+[workspace.dependencies.gloo]
+git = "https://github.com/carlsverre/gloo"
+rev = "8f48a39a0a1e126e3c455525d5b4c51487102333"
+features = ["futures"]
 
 [workspace.dependencies.libsqlite3-sys]
 git = "https://github.com/trevyn/rusqlite"
