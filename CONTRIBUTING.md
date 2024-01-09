@@ -9,6 +9,8 @@ This document attempts to explain how to work on SQLSync itself. Buckle up, it's
 - [wasm-pack](https://rustwasm.github.io/wasm-pack/)
 - [node.js](https://nodejs.org/en)
 - [pnpm](https://pnpm.io/)
+- [llvm](https://llvm.org/)
+- [clang](https://clang.llvm.org/)
 
 ### Build Wasm artifacts
 

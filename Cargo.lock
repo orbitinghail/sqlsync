@@ -201,6 +201,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "compiler-rt-builtins"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dc6e7326298fd095daa7892bbf01816cad1d0139e2b51194542f13727640aab"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -710,13 +719,15 @@ checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
 [[package]]
 name = "libsqlite3-sys"
 version = "0.27.0"
-source = "git+https://github.com/carlsverre/rusqlite?rev=7c6cd3bf6118ee3e9f7ac3babbc74086860415d2#7c6cd3bf6118ee3e9f7ac3babbc74086860415d2"
+source = "git+https://github.com/trevyn/rusqlite?rev=fe59054e75e7fd5cbeb278be8cfd2f420b154fa6#fe59054e75e7fd5cbeb278be8cfd2f420b154fa6"
 dependencies = [
  "cc",
+ "compiler-rt-builtins",
  "getrandom",
  "js-sys",
  "pkg-config",
  "vcpkg",
+ "wasm32-unknown-unknown-openbsd-libc",
 ]
 
 [[package]]
@@ -1005,7 +1016,7 @@ checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 [[package]]
 name = "rusqlite"
 version = "0.30.0"
-source = "git+https://github.com/carlsverre/rusqlite?rev=7c6cd3bf6118ee3e9f7ac3babbc74086860415d2#7c6cd3bf6118ee3e9f7ac3babbc74086860415d2"
+source = "git+https://github.com/trevyn/rusqlite?rev=fe59054e75e7fd5cbeb278be8cfd2f420b154fa6#fe59054e75e7fd5cbeb278be8cfd2f420b154fa6"
 dependencies = [
  "bitflags",
  "fallible-iterator",
@@ -1543,6 +1554,15 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "wasm32-unknown-unknown-openbsd-libc"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6af2d8d35efaca9f74c83aaf81a20f973ecdce5f175900c41ab63d28548ae9a0"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
