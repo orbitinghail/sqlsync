@@ -66,11 +66,11 @@ features = ["futures"]
 [workspace.dependencies.libsqlite3-sys]
 git = "https://github.com/trevyn/rusqlite"
 features = ["bundled", "wasm32-unknown-unknown-openbsd-libc"]
-# on branch: https://github.com/trevyn/rusqlite?branch=wasm32-unknown-unknown
-rev = "fe59054e75e7fd5cbeb278be8cfd2f420b154fa6"
+# on branch: https://github.com/trevyn/rusqlite/tree/wasm32-unknown-unknown
+rev = "c4711800a851b304af0ead5fafd0331c047e9cc7"
 
 [workspace.dependencies.rusqlite]
 git = "https://github.com/trevyn/rusqlite"
 features = ["bundled", "hooks", "modern_sqlite"]
-# on branch: https://github.com/trevyn/rusqlite?branch=wasm32-unknown-unknown
-rev = "fe59054e75e7fd5cbeb278be8cfd2f420b154fa6"
+# on branch: https://github.com/trevyn/rusqlite/tree/wasm32-unknown-unknown
+rev = "c4711800a851b304af0ead5fafd0331c047e9cc7"

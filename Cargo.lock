@@ -719,7 +719,7 @@ checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
 [[package]]
 name = "libsqlite3-sys"
 version = "0.27.0"
-source = "git+https://github.com/trevyn/rusqlite?rev=fe59054e75e7fd5cbeb278be8cfd2f420b154fa6#fe59054e75e7fd5cbeb278be8cfd2f420b154fa6"
+source = "git+https://github.com/trevyn/rusqlite?rev=c4711800a851b304af0ead5fafd0331c047e9cc7#c4711800a851b304af0ead5fafd0331c047e9cc7"
 dependencies = [
  "cc",
  "compiler-rt-builtins",
@@ -1016,7 +1016,7 @@ checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 [[package]]
 name = "rusqlite"
 version = "0.30.0"
-source = "git+https://github.com/trevyn/rusqlite?rev=fe59054e75e7fd5cbeb278be8cfd2f420b154fa6#fe59054e75e7fd5cbeb278be8cfd2f420b154fa6"
+source = "git+https://github.com/trevyn/rusqlite?rev=c4711800a851b304af0ead5fafd0331c047e9cc7#c4711800a851b304af0ead5fafd0331c047e9cc7"
 dependencies = [
  "bitflags",
  "fallible-iterator",
