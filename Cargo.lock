@@ -1401,7 +1401,7 @@ dependencies = [
 [[package]]
 name = "tsify"
 version = "0.4.5"
-source = "git+https://github.com/carlsverre/tsify?rev=c05a60b6ae15b2869bf63f618940dc56ef516d1d#c05a60b6ae15b2869bf63f618940dc56ef516d1d"
+source = "git+https://github.com/siefkenj/tsify?rev=145ed4c8ef6417003e182fad41d1c0f26ed645e5#145ed4c8ef6417003e182fad41d1c0f26ed645e5"
 dependencies = [
  "serde",
  "serde-wasm-bindgen 0.5.0",
@@ -1412,7 +1412,7 @@ dependencies = [
 [[package]]
 name = "tsify-macros"
 version = "0.4.5"
-source = "git+https://github.com/carlsverre/tsify?rev=c05a60b6ae15b2869bf63f618940dc56ef516d1d#c05a60b6ae15b2869bf63f618940dc56ef516d1d"
+source = "git+https://github.com/siefkenj/tsify?rev=145ed4c8ef6417003e182fad41d1c0f26ed645e5#145ed4c8ef6417003e182fad41d1c0f26ed645e5"
 dependencies = [
  "proc-macro2",
  "quote",

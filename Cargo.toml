@@ -53,7 +53,7 @@ sha2 = "0.10.8"
 serde-wasm-bindgen = "0.6"
 
 # specific revision of tsify needed for serde updates
-tsify = { git = "https://github.com/carlsverre/tsify", rev = "c05a60b6ae15b2869bf63f618940dc56ef516d1d", default-features = false }
+tsify = { git = "https://github.com/siefkenj/tsify", rev = "145ed4c8ef6417003e182fad41d1c0f26ed645e5", default-features = false }
 
 # specific revision of gloo needed for:
 #  - parse_message receiving a uint8array directly
