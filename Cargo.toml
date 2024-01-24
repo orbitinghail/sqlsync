@@ -67,10 +67,10 @@ features = ["futures"]
 git = "https://github.com/trevyn/rusqlite"
 features = ["bundled", "wasm32-unknown-unknown-openbsd-libc"]
 # on branch: https://github.com/trevyn/rusqlite/tree/wasm32-unknown-unknown
-rev = "c4711800a851b304af0ead5fafd0331c047e9cc7"
+rev = "504eff51ece3e4f07b2c01c57e2e06602f63bb01"
 
 [workspace.dependencies.rusqlite]
 git = "https://github.com/trevyn/rusqlite"
 features = ["bundled", "hooks", "modern_sqlite"]
 # on branch: https://github.com/trevyn/rusqlite/tree/wasm32-unknown-unknown
-rev = "c4711800a851b304af0ead5fafd0331c047e9cc7"
+rev = "504eff51ece3e4f07b2c01c57e2e06602f63bb01"
