@@ -4,13 +4,24 @@
   "description": "SQLSync is a collaborative offline-first wrapper around SQLite. It is designed to synchronize web application state between users, devices, and the edge.",
   "homepage": "https://sqlsync.dev",
   "license": "Apache-2.0",
-  "keywords": ["sqlsync", "sql", "database", "sqlite", "offline-first", "local-first", "solid-js"],
+  "keywords": [
+    "sqlsync",
+    "sql",
+    "database",
+    "sqlite",
+    "offline-first",
+    "local-first",
+    "solid-js"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/orbitinghail/sqlsync"
   },
   "type": "module",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
@@ -38,10 +49,10 @@
     "@orbitinghail/sqlsync-worker": "workspace:^",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-node-resolve": "^15.2.3",
-    "@rollup/plugin-typescript": "^11.1.5",
-    "@types/node": "^20.10.7",
-    "babel-preset-solid": "^1.8.8",
-    "rollup": "^4.9.4",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/node": "^20.11.6",
+    "babel-preset-solid": "^1.8.12",
+    "rollup": "^4.9.6",
     "typescript": "^5.3.3"
   },
   "dependencies": {
