@@ -46,6 +46,7 @@
     "build": "rollup --config"
   },
   "devDependencies": {
+    "@babel/preset-typescript": "^7.23.3",
     "@orbitinghail/sqlsync-worker": "workspace:^",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-node-resolve": "^15.2.3",
