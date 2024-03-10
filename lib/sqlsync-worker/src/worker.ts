@@ -19,13 +19,14 @@ const MessageQueue = (() => {
   let queue = Promise.resolve();
   return {
     push: (m: Message) => {
-      queue = queue.then(
-        () => handleMessage(m),
-        (e) => {
+      queue = queue.then(async () => {
+        try {
+          await handleMessage(m);
+        } catch (e) {
           const err = e instanceof Error ? e.message : `error: ${JSON.stringify(e)}`;
           reply(m.portId, m.req.handlerId, { tag: "Err", err });
-        },
-      );
+        }
+      });
     },
   };
 })();

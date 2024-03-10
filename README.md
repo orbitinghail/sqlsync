@@ -37,6 +37,13 @@ If you are interested in using or contributing to SQLSync, please [join the Disc
 
 Please refer to [the guide](./GUIDE.md) to learn how to add SQLSync to your application.
 
+## Tips & Tricks
+
+### How to debug SQLSync in the browser
+By default SQLSync runs in a shared web worker. This allows the database to automatically be shared between different tabs, however results in making SQLSync a bit harder to debug.
+
+The easiest way is to use Google Chrome, and go to the special URL: [chrome://inspect/#workers](chrome://inspect/#workers). On that page you'll find a list of all the running shared workers in other tabs. Assuming another tab is running SQLSync, you'll see the shared worker listed. Click `inspect` to open up dev-tools for the worker.
+
 ## Community & Contributing
 
 If you are interested in contributing to SQLSync, please [join the Discord community][discord] and let us know what you want to build. All contributions will be held to a high standard, and are more likely to be accepted if they are tied to an existing task and agreed upon specification.

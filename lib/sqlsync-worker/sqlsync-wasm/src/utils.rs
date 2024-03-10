@@ -137,7 +137,8 @@ pub async fn fetch_reducer(reducer_url: &str) -> Result<(WasmReducer, Vec<u8>), 
         Uint8Array::new(&digest).to_vec()
     };
 
-    let reducer = WasmReducer::new(reducer_wasm_bytes.as_slice())?;
+    let reducer = WasmReducer::new(reducer_wasm_bytes.as_slice())
+        .map_err(|err| anyhow!("failed to instantiate reducer from wasm: {}", err))?;
 
     Ok((reducer, digest))
 }
