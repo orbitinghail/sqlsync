@@ -260,7 +260,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
- "sqlsync-reducer 0.3.0",
+ "sqlsync-reducer 0.3.1",
 ]
 
 [[package]]
@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "reducer-guestbook"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "log",
  "serde",
@@ -1192,7 +1192,7 @@ dependencies = [
 
 [[package]]
 name = "sqlsync"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1208,7 +1208,7 @@ dependencies = [
  "serde",
  "simple_logger",
  "sqlite-vfs",
- "sqlsync-reducer 0.3.0",
+ "sqlsync-reducer 0.3.1",
  "testutil",
  "thiserror",
  "time",
@@ -1249,7 +1249,7 @@ dependencies = [
 
 [[package]]
 name = "sqlsync-reducer"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1263,7 +1263,7 @@ dependencies = [
 
 [[package]]
 name = "sqlsync-wasm"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "bincode",

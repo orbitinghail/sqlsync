@@ -1,5 +1,9 @@
 This changelog documents changes across multiple projects contained in this monorepo. Each project is released for every SQLSync version, even if the project has not changed. The reason for this decision is to simplify testing and debugging. Lockstep versioning will be relaxed as SQLSync matures.
 
+# 0.3.1 - Mar 9 2024
+
+- Fixed bug that caused errors to be swallowed
+
 # 0.3.0 - Jan 7 2023
 
 - Moved the majority of functionality from `sqlsync-react` to `sqlsync-worker` to make it easier to add additional JS framework support. ([#38])
