@@ -65,6 +65,7 @@ fn main() -> anyhow::Result<()> {
                 }
                 Request::Exec { sql, params } => {
                     log::info!("received exec request: {} {:?}", sql, params);
+                    log::info!("the following error is EXPECTED");
                     if sql == "FAIL" {
                         let ptr = ffi.encode(
                             &mut store,

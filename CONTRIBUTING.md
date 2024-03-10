@@ -52,6 +52,13 @@ These tests are useful for learning more about how SQLSync works.
 just unit-test
 just test-end-to-end-local
 just test-end-to-end-local-net
+just test-sqlsync-reducer
+```
+
+You can run all the tests in one command like so:
+
+```bash
+just test
 ```
 
 ### Submitting a pull request

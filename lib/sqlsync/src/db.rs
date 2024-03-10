@@ -1,12 +1,16 @@
-use std::convert::From;
+use std::{convert::From, pin::Pin};
 
 use rusqlite::{
     hooks::{AuthAction, AuthContext, Authorization},
     Connection, OpenFlags, Transaction,
 };
-use sqlite_vfs::FilePtr;
 
-use crate::{journal::Journal, page::PAGESIZE, storage::Storage, vfs::StorageVfs};
+use crate::{
+    journal::Journal,
+    page::PAGESIZE,
+    storage::Storage,
+    vfs::{FilePtr, StorageVfs},
+};
 
 pub struct ConnectionPair {
     pub readwrite: Connection,
@@ -15,8 +19,8 @@ pub struct ConnectionPair {
 
 pub fn open_with_vfs<J: Journal>(
     journal: J,
-) -> rusqlite::Result<(ConnectionPair, Box<Storage<J>>)> {
-    let mut storage = Box::new(Storage::new(journal));
+) -> rusqlite::Result<(ConnectionPair, Pin<Box<Storage<J>>>)> {
+    let mut storage = Box::pin(Storage::new(journal));
     let storage_ptr = FilePtr::new(&mut storage);
 
     // generate random vfs name

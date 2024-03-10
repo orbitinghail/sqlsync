@@ -3,6 +3,7 @@ use std::collections::{HashMap, VecDeque};
 use std::convert::From;
 use std::fmt::Debug;
 use std::io;
+use std::pin::Pin;
 
 use rusqlite::Transaction;
 
@@ -25,7 +26,7 @@ struct ReceiveQueueEntry {
 
 pub struct CoordinatorDocument<J: Journal, R> {
     reducer: R,
-    storage: Box<Storage<J>>,
+    storage: Pin<Box<Storage<J>>>,
     sqlite: ConnectionPair,
     timeline_factory: J::Factory,
     timelines: HashMap<JournalId, J>,

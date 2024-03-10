@@ -1,5 +1,6 @@
 use std::{collections::HashSet, fmt::Debug, io};
 
+use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use sqlite_vfs::SQLITE_IOERR;
 
@@ -34,6 +35,7 @@ pub enum StorageChange {
     Tables { root_pages_sorted: Vec<PageIdx> },
 }
 
+#[pin_project]
 pub struct Storage<J> {
     journal: J,
     visible_lsn_range: LsnRange,

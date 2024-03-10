@@ -25,6 +25,7 @@ bs58.workspace = true
 hex.workspace = true
 libsqlite3-sys.workspace = true
 rusqlite.workspace = true
+pin-project.workspace = true
 
 [dependencies.sqlsync-reducer]
 path = "../sqlsync-reducer"

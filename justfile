@@ -14,6 +14,10 @@ unit-test:
 build: build-wasm
     cargo build -p sqlsync
 
+test:
+    just unit-test
+    just run-with-prefix 'test-'
+
 build-wasm:
     just run-with-prefix 'wasm-'
 

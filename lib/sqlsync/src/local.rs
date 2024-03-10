@@ -1,4 +1,4 @@
-use std::{fmt::Debug, io};
+use std::{fmt::Debug, io, pin::Pin};
 
 use rusqlite::Connection;
 
@@ -26,7 +26,7 @@ impl Signal for NoopSignal {
 pub struct LocalDocument<J, S> {
     reducer: WasmReducer,
     timeline: J,
-    storage: Box<Storage<J>>,
+    storage: Pin<Box<Storage<J>>>,
     sqlite: ConnectionPair,
 
     // signals

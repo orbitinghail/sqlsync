@@ -1,5 +1,6 @@
 # sqlite-vfs
 
-Copied from https://github.com/rklaehn/sqlite-vfs and modified to include more hooks. Plan to upstream.
+Copy of https://github.com/rklaehn/sqlite-vfs.
+Only changed rusqlite dependency.
 
 LICENSE: Apache 2.0
