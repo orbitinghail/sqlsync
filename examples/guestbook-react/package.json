@@ -16,11 +16,11 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "@types/react": "^18.2.48",
-    "@types/react-dom": "^18.2.18",
-    "@types/uuid": "^9.0.7",
+    "@types/react": "^18.2.64",
+    "@types/react-dom": "^18.2.21",
+    "@types/uuid": "^9.0.8",
     "@vitejs/plugin-react": "^4.2.1",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.12"
+    "typescript": "^5.4.2",
+    "vite": "^5.1.5"
   }
 }

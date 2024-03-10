@@ -11,14 +11,14 @@
   "dependencies": {
     "@orbitinghail/sqlsync-solid-js": "workspace:*",
     "@orbitinghail/sqlsync-worker": "workspace:*",
-    "solid-js": "^1.8.12",
+    "solid-js": "^1.8.15",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "@types/uuid": "^9.0.7",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.12",
-    "vite-plugin-solid": "^2.9.1",
-    "vitest": "^1.2.1"
+    "@types/uuid": "^9.0.8",
+    "typescript": "^5.4.2",
+    "vite": "^5.1.5",
+    "vite-plugin-solid": "^2.10.1",
+    "vitest": "^1.3.1"
   }
 }

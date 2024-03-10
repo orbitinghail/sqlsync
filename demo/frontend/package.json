@@ -11,31 +11,31 @@
     "release": "pnpm build && wrangler pages deploy dist"
   },
   "dependencies": {
-    "@mantine/code-highlight": "^7.4.2",
-    "@mantine/core": "^7.4.2",
-    "@mantine/form": "^7.4.2",
-    "@mantine/hooks": "^7.4.2",
+    "@mantine/code-highlight": "^7.6.1",
+    "@mantine/core": "^7.6.1",
+    "@mantine/form": "^7.6.1",
+    "@mantine/hooks": "^7.6.1",
     "@orbitinghail/sqlsync-react": "workspace:*",
     "@orbitinghail/sqlsync-worker": "workspace:*",
-    "@tabler/icons-react": "^2.46.0",
+    "@tabler/icons-react": "^2.47.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-github-btn": "^1.4.0",
     "react-qr-code": "^2.0.12",
-    "react-router-dom": "^6.21.3",
+    "react-router-dom": "^6.22.3",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "@types/node": "^20.11.6",
-    "@types/react": "^18.2.48",
-    "@types/react-dom": "^18.2.18",
-    "@types/uuid": "^9.0.7",
+    "@types/node": "^20.11.25",
+    "@types/react": "^18.2.64",
+    "@types/react-dom": "^18.2.21",
+    "@types/uuid": "^9.0.8",
     "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.17",
-    "postcss": "^8.4.33",
-    "postcss-preset-mantine": "^1.12.3",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.12",
-    "wrangler": "^3.24.0"
+    "autoprefixer": "^10.4.18",
+    "postcss": "^8.4.35",
+    "postcss-preset-mantine": "^1.13.0",
+    "typescript": "^5.4.2",
+    "vite": "^5.1.5",
+    "wrangler": "^3.32.0"
   }
 }

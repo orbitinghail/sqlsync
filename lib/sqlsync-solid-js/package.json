@@ -50,10 +50,10 @@
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-typescript": "^11.1.6",
-    "@types/node": "^20.11.6",
-    "babel-preset-solid": "^1.8.12",
-    "rollup": "^4.9.6",
-    "typescript": "^5.3.3"
+    "@types/node": "^20.11.25",
+    "babel-preset-solid": "^1.8.15",
+    "rollup": "^4.12.1",
+    "typescript": "^5.4.2"
   },
   "dependencies": {
     "fast-equals": "^5.0.1"
