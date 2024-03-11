@@ -1,6 +1,6 @@
 {
   "name": "@orbitinghail/sqlsync-worker",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "SQLSync is a collaborative offline-first wrapper around SQLite. It is designed to synchronize web application state between users, devices, and the edge.",
   "homepage": "https://sqlsync.dev",
   "license": "Apache-2.0",

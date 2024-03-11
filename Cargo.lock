@@ -979,7 +979,7 @@ dependencies = [
 
 [[package]]
 name = "reducer-guestbook"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "log",
  "serde",
@@ -1195,7 +1195,7 @@ dependencies = [
 
 [[package]]
 name = "sqlsync"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1239,7 +1239,7 @@ dependencies = [
 
 [[package]]
 name = "sqlsync-reducer"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1253,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "sqlsync-wasm"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "bincode",

@@ -51,7 +51,7 @@ strip = "debuginfo"
 codegen-units = 1
 
 [dependencies]
-sqlsync-reducer = "0.3.1"
+sqlsync-reducer = "0.3.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 log = "0.4"

@@ -20,7 +20,7 @@ edition = "2021"
 homepage = "https://sqlsync.dev"
 license = "Apache-2.0"
 repository = "https://github.com/orbitinghail/sqlsync"
-version = "0.3.1"
+version = "0.3.2"
 
 [profile.release]
 lto = true
