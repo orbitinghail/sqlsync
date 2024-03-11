@@ -35,11 +35,10 @@ async fn reducer(mutation: Vec<u8>) -> Result<(), ReducerError> {
     let result = query_future.await;
     log::info!("final query result: {:?}", result);
 
-    log::info!("testing errors");
     if let Err(err) = execute!("FAIL").await {
-        log::error!("error: {:?}", err);
+        log::info!("received expected error: {:?}", err);
     } else {
-        panic!("expected error");
+        panic!("failed to receive expected error");
     }
 
     log::info!("make sure we can resume queries after an error");

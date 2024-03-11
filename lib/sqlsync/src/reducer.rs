@@ -182,9 +182,12 @@ fn to_sqlite_value(v: ValueRef) -> SqliteValue {
 
 fn rusqlite_err_to_response_err(e: rusqlite::Error) -> ErrorResponse {
     match e {
-        rusqlite::Error::SqliteFailure(e, _) => ErrorResponse::SqliteError {
+        rusqlite::Error::SqliteFailure(e, extra) => ErrorResponse::SqliteError {
             code: e.extended_code,
-            message: format!("{}", e),
+            message: match extra {
+                Some(extra) => format!("{}: {}", e, extra),
+                None => format!("{}", e),
+            },
         },
         other => ErrorResponse::Unknown(format!("{}", other)),
     }
