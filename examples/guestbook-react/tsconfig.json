@@ -5,7 +5,6 @@
     "lib": ["ES2020", "ES2021.WeakRef", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
-    "types": ["vite/client"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",

@@ -24,11 +24,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": {
-      "import": "./src/index.ts",
-      "default": "./src/index.ts",
-      "types": "./src/index.ts"
-    }
+    ".": "./src/index.ts"
   },
   "publishConfig": {
     "main": "./dist/index.js",

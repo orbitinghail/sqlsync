@@ -44,6 +44,19 @@ By default SQLSync runs in a shared web worker. This allows the database to auto
 
 The easiest way is to use Google Chrome, and go to the special URL: [chrome://inspect/#workers](chrome://inspect/#workers). On that page you'll find a list of all the running shared workers in other tabs. Assuming another tab is running SQLSync, you'll see the shared worker listed. Click `inspect` to open up dev-tools for the worker.
 
+### My table is missing, or multiple statements aren't executing
+SQLSync uses [rusqlite] under the hood to run and query SQLite. Unfortunately, the `execute` method only supports single statements and silently ignores trailing statements. Thus, if you are using `execute!(...)` in your reducer, make sure that each call only runs a single SQL statement.
+
+For example:
+```rust
+// DON'T DO THIS:
+execute!("create table foo (id int); create table bar (id int);").await?;
+
+// DO THIS:
+execute!("create table foo (id int)").await?;
+execute!("create table bar (id int)").await?;
+```
+
 ## Community & Contributing
 
 If you are interested in contributing to SQLSync, please [join the Discord community][discord] and let us know what you want to build. All contributions will be held to a high standard, and are more likely to be accepted if they are tied to an existing task and agreed upon specification.
@@ -51,3 +64,4 @@ If you are interested in contributing to SQLSync, please [join the Discord commu
 [![Join the SQLSync Community](https://discordapp.com/api/guilds/1149205110262595634/widget.png?style=banner2)][discord]
 
 [discord]: https://discord.gg/etFk2N9nzC
+[rusqlite]: https://github.com/rusqlite/rusqlite

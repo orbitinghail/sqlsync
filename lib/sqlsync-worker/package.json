@@ -26,11 +26,7 @@
   ],
   "main": "./src/index.ts",
   "exports": {
-    ".": {
-      "default": "./src/index.ts",
-      "import": "./src/index.ts",
-      "types": "./src/index.ts"
-    },
+    ".": "./src/index.ts",
     "./worker.ts": "./src/worker.ts",
     "./sqlsync.wasm": "./sqlsync-wasm/pkg/sqlsync_wasm_bg.wasm"
   },
