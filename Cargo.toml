@@ -2,16 +2,16 @@
 resolver = "2"
 
 members = [
-    "lib/sqlsync",
-    "lib/sqlsync-worker/sqlsync-wasm",
-    "lib/sqlsync-reducer",
-    "lib/sqlite-vfs",
-    "lib/testutil",
+  "lib/sqlsync",
+  "lib/sqlsync-worker/sqlsync-wasm",
+  "lib/sqlsync-reducer",
+  "lib/sqlite-vfs",
+  "lib/testutil",
 
-    "examples/reducer-guestbook",
+  "examples/reducer-guestbook",
 
-    "demo/demo-reducer",
-    "demo/cloudflare-backend",
+  "demo/demo-reducer",
+  "demo/cloudflare-backend",
 ]
 
 [workspace.package]

@@ -23,8 +23,10 @@ pub fn reactor() -> &'static mut Reactor {
     unsafe {
         ONCE.call_once(|| {
             let singleton = Reactor::new();
+            #[allow(static_mut_refs)]
             SINGLETON.write(singleton);
         });
+        #[allow(static_mut_refs)]
         SINGLETON.assume_init_mut()
     }
 }

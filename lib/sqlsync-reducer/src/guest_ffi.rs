@@ -14,8 +14,10 @@ pub fn fbm() -> &'static mut FFIBufManager {
     unsafe {
         ONCE.call_once(|| {
             let singleton = FFIBufManager::default();
+            #[allow(static_mut_refs)]
             SINGLETON.write(singleton);
         });
+        #[allow(static_mut_refs)]
         SINGLETON.assume_init_mut()
     }
 }
@@ -138,7 +140,7 @@ pub fn install_panic_hook() {
     });
 }
 
-fn panic_hook(info: &panic::PanicInfo) {
+fn panic_hook(info: &panic::PanicHookInfo) {
     let record: LogRecord = info.into();
     let record_ptr = fbm().encode(&record).unwrap();
     unsafe { host_log(record_ptr) }

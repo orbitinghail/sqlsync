@@ -77,7 +77,7 @@ fn main() -> anyhow::Result<()> {
                     } else {
                         let ptr = ffi.encode(
                             &mut store,
-                            &Ok::<_, ErrorResponse>(ExecResponse { changes: 1 }),
+                            Ok::<_, ErrorResponse>(ExecResponse { changes: 1 }),
                         )?;
                         responses.insert(id, ptr);
                     }
