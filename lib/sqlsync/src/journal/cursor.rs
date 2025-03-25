@@ -64,7 +64,7 @@ impl<'a, S: Scannable, I: DoubleEndedIterator<Item = Lsn>> Cursor<'a, S, I> {
     }
 }
 
-impl<'a, S: Scannable, I> PositionedReader for Cursor<'a, S, I> {
+impl<S: Scannable, I> PositionedReader for Cursor<'_, S, I> {
     fn read_at(&self, pos: usize, buf: &mut [u8]) -> io::Result<usize> {
         match self.state {
             None => Ok(0),

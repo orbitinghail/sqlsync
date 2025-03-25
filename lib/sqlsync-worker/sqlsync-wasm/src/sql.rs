@@ -78,7 +78,7 @@ impl<'de> Deserialize<'de> for SqlValue {
     {
         struct SqlValueVisitor;
 
-        impl<'de> Visitor<'de> for SqlValueVisitor {
+        impl Visitor<'_> for SqlValueVisitor {
             type Value = SqlValue;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

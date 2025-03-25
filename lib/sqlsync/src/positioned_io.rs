@@ -8,7 +8,6 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
  * They are copied here as the positioned-io crate takes a lot of dependencies
  * on std::File which we don't need or want due to Wasm limitations.
  */
-
 pub trait PositionedReader {
     /// Reads bytes from an offset in this source into a buffer, returning how
     /// many bytes were read.
@@ -120,7 +119,7 @@ impl PositionedReader for Vec<u8> {
     }
 }
 
-impl<'a> PositionedReader for &'a [u8] {
+impl PositionedReader for &[u8] {
     fn read_at(&self, pos: usize, buf: &mut [u8]) -> io::Result<usize> {
         if pos >= self.len() {
             return Ok(0);
@@ -195,7 +194,7 @@ impl<I: PositionedReader> Seek for PositionedCursor<I> {
 
 // Ref implementations
 
-impl<'a, T: ?Sized + PositionedReader> PositionedReader for &'a T {
+impl<T: ?Sized + PositionedReader> PositionedReader for &T {
     fn read_at(&self, pos: usize, buf: &mut [u8]) -> io::Result<usize> {
         T::read_at(self, pos, buf)
     }
@@ -205,7 +204,7 @@ impl<'a, T: ?Sized + PositionedReader> PositionedReader for &'a T {
     }
 }
 
-impl<'a, T: ?Sized + PositionedReader> PositionedReader for &'a mut T {
+impl<T: ?Sized + PositionedReader> PositionedReader for &mut T {
     fn read_at(&self, pos: usize, buf: &mut [u8]) -> io::Result<usize> {
         T::read_at(self, pos, buf)
     }
@@ -215,7 +214,7 @@ impl<'a, T: ?Sized + PositionedReader> PositionedReader for &'a mut T {
     }
 }
 
-impl<'a, T: ?Sized + PositionedWriter> PositionedWriter for &'a mut T {
+impl<T: ?Sized + PositionedWriter> PositionedWriter for &mut T {
     fn write_at(&mut self, pos: usize, buf: &[u8]) -> io::Result<usize> {
         T::write_at(self, pos, buf)
     }

@@ -56,7 +56,7 @@ fn main() -> anyhow::Result<()> {
                     log::info!("received query request: {} {:?}", sql, params);
                     let ptr = ffi.encode(
                         &mut store,
-                        &Ok::<_, ErrorResponse>(QueryResponse {
+                        Ok::<_, ErrorResponse>(QueryResponse {
                             columns: vec!["foo".into(), "bar".into()],
                             rows: vec![vec!["baz".into(), "qux".into()].into()],
                         }),
@@ -68,7 +68,7 @@ fn main() -> anyhow::Result<()> {
                     if sql == "FAIL" {
                         let ptr = ffi.encode(
                             &mut store,
-                            &Err::<ExecResponse, _>(ErrorResponse::SqliteError {
+                            Err::<ExecResponse, _>(ErrorResponse::SqliteError {
                                 code: 1,
                                 message: "error".to_string(),
                             }),

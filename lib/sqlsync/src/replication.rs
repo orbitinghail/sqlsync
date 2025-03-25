@@ -177,7 +177,7 @@ struct LimitedReader<'a, R: io::Read> {
     inner: &'a mut R,
 }
 
-impl<'a, R: io::Read> io::Read for LimitedReader<'a, R> {
+impl<R: io::Read> io::Read for LimitedReader<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.limit == 0 {
             return Ok(0);
