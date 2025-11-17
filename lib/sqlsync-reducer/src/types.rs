@@ -79,8 +79,8 @@ pub struct LogRecord {
     line: Option<u32>,
 }
 
-impl From<&panic::PanicInfo<'_>> for LogRecord {
-    fn from(info: &panic::PanicInfo) -> Self {
+impl From<&panic::PanicHookInfo<'_>> for LogRecord {
+    fn from(info: &panic::PanicHookInfo) -> Self {
         let loc = info.location();
         LogRecord {
             level: log::Level::Error.to_string(),

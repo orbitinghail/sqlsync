@@ -1,9 +1,8 @@
 use std::{
     collections::BTreeMap,
     future::Future,
-    mem::MaybeUninit,
     pin::Pin,
-    sync::Once,
+    sync::{Mutex, OnceLock},
     task::{Context, Poll},
 };
 
@@ -17,19 +16,13 @@ use crate::{
     },
 };
 
-pub fn reactor() -> &'static mut Reactor {
-    static mut SINGLETON: MaybeUninit<Reactor> = MaybeUninit::uninit();
-    static ONCE: Once = Once::new();
-    unsafe {
-        ONCE.call_once(|| {
-            let singleton = Reactor::new();
-            SINGLETON.write(singleton);
-        });
-        SINGLETON.assume_init_mut()
-    }
+pub fn reactor() -> std::sync::MutexGuard<'static, Reactor> {
+    static SINGLETON: OnceLock<Mutex<Reactor>> = OnceLock::new();
+    let m = SINGLETON.get_or_init(|| Mutex::new(Reactor::new()));
+    m.lock().unwrap()
 }
 
-type ReducerTask = Pin<Box<dyn Future<Output = Result<(), ReducerError>>>>;
+type ReducerTask = Pin<Box<dyn Future<Output = Result<(), ReducerError>> + Send + 'static>>;
 
 #[derive(Default)]
 pub struct Reactor {
@@ -61,8 +54,8 @@ impl Reactor {
             .as_mut()
             .and_then(|b| b.remove(&id))
             .map(|ptr| {
-                let f = fbm();
-                unsafe { f.decode(ptr as *mut u8).unwrap() }
+                let mut f = fbm();
+                unsafe { f.decode(ptr).unwrap() }
             })
     }
 
@@ -116,7 +109,8 @@ impl<T: DeserializeOwned> Future for ResponseFuture<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        match reactor().get_response(self.id) {
+        let mut r = reactor();
+        match r.get_response(self.id) {
             Some(response) => Poll::Ready(response),
             None => Poll::Pending,
         }
@@ -128,7 +122,8 @@ pub fn raw_query(
     params: Vec<SqliteValue>,
 ) -> ResponseFuture<Result<QueryResponse, ErrorResponse>> {
     let request = Request::Query { sql, params };
-    let id = reactor().queue_request(request);
+    let mut r = reactor();
+    let id = r.queue_request(request);
     ResponseFuture::new(id)
 }
 
@@ -137,7 +132,8 @@ pub fn raw_execute(
     params: Vec<SqliteValue>,
 ) -> ResponseFuture<Result<ExecResponse, ErrorResponse>> {
     let request = Request::Exec { sql, params };
-    let id = reactor().queue_request(request);
+    let mut r = reactor();
+    let id = r.queue_request(request);
     ResponseFuture::new(id)
 }
 
@@ -169,8 +165,8 @@ macro_rules! init_reducer {
         pub unsafe fn ffi_reduce(
             mutation_ptr: sqlsync_reducer::guest_ffi::FFIBufPtr,
         ) -> sqlsync_reducer::guest_ffi::FFIBufPtr {
-            let reactor = sqlsync_reducer::guest_reactor::reactor();
-            let fbm = sqlsync_reducer::guest_ffi::fbm();
+            let mut reactor = sqlsync_reducer::guest_reactor::reactor();
+            let mut fbm = sqlsync_reducer::guest_ffi::fbm();
             let mutation = fbm.consume(mutation_ptr);
 
             reactor.spawn(Box::pin(async move { $fn(mutation).await }));
@@ -199,8 +195,9 @@ macro_rules! init_reducer {
 /// The host must pass in a valid pointer to a serialized Responses object.
 #[no_mangle]
 pub unsafe fn ffi_reactor_step(responses_ptr: FFIBufPtr) -> FFIBufPtr {
-    let fbm = fbm();
+    let mut fbm = fbm();
     let responses = fbm.decode(responses_ptr).unwrap();
-    let out = reactor().step(responses);
+    let mut r = reactor();
+    let out = r.step(responses);
     fbm.encode(&out).unwrap()
 }

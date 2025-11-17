@@ -1,23 +1,17 @@
-use std::{collections::BTreeMap, mem::MaybeUninit, panic, sync::Once};
+use std::{collections::BTreeMap, panic, sync::{Mutex, OnceLock, Once}};
 
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::types::LogRecord;
 
 pub type FFIBuf = Vec<u8>;
-pub type FFIBufPtr = *mut u8;
+pub type FFIBufPtr = u32;
 pub type FFIBufLen = u32;
 
-pub fn fbm() -> &'static mut FFIBufManager {
-    static mut SINGLETON: MaybeUninit<FFIBufManager> = MaybeUninit::uninit();
-    static ONCE: Once = Once::new();
-    unsafe {
-        ONCE.call_once(|| {
-            let singleton = FFIBufManager::default();
-            SINGLETON.write(singleton);
-        });
-        SINGLETON.assume_init_mut()
-    }
+pub fn fbm() -> std::sync::MutexGuard<'static, FFIBufManager> {
+    static SINGLETON: OnceLock<Mutex<FFIBufManager>> = OnceLock::new();
+    let m = SINGLETON.get_or_init(|| Mutex::new(FFIBufManager::default()));
+    m.lock().unwrap()
 }
 
 #[derive(Default)]
@@ -29,7 +23,7 @@ pub struct FFIBufManager {
 impl FFIBufManager {
     pub fn alloc(&mut self, len: FFIBufLen) -> FFIBufPtr {
         let mut buf = Vec::with_capacity(len as usize);
-        let ptr = buf.as_mut_ptr();
+        let ptr = (buf.as_mut_ptr() as *const u8 as usize) as FFIBufPtr;
         self.bufs.insert(ptr, len);
         std::mem::forget(buf);
         ptr
@@ -54,12 +48,13 @@ impl FFIBufManager {
     /// The pointer must have been allocated by FFIBufManager::alloc.
     pub unsafe fn consume(&mut self, ptr: FFIBufPtr) -> FFIBuf {
         let len = self.bufs.remove(&ptr).unwrap();
+        let ptr = (ptr as usize) as *mut u8;
         Vec::from_raw_parts(ptr, len as usize, len as usize)
     }
 
     pub fn encode<T: Serialize>(&mut self, data: &T) -> Result<FFIBufPtr, bincode::Error> {
         let mut buf = bincode::serialize(data)?;
-        let ptr = buf.as_mut_ptr();
+        let ptr = (buf.as_mut_ptr() as *const u8 as usize) as FFIBufPtr;
         self.bufs.insert(ptr, buf.len() as FFIBufLen);
         std::mem::forget(buf);
         Ok(ptr)
@@ -138,7 +133,7 @@ pub fn install_panic_hook() {
     });
 }
 
-fn panic_hook(info: &panic::PanicInfo) {
+fn panic_hook(info: &panic::PanicHookInfo) {
     let record: LogRecord = info.into();
     let record_ptr = fbm().encode(&record).unwrap();
     unsafe { host_log(record_ptr) }
