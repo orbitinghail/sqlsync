@@ -14,7 +14,7 @@ pub struct Persistence {
 }
 
 impl Persistence {
-    pub async fn init(mut storage: Storage) -> Result<Self> {
+    pub async fn init(storage: Storage) -> Result<Self> {
         let range = match storage.get::<LsnRange>(RANGE_KEY).await {
             Ok(range) => range,
             Err(_) => {

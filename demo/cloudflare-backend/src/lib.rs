@@ -1,4 +1,5 @@
 use coordinator::Coordinator;
+use std::cell::RefCell;
 use js_sys::{ArrayBuffer, Reflect, Uint8Array};
 use sqlsync::JournalId;
 use wasm_bindgen::JsCast;
@@ -15,17 +16,16 @@ pub const REDUCER_BUCKET: &str = "SQLSYNC_REDUCERS";
 pub struct DocumentCoordinator {
     state: State,
     env: Env,
-    coordinator: Option<Coordinator>,
+    coordinator: RefCell<Option<Coordinator>>,
 }
 
-#[durable_object]
 impl DurableObject for DocumentCoordinator {
     fn new(state: State, env: Env) -> Self {
         console_error_panic_hook::set_once();
-        Self { state, env, coordinator: None }
+        Self { state, env, coordinator: RefCell::new(None) }
     }
 
-    async fn fetch(&mut self, req: Request) -> Result<Response> {
+    async fn fetch(&self, req: Request) -> Result<Response> {
         // check that the Upgrade header is set and == "websocket"
         let is_upgrade_req = req.headers().get("Upgrade")?.unwrap_or("".into()) == "websocket";
         if !is_upgrade_req {
@@ -33,7 +33,7 @@ impl DurableObject for DocumentCoordinator {
         }
 
         // initialize the coordinator if it hasn't been initialized yet
-        if self.coordinator.is_none() {
+        if self.coordinator.borrow().is_none() {
             // retrieve the reducer digest from the request url
             let url = req.url()?;
             let reducer_digest = match url.query_pairs().find(|(k, _)| k == "reducer") {
@@ -63,9 +63,10 @@ impl DurableObject for DocumentCoordinator {
 
             let (coordinator, task) = Coordinator::init(&self.state, reducer_bytes).await?;
             spawn_local(task.into_task());
-            self.coordinator = Some(coordinator);
+            *self.coordinator.borrow_mut() = Some(coordinator);
         }
-        let coordinator = self.coordinator.as_mut().unwrap();
+        let mut coordinator = self.coordinator.borrow_mut();
+        let coordinator = coordinator.as_mut().unwrap();
 
         let pair = WebSocketPair::new()?;
         let ws = pair.server;

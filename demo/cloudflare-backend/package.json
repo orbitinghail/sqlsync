@@ -8,6 +8,11 @@
     "wrangler-tail": "wrangler tail"
   },
   "devDependencies": {
-    "wrangler": "^3.32.0"
+    "wrangler": "^4"
+  }
+  ,
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=8"
   }
 }
